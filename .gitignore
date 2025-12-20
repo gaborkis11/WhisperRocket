@@ -1,0 +1,15 @@
+# Virtual environment
+venv/
+__pycache__/
+*.pyc
+
+# Backup files
+*.save
+*.save.*
+
+# Test audio files
+*.wav
+
+# IDE
+.idea/
+.vscode/

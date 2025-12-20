@@ -1,0 +1,8 @@
+{
+  "hotkey": "alt+s",
+  "model": "large-v3",
+  "device": "cuda",
+  "compute_type": "float16",
+  "language": "hu",
+  "sample_rate": 16000
+}

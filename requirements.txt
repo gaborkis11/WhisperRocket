@@ -1,0 +1,10 @@
+faster-whisper
+sounddevice
+soundfile
+pyperclip
+pynput
+pystray
+pillow
+numpy
+nvidia-cudnn-cu12
+nvidia-cublas-cu12
