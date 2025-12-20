@@ -6,6 +6,28 @@ _Nincs aktív feladat_
 
 ---
 
+## Befejezett: Popup szöveg megjelenítés + kibővítés
+
+**Cél:** Transzkripció után a popup mutassa a leiratott szöveget, kattintásra kibővíthető Copy gombbal.
+
+**Megoldás:**
+- [x] `PopupState` enum hozzáadva (HIDDEN, RECORDING, TEXT_PREVIEW, TEXT_EXPANDED)
+- [x] `show_text(text)` metódus - szöveg megjelenítése
+- [x] `_draw_text_preview()` - rövidített szöveg előnézet
+- [x] `_draw_text_expanded()` - teljes szöveg + Copy gomb + X bezárás
+- [x] Auto-hide timer (3 másodperc)
+- [x] Kattintásra kibővül, marad nyitva
+- [x] Copy gomb - vágólapra másol és bezár
+- [x] X gomb - bezárás
+- [x] `whisper_gui.py` integráció
+
+**Működés:**
+1. Recording: waveform vizualizáció (változatlan)
+2. Transzkripció után: szöveg előnézet (3mp-ig látszik)
+3. Kattintásra: kibővített nézet teljes szöveggel + Copy gomb
+
+---
+
 ## Befejezett: Hangjelzések felvétel indításkor/leállításkor
 
 **Cél:** Hangvisszajelzés, hogy a felhasználó tudja, mikor indul/áll le a felvétel.
@@ -23,8 +45,6 @@ _Nincs aktív feladat_
 
 ## Tervezett Fejlesztések
 
-- [ ] Popup ablak hullámforma vizualizációval
-- [ ] Modern beállítások UI (PyQt6)
 - [ ] Cross-platform támogatás (Windows, macOS)
 
 ---
@@ -37,6 +57,9 @@ _Nincs aktív feladat_
 - [x] System Tray menü (jobb klikk → Kilépés)
 - [x] Linux app launcher (.desktop fájl)
 - [x] Alkalmazás ikon (assets/whispertalk.png)
+- [x] Popup ablak waveform vizualizációval
+- [x] Modern beállítások UI (PyQt6)
+- [x] Popup szöveg megjelenítés + kibővítés
 
 ---
 

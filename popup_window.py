@@ -2,27 +2,64 @@
 """
 WhisperTalk - Recording Popup Window
 Valós idejű waveform vizualizáció felvétel közben
+Transzkripció utáni szöveg megjelenítés
 """
 from PyQt6.QtWidgets import QWidget, QApplication
 from PyQt6.QtCore import Qt, QTimer, QPoint, QRectF
 from PyQt6.QtGui import QPainter, QColor, QPen, QBrush, QPainterPath, QFont
 from queue import Queue, Empty
+from enum import Enum, auto
 import sys
 import math
 import random
+import pyperclip
+
+
+class PopupState(Enum):
+    """Popup állapotok"""
+    HIDDEN = auto()
+    RECORDING = auto()
+    TEXT_PREVIEW = auto()
+    TEXT_EXPANDED = auto()
 
 
 class RecordingPopup(QWidget):
     """Frameless popup ablak waveform vizualizációval"""
 
-    def __init__(self, amplitude_queue: Queue):
+    def __init__(self, amplitude_queue: Queue, hotkey: str = "Alt+S"):
         super().__init__()
         self.amplitude_queue = amplitude_queue
+        self.hotkey = hotkey  # Beállított hotkey megjelenítéshez
         self.current_amplitude = 0.0  # Aktuális hangerő (nyers)
         self.smoothed_amplitude = 0.0  # Simított hangerő (megjelenítéshez)
         self.bar_count = 45  # Oszlopok száma
         self.drag_position = None
         self.saved_position = None  # Session alatti pozíció memória
+
+        # Állapotgép
+        self.state = PopupState.HIDDEN
+        self.transcribed_text = ""  # Leiratott szöveg
+
+        # Auto-hide timer
+        self.auto_hide_timer = QTimer()
+        self.auto_hide_timer.setSingleShot(True)
+        self.auto_hide_timer.timeout.connect(self._auto_hide)
+        self.auto_hide_seconds = 5  # Ennyi másodperc után tűnik el
+
+        # Visszaszámláló timer (másodpercenként frissít)
+        self.countdown_timer = QTimer()
+        self.countdown_timer.timeout.connect(self._update_countdown)
+        self.countdown_remaining = 0  # Hátralévő másodpercek
+
+        # Méretek
+        self.base_width = 350
+        self.base_height = 100  # Nagyobb, hogy az equalizer ne lógjon bele
+        self.preview_height = 140  # Fejléc + szöveg előnézet
+        self.expanded_height = 220  # Fejléc + teljes szöveg + Copy
+
+        # Gomb területek (expandált nézethez)
+        self.close_btn_rect = QRectF(0, 0, 0, 0)
+        self.copy_btn_rect = QRectF(0, 0, 0, 0)
 
         # Simítási faktor (0.0-1.0, alacsonyabb = lágyabb)
         self.smoothing_factor = 0.15  # Lassú, lágy követés
@@ -88,7 +125,7 @@ class RecordingPopup(QWidget):
         self.update()
 
     def paintEvent(self, event):
-        """Ablak rajzolása"""
+        """Ablak rajzolása állapot alapján"""
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
 
@@ -98,11 +135,20 @@ class RecordingPopup(QWidget):
         path.addRoundedRect(QRectF(0, 0, self.width(), self.height()), 12, 12)
         painter.fillPath(path, QBrush(bg_color))
 
-        # Waveform rajzolás
-        self._draw_waveform(painter)
+        # DEBUG: állapot kiírás (csak néha, hogy ne spammeljen)
+        import time
+        if not hasattr(self, '_last_state_log') or time.time() - self._last_state_log > 1:
+            print(f"[DEBUG paintEvent] state={self.state}")
+            self._last_state_log = time.time()
 
-        # "Recording" felirat piros körrel
-        self._draw_recording_label(painter)
+        # Állapot alapú rajzolás
+        if self.state == PopupState.RECORDING:
+            self._draw_waveform(painter)
+            self._draw_recording_label(painter)
+        elif self.state == PopupState.TEXT_PREVIEW:
+            self._draw_text_preview(painter)
+        elif self.state == PopupState.TEXT_EXPANDED:
+            self._draw_text_expanded(painter)
 
     def _draw_waveform(self, painter: QPainter):
         """Equalizer stílusú waveform - statikus, szimmetrikus oszlopok"""
@@ -110,9 +156,9 @@ class RecordingPopup(QWidget):
         bar_gap = 3
         total_width = self.bar_count * (bar_width + bar_gap)
 
-        # Középre igazítás
+        # Középre igazítás - feljebb, hogy ne lógjon az alsó részbe
         start_x = (self.width() - total_width) // 2
-        center_y = self.height() // 2
+        center_y = 40  # Fix pozíció fent
         max_half_height = 25  # Max fél-magasság (fel ÉS le is ennyi)
 
         painter.setPen(Qt.PenStyle.NoPen)
@@ -149,9 +195,11 @@ class RecordingPopup(QWidget):
             painter.fillPath(bar_path_bottom, QBrush(QColor(255, 255, 255)))
 
     def _draw_recording_label(self, painter: QPainter):
-        """Recording felirat és piros kör"""
-        # Piros kör
-        circle_x = 15
+        """Recording felirat, piros kör, és hotkey gombok"""
+        padding = 15
+
+        # Piros kör + Recording (bal oldalon)
+        circle_x = padding
         circle_y = self.height() - 20
         circle_radius = 5
 
@@ -159,14 +207,273 @@ class RecordingPopup(QWidget):
         painter.setBrush(QBrush(QColor(239, 68, 68)))  # Piros
         painter.drawEllipse(QPoint(circle_x, circle_y), circle_radius, circle_radius)
 
-        # "Recording" felirat
-        painter.setPen(QPen(QColor(160, 160, 160)))  # Szürke szöveg
+        painter.setPen(QPen(QColor(160, 160, 160)))
         painter.setFont(QFont("Sans", 9))
         painter.drawText(circle_x + 12, circle_y + 4, "Recording")
 
+        # Hotkey gombok jobb oldalon: "Finish [Alt+S]" | "Cancel [Esc]"
+        btn_y = self.height() - 28
+        btn_height = 20
+
+        # Hotkey formázása (alt+s -> Alt+S)
+        hotkey_display = self.hotkey.replace("+", "+").title()
+
+        # Cancel gomb (jobb szélső)
+        cancel_text = "Esc"
+        painter.setFont(QFont("Sans", 8))
+        fm = painter.fontMetrics()
+
+        cancel_btn_w = fm.horizontalAdvance(cancel_text) + 12
+        cancel_btn_x = self.width() - padding - cancel_btn_w
+
+        # Cancel gomb háttér
+        cancel_rect = QRectF(cancel_btn_x, btn_y, cancel_btn_w, btn_height)
+        cancel_path = QPainterPath()
+        cancel_path.addRoundedRect(cancel_rect, 4, 4)
+        painter.fillPath(cancel_path, QBrush(QColor(80, 80, 80, 150)))
+
+        painter.setPen(QPen(QColor(180, 180, 180)))
+        painter.drawText(int(cancel_btn_x + 6), int(btn_y + 14), cancel_text)
+
+        # "Cancel" label
+        painter.setPen(QPen(QColor(120, 120, 120)))
+        painter.drawText(int(cancel_btn_x - 45), int(btn_y + 14), "Cancel")
+
+        # Finish gomb (Cancel előtt)
+        finish_text = hotkey_display
+        finish_btn_w = fm.horizontalAdvance(finish_text) + 12
+        finish_btn_x = cancel_btn_x - 55 - finish_btn_w
+
+        # Finish gomb háttér
+        finish_rect = QRectF(finish_btn_x, btn_y, finish_btn_w, btn_height)
+        finish_path = QPainterPath()
+        finish_path.addRoundedRect(finish_rect, 4, 4)
+        painter.fillPath(finish_path, QBrush(QColor(80, 80, 80, 150)))
+
+        painter.setPen(QPen(QColor(180, 180, 180)))
+        painter.drawText(int(finish_btn_x + 6), int(btn_y + 14), finish_text)
+
+        # "Finish" label
+        painter.setPen(QPen(QColor(120, 120, 120)))
+        painter.drawText(int(finish_btn_x - 40), int(btn_y + 14), "Finish")
+
+    def _draw_text_preview(self, painter: QPainter):
+        """Szöveg előnézet - fejléc + kisimult equalizer + szöveg alatta"""
+        # 1. Fejléc rész (Recording + kisimult equalizer) - 50px magasság
+        self._draw_header_with_flat_bars(painter)
+
+        # 2. Elválasztó vonal
+        padding = 15
+        painter.setPen(QPen(QColor(60, 60, 60)))
+        painter.drawLine(padding, 55, self.width() - padding, 55)
+
+        # 3. Szöveg előnézet alatta
+        max_chars = 40
+        display_text = self.transcribed_text
+        if len(display_text) > max_chars:
+            display_text = display_text[:max_chars] + "..."
+
+        painter.setPen(QPen(QColor(255, 255, 255)))
+        painter.setFont(QFont("Sans", 10))
+        painter.drawText(padding, 78, f'"{display_text}"')
+
+        # 4. "Click to expand" gomb - zöldes háttérrel
+        btn_text = "Click to expand"
+        btn_font = QFont("Sans", 9)
+        painter.setFont(btn_font)
+        fm = painter.fontMetrics()
+        text_width = fm.horizontalAdvance(btn_text)
+
+        btn_width = text_width + 35  # Hely az ikonnak is
+        btn_height = 22
+        btn_x = padding
+        btn_y = self.height() - btn_height - 6
+
+        # Gomb háttér - áttetsző zöld
+        btn_rect = QRectF(btn_x, btn_y, btn_width, btn_height)
+        btn_path = QPainterPath()
+        btn_path.addRoundedRect(btn_rect, 4, 4)
+        painter.fillPath(btn_path, QBrush(QColor(76, 175, 80, 60)))  # Zöld, áttetsző
+
+        # Kattintás ikon - egérkurzor alakú
+        icon_x = btn_x + 10
+        icon_y = btn_y + btn_height // 2
+
+        # Kurzor alakú ikon (nyíl)
+        cursor = QPainterPath()
+        cursor.moveTo(icon_x, icon_y - 7)       # Csúcs (felül)
+        cursor.lineTo(icon_x + 5, icon_y + 1)   # Jobb alsó
+        cursor.lineTo(icon_x + 2, icon_y + 1)   # Közép jobb
+        cursor.lineTo(icon_x + 4, icon_y + 5)   # Nyél jobb
+        cursor.lineTo(icon_x + 1, icon_y + 6)   # Nyél alja
+        cursor.lineTo(icon_x - 1, icon_y + 3)   # Nyél bal
+        cursor.lineTo(icon_x - 1, icon_y + 1)   # Közép bal
+        cursor.lineTo(icon_x - 3, icon_y + 1)   # Bal alsó
+        cursor.closeSubpath()
+        painter.fillPath(cursor, QBrush(QColor(150, 220, 150)))
+
+        # Gomb szöveg
+        painter.setPen(QPen(QColor(180, 230, 180)))
+        painter.drawText(int(btn_x + 22), int(btn_y + 15), btn_text)
+
+        # 5. Visszaszámláló jobb oldalon - sárga háttérrel
+        countdown_text = f"{self.countdown_remaining}s"
+        painter.setFont(QFont("Sans", 9))
+        fm = painter.fontMetrics()
+        countdown_w = fm.horizontalAdvance(countdown_text) + 14
+        countdown_h = 20
+        countdown_x = self.width() - padding - countdown_w
+        countdown_y = btn_y
+
+        # Háttér - sárga/narancs
+        countdown_rect = QRectF(countdown_x, countdown_y, countdown_w, countdown_h)
+        countdown_path = QPainterPath()
+        countdown_path.addRoundedRect(countdown_rect, 4, 4)
+        painter.fillPath(countdown_path, QBrush(QColor(255, 193, 7, 180)))  # Sárga
+
+        # Szöveg - sötét a sárga háttéren
+        painter.setPen(QPen(QColor(50, 50, 50)))
+        painter.drawText(int(countdown_x + 7), int(countdown_y + 14), countdown_text)
+
+    def _draw_header_with_flat_bars(self, painter: QPainter):
+        """Fejléc rész: Recording label + kisimult equalizer"""
+        # Recording label (bal oldalon)
+        circle_x = 15
+        circle_y = 30
+        circle_radius = 5
+
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(QBrush(QColor(100, 100, 100)))  # Szürke kör (nem aktív)
+        painter.drawEllipse(QPoint(circle_x, circle_y), circle_radius, circle_radius)
+
+        painter.setPen(QPen(QColor(160, 160, 160)))
+        painter.setFont(QFont("Sans", 9))
+        painter.drawText(circle_x + 12, circle_y + 4, "Done")
+
+        # Kisimult equalizer (jobb oldalon, alacsony vonalak) - rövidebb, hogy a close gomb elférjen
+        bar_width = 3
+        bar_gap = 3
+        bar_count = 20  # Kevesebb oszlop
+        total_width = bar_count * (bar_width + bar_gap)
+        start_x = self.width() - total_width - 35  # Több hely jobbra
+        center_y = 30
+        min_height = 3  # Alacsony, egyenletes magasság
+
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(QBrush(QColor(100, 100, 100)))  # Szürke vonalak
+
+        for i in range(bar_count):
+            x = start_x + i * (bar_width + bar_gap)
+            # Felső fél
+            bar_path = QPainterPath()
+            bar_path.addRoundedRect(QRectF(x, center_y - min_height, bar_width, min_height), 1, 1)
+            painter.fillPath(bar_path, QBrush(QColor(100, 100, 100)))
+            # Alsó fél
+            bar_path2 = QPainterPath()
+            bar_path2.addRoundedRect(QRectF(x, center_y, bar_width, min_height), 1, 1)
+            painter.fillPath(bar_path2, QBrush(QColor(100, 100, 100)))
+
+    def _draw_text_expanded(self, painter: QPainter):
+        """Kibővített nézet - fejléc + teljes szöveg + Copy gomb + bezáró gomb"""
+        padding = 15
+
+        # 1. Fejléc rész (Done + kisimult equalizer)
+        self._draw_header_with_flat_bars(painter)
+
+        # Bezáró gomb - piros kör (macOS stílus) - jobb felső sarok, magasabban
+        close_radius = 6
+        close_x = self.width() - padding - close_radius
+        close_y = 12
+        self.close_btn_rect = QRectF(close_x - close_radius - 4, close_y - close_radius - 4,
+                                      close_radius * 2 + 8, close_radius * 2 + 8)
+
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(QBrush(QColor(255, 95, 87)))  # Piros (macOS)
+        painter.drawEllipse(QPoint(int(close_x), int(close_y)), close_radius, close_radius)
+
+        # 2. Elválasztó vonal
+        painter.setPen(QPen(QColor(60, 60, 60)))
+        painter.drawLine(padding, 55, self.width() - padding, 55)
+
+        # 3. Teljes szöveg (több soros)
+        painter.setPen(QPen(QColor(255, 255, 255)))
+        painter.setFont(QFont("Sans", 10))
+
+        # Szöveg tördelése
+        text_width = self.width() - 2 * padding
+        words = self.transcribed_text.split()
+        lines = []
+        current_line = ""
+        fm = painter.fontMetrics()
+
+        for word in words:
+            test_line = current_line + (" " if current_line else "") + word
+            if fm.horizontalAdvance(test_line) <= text_width:
+                current_line = test_line
+            else:
+                if current_line:
+                    lines.append(current_line)
+                current_line = word
+        if current_line:
+            lines.append(current_line)
+
+        # Max 5 sor
+        y = 72
+        for i, line in enumerate(lines[:5]):
+            painter.drawText(padding, y + i * 18, line)
+        if len(lines) > 5:
+            painter.drawText(padding, y + 5 * 18, "...")
+
+        # 4. Copy gomb alul középen
+        btn_width = 80
+        btn_height = 28
+        btn_x = (self.width() - btn_width) // 2
+        btn_y = self.height() - btn_height - 10
+        self.copy_btn_rect = QRectF(btn_x, btn_y, btn_width, btn_height)
+
+        # Gomb háttér
+        painter.setPen(QPen(QColor(80, 80, 80)))
+        btn_path = QPainterPath()
+        btn_path.addRoundedRect(self.copy_btn_rect, 6, 6)
+        painter.fillPath(btn_path, QBrush(QColor(50, 50, 50)))
+        painter.drawPath(btn_path)
+
+        # Gomb szöveg
+        painter.setPen(QPen(QColor(200, 200, 200)))
+        painter.setFont(QFont("Sans", 9))
+        painter.drawText(int(btn_x + 22), int(btn_y + 18), "Copy")
+
     def mousePressEvent(self, event):
-        """Drag kezdése"""
+        """Kattintás kezelése - állapot alapján"""
         if event.button() == Qt.MouseButton.LeftButton:
+            pos = event.position()
+
+            # TEXT_PREVIEW: kattintásra kibővítés
+            if self.state == PopupState.TEXT_PREVIEW:
+                self.auto_hide_timer.stop()
+                self.countdown_timer.stop()
+                self.state = PopupState.TEXT_EXPANDED
+                self.setFixedSize(self.base_width, self.expanded_height)
+                self.update()
+                event.accept()
+                return
+
+            # TEXT_EXPANDED: gombok kezelése
+            if self.state == PopupState.TEXT_EXPANDED:
+                # X gomb - bezárás
+                if self.close_btn_rect.contains(pos):
+                    self.hide_popup()
+                    event.accept()
+                    return
+
+                # Copy gomb - másolás
+                if self.copy_btn_rect.contains(pos):
+                    pyperclip.copy(self.transcribed_text)
+                    self.hide_popup()
+                    event.accept()
+                    return
+
+            # Egyébként drag
             self.drag_position = event.globalPosition().toPoint() - self.frameGeometry().topLeft()
             event.accept()
 
@@ -179,17 +486,57 @@ class RecordingPopup(QWidget):
             event.accept()
 
     def show_popup(self):
-        """Popup megjelenítése"""
+        """Popup megjelenítése felvételhez"""
+        self.state = PopupState.RECORDING
+        self.auto_hide_timer.stop()  # Timer leállítása ha fut
+        self.setFixedSize(self.base_width, self.base_height)
         if self.saved_position:
             self.move(self.saved_position)
         else:
             self._center_on_screen()
         self.show()
         self.raise_()
-        self.activateWindow()
+
+    def show_pending_text(self):
+        """Pending szöveg megjelenítése (QTimer callback)"""
+        if hasattr(self, 'pending_text') and self.pending_text:
+            self.show_text(self.pending_text)
+
+    def show_text(self, text: str):
+        """Szöveg megjelenítése transzkripció után"""
+        print(f"[DEBUG] show_text() hívva, text='{text[:50]}...' state={self.state}")
+        self.transcribed_text = text
+        self.state = PopupState.TEXT_PREVIEW
+        self.setFixedSize(self.base_width, self.preview_height)
+        self.update()
+        print(f"[DEBUG] Állapot váltás után: state={self.state}")
+
+        # Visszaszámláló indítása
+        self.countdown_remaining = self.auto_hide_seconds
+        self.countdown_timer.start(1000)  # Másodpercenként frissít
+
+        # Auto-hide timer indítása
+        self.auto_hide_timer.start(self.auto_hide_seconds * 1000)
+
+    def _update_countdown(self):
+        """Visszaszámláló frissítése"""
+        if self.countdown_remaining > 0:
+            self.countdown_remaining -= 1
+            self.update()  # Újrarajzolás
+        else:
+            self.countdown_timer.stop()
+
+    def _auto_hide(self):
+        """Automatikus elrejtés timer után"""
+        self.countdown_timer.stop()
+        if self.state == PopupState.TEXT_PREVIEW:
+            self.hide_popup()
 
     def hide_popup(self):
         """Popup elrejtése"""
+        self.state = PopupState.HIDDEN
+        self.auto_hide_timer.stop()
+        self.countdown_timer.stop()
         self.hide()
         # Amplitude reset
         self.current_amplitude = 0.0

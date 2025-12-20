@@ -218,11 +218,15 @@ def process_audio(audio_copy):
         
         # Temp fájl törlés
         os.unlink(temp_file.name)
-        
+
         # Ikon frissítés
         update_icon('green', 'Whisper - Kesz! Ctrl+V')
-        time.sleep(2)
-        hide_popup()
+
+        # Szöveg megjelenítése a popup-ban (3mp-ig látszik, kattintásra expand)
+        show_text_popup(text)
+
+        # Ikon visszaállítás késleltetéssel
+        time.sleep(3)
         update_icon('blue', 'Whisper - Keszen all')
 
     except Exception as e:
@@ -242,6 +246,15 @@ def show_popup():
     if popup_window:
         # Qt-nek főszálból kell hívni - QTimer.singleShot használata
         QTimer.singleShot(0, popup_window.show_popup)
+
+def show_text_popup(text: str):
+    """Szöveg megjelenítése a popup-ban (thread-safe)"""
+    global popup_window
+    print(f"[DEBUG] show_text_popup() hívva, text='{text[:30]}...'")
+    if popup_window:
+        # Szöveg tárolása a popup objektumon és metódus hívás
+        popup_window.pending_text = text
+        QTimer.singleShot(0, popup_window.show_pending_text)
 
 def hide_popup():
     """Popup ablak elrejtése (thread-safe)"""
@@ -273,7 +286,7 @@ def stop_recording():
         play_sound(SOUND_STOP)
         print("[ROGZITES] Megall")
         update_icon('yellow', 'Whisper - Feldolgozas...')
-        
+
         if len(audio_data) > 0:
             audio_copy = audio_data.copy()
             audio_data = []
@@ -281,6 +294,16 @@ def stop_recording():
         else:
             print("[FIGYELEM] Nincs rogzitett hang!")
             update_icon('blue', 'Whisper - Keszen all')
+
+def cancel_recording():
+    """Felvétel megszakítása (Escape) - nem dolgozza fel"""
+    global recording, audio_data
+    if recording:
+        recording = False
+        audio_data = []
+        hide_popup()
+        print("[ROGZITES] Megszakítva (Cancel)")
+        update_icon('blue', 'Whisper - Keszen all')
 
 # Hotkey
 def parse_hotkey(hotkey_str):
@@ -305,6 +328,13 @@ def check_hotkey_match():
 
 def on_press(key):
     global hotkey_pressed
+
+    # Escape = Cancel (felvétel megszakítása)
+    if key == keyboard.Key.esc:
+        if recording:
+            cancel_recording()
+        return
+
     if key in [keyboard.Key.ctrl_l, keyboard.Key.ctrl_r]:
         hotkey_pressed['ctrl'] = True
     elif key in [keyboard.Key.alt_l, keyboard.Key.alt_r, keyboard.Key.alt_gr]:
@@ -342,9 +372,9 @@ def main():
     # PyQt6 inicializálás (először kell lennie)
     qt_app = QApplication(sys.argv)
 
-    # Popup ablak létrehozása
+    # Popup ablak létrehozása (hotkey átadása)
     from popup_window import RecordingPopup
-    popup_window = RecordingPopup(amplitude_queue)
+    popup_window = RecordingPopup(amplitude_queue, config["hotkey"])
 
     # Audio stream (rendszer alapértelmezett mikrofon)
     global actual_sample_rate
