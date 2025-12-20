@@ -8,6 +8,8 @@ from PyQt6.QtCore import Qt, QTimer, QPoint, QRectF
 from PyQt6.QtGui import QPainter, QColor, QPen, QBrush, QPainterPath, QFont
 from queue import Queue, Empty
 import sys
+import math
+import random
 
 
 class RecordingPopup(QWidget):
@@ -16,9 +18,23 @@ class RecordingPopup(QWidget):
     def __init__(self, amplitude_queue: Queue):
         super().__init__()
         self.amplitude_queue = amplitude_queue
-        self.waveform_data = [0.0] * 50  # 50 oszlop
+        self.current_amplitude = 0.0  # Aktuális hangerő (nyers)
+        self.smoothed_amplitude = 0.0  # Simított hangerő (megjelenítéshez)
+        self.bar_count = 45  # Oszlopok száma
         self.drag_position = None
         self.saved_position = None  # Session alatti pozíció memória
+
+        # Simítási faktor (0.0-1.0, alacsonyabb = lágyabb)
+        self.smoothing_factor = 0.15  # Lassú, lágy követés
+
+        # Gauss súlyok előre kiszámítva (közép = 1.0, szélek = ~0.3)
+        center = self.bar_count // 2
+        sigma = self.bar_count / 4  # Szélesség
+        self.bar_weights = []
+        for i in range(self.bar_count):
+            distance = abs(i - center)
+            weight = math.exp(-(distance ** 2) / (2 * sigma ** 2))
+            self.bar_weights.append(weight)
 
         # Ablak beállítások - NE vegyen fókuszt!
         self.setWindowFlags(
@@ -56,14 +72,17 @@ class RecordingPopup(QWidget):
     def _update_waveform(self):
         """Waveform adatok frissítése a queue-ból"""
         try:
-            # Összes elérhető amplitude érték feldolgozása
+            # Csak a legutolsó amplitude értéket használjuk
             while True:
-                amplitude = self.amplitude_queue.get_nowait()
-                # Hozzáadjuk az új értéket, eltávolítjuk a legrégebbit
-                self.waveform_data.pop(0)
-                self.waveform_data.append(amplitude)
+                self.current_amplitude = self.amplitude_queue.get_nowait()
         except Empty:
             pass
+
+        # Exponenciális simítás - lágy, fokozatos követés
+        self.smoothed_amplitude = (
+            self.smoothed_amplitude * (1 - self.smoothing_factor) +
+            self.current_amplitude * self.smoothing_factor
+        )
 
         # UI frissítés
         self.update()
@@ -86,32 +105,48 @@ class RecordingPopup(QWidget):
         self._draw_recording_label(painter)
 
     def _draw_waveform(self, painter: QPainter):
-        """Waveform oszlopok rajzolása"""
-        bar_count = len(self.waveform_data)
-        bar_width = 4
-        bar_gap = 2
-        total_width = bar_count * (bar_width + bar_gap)
+        """Equalizer stílusú waveform - statikus, szimmetrikus oszlopok"""
+        bar_width = 3
+        bar_gap = 3
+        total_width = self.bar_count * (bar_width + bar_gap)
 
         # Középre igazítás
         start_x = (self.width() - total_width) // 2
         center_y = self.height() // 2
-        max_height = 40  # Max oszlop magasság
+        max_half_height = 25  # Max fél-magasság (fel ÉS le is ennyi)
 
         painter.setPen(Qt.PenStyle.NoPen)
         painter.setBrush(QBrush(QColor(255, 255, 255)))  # Fehér oszlopok
 
-        for i, amplitude in enumerate(self.waveform_data):
-            # Amplitude normalizálás (0.0 - 1.0 közé)
-            normalized = min(amplitude * 15, 1.0)  # Magasabb érzékenység
-            bar_height = max(4, int(normalized * max_height))  # Min 4px
+        # Simított amplitude normalizálás
+        normalized_amp = min(self.smoothed_amplitude * 10, 1.0)
+
+        for i in range(self.bar_count):
+            # Gauss súlyozás + enyhe véletlenszerűség (kevésbé agresszív)
+            weight = self.bar_weights[i]
+            random_factor = random.uniform(0.9, 1.1)  # Kisebb variáció
+
+            # Fél-magasság számítás (min 2px)
+            half_height = max(2, int(normalized_amp * max_half_height * weight * random_factor))
 
             x = start_x + i * (bar_width + bar_gap)
-            y = center_y - bar_height // 2
 
-            # Lekerekített oszlop
-            bar_path = QPainterPath()
-            bar_path.addRoundedRect(QRectF(x, y, bar_width, bar_height), 2, 2)
-            painter.fillPath(bar_path, QBrush(QColor(255, 255, 255)))
+            # Szimmetrikus rajzolás - középvonaltól FEL és LE
+            # Felső fél
+            bar_path_top = QPainterPath()
+            bar_path_top.addRoundedRect(
+                QRectF(x, center_y - half_height, bar_width, half_height),
+                1.5, 1.5
+            )
+            painter.fillPath(bar_path_top, QBrush(QColor(255, 255, 255)))
+
+            # Alsó fél (tükrözve)
+            bar_path_bottom = QPainterPath()
+            bar_path_bottom.addRoundedRect(
+                QRectF(x, center_y, bar_width, half_height),
+                1.5, 1.5
+            )
+            painter.fillPath(bar_path_bottom, QBrush(QColor(255, 255, 255)))
 
     def _draw_recording_label(self, painter: QPainter):
         """Recording felirat és piros kör"""
@@ -156,8 +191,9 @@ class RecordingPopup(QWidget):
     def hide_popup(self):
         """Popup elrejtése"""
         self.hide()
-        # Waveform reset
-        self.waveform_data = [0.0] * 50
+        # Amplitude reset
+        self.current_amplitude = 0.0
+        self.smoothed_amplitude = 0.0
 
 
 # Tesztelés
