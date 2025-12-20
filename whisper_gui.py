@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
 import os
+import sys
 import json
 import tempfile
 import time
 import threading
+from queue import Queue
 import sounddevice as sd
 import soundfile as sf
 import pyperclip
@@ -12,6 +14,8 @@ from faster_whisper import WhisperModel
 import numpy as np
 from pystray import Icon, Menu, MenuItem
 from PIL import Image, ImageDraw
+from PyQt6.QtWidgets import QApplication
+from PyQt6.QtCore import QTimer
 
 # Konfiguráció
 CONFIG_FILE = os.path.join(os.path.dirname(__file__), 'config.json')
@@ -47,6 +51,11 @@ tray_icon = None
 hotkey_pressed = {}
 actual_sample_rate = config.get("sample_rate", 16000)  # Tényleges sample rate
 
+# Popup ablak változók
+amplitude_queue = Queue(maxsize=100)  # Thread-safe queue a waveform adatokhoz
+popup_window = None
+qt_app = None
+
 # Hang lejátszás háttérszálban (paplay használata - megbízhatóbb)
 def play_sound(sound_file):
     """Hangfájl lejátszása háttérszálban"""
@@ -80,12 +89,15 @@ def update_icon(color, title):
 
 def quit_app(icon, item):
     """Alkalmazás leállítása"""
-    global stream
+    global stream, qt_app
     print("[INFO] Kilépés...")
     if stream:
         stream.stop()
         stream.close()
     icon.stop()
+    # Qt alkalmazás leállítása
+    if qt_app:
+        qt_app.quit()
 
 def open_settings(icon, item):
     """Beállítások ablak megnyitása"""
@@ -117,6 +129,12 @@ def load_model():
 def audio_callback(indata, frames, time_info, status):
     if recording:
         audio_data.append(indata.copy())
+        # Amplitude számítás a waveform vizualizációhoz
+        amplitude = np.abs(indata).mean()
+        try:
+            amplitude_queue.put_nowait(amplitude)
+        except:
+            pass  # Queue tele - nem gond, csak vizualizáció
 
 # Feldolgozás
 def process_audio(audio_copy):
@@ -204,16 +222,32 @@ def process_audio(audio_copy):
         # Ikon frissítés
         update_icon('green', 'Whisper - Kesz! Ctrl+V')
         time.sleep(2)
+        hide_popup()
         update_icon('blue', 'Whisper - Keszen all')
-        
+
     except Exception as e:
         print("\n" + "="*60)
         print(f"[HIBA] {e}")
         print("="*60 + "\n")
-        
+
         update_icon('red', 'Whisper - HIBA!')
         time.sleep(2)
+        hide_popup()
         update_icon('blue', 'Whisper - Keszen all')
+
+# Popup kezelés
+def show_popup():
+    """Popup ablak megjelenítése (thread-safe)"""
+    global popup_window
+    if popup_window:
+        # Qt-nek főszálból kell hívni - QTimer.singleShot használata
+        QTimer.singleShot(0, popup_window.show_popup)
+
+def hide_popup():
+    """Popup ablak elrejtése (thread-safe)"""
+    global popup_window
+    if popup_window:
+        QTimer.singleShot(0, popup_window.hide_popup)
 
 # Rögzítés
 def start_recording():
@@ -221,6 +255,13 @@ def start_recording():
     if not recording:
         recording = True
         audio_data = []
+        # Queue ürítése
+        while not amplitude_queue.empty():
+            try:
+                amplitude_queue.get_nowait()
+            except:
+                break
+        show_popup()
         play_sound(SOUND_START)
         print("\n[ROGZITES] Indul...")
         update_icon('red', 'Whisper - ROGZITES')
@@ -274,7 +315,7 @@ def on_press(key):
         hotkey_pressed[key.char.lower()] = True
     elif hasattr(key, 'name'):
         hotkey_pressed[key.name.lower()] = True
-    
+
     if check_hotkey_match():
         if not recording:
             start_recording()
@@ -296,8 +337,15 @@ def on_release(key):
 
 # Fő program
 def main():
-    global stream, tray_icon
-    
+    global stream, tray_icon, qt_app, popup_window
+
+    # PyQt6 inicializálás (először kell lennie)
+    qt_app = QApplication(sys.argv)
+
+    # Popup ablak létrehozása
+    from popup_window import RecordingPopup
+    popup_window = RecordingPopup(amplitude_queue)
+
     # Audio stream (rendszer alapértelmezett mikrofon)
     global actual_sample_rate
     try:
@@ -320,11 +368,11 @@ def main():
     import subprocess
     subprocess.run(['paplay', '--volume=1', SOUND_START], capture_output=True, timeout=2)
     print("[INFO] Audio rendszer inicializálva")
-    
+
     # Hotkey listener
     listener = keyboard.Listener(on_press=on_press, on_release=on_release)
     listener.start()
-    
+
     # System Tray ikon menüvel (klikk -> menü)
     menu = Menu(
         MenuItem("Beállítások", open_settings),
@@ -332,10 +380,10 @@ def main():
         MenuItem("Kilépés", quit_app)
     )
     tray_icon = Icon("WhisperTalk", create_icon('gray'), "WhisperTalk", menu)
-    
+
     # Modell betöltés háttérben
     threading.Thread(target=load_model, daemon=True).start()
-    
+
     print("="*60)
     print("  WHISPER SPEECH-TO-TEXT")
     print("="*60)
@@ -353,9 +401,12 @@ def main():
     print("  Config:  nano config.json")
     print("="*60)
     print("")
-    
-    # Tray ikon futtatása (ez blokkoló hívás)
-    tray_icon.run()
+
+    # Tray ikon futtatása háttérszálban
+    tray_icon.run_detached()
+
+    # Qt event loop futtatása (főszál)
+    sys.exit(qt_app.exec())
 
 if __name__ == "__main__":
     main()
