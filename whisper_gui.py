@@ -113,8 +113,41 @@ def process_audio(audio_copy):
             print("[INFO] Automatikus beillesztes...")
             time.sleep(0.3)
             import subprocess
-            subprocess.run(['xdotool', 'key', 'ctrl+v'], check=True)
-            print("[INFO] Beillesztve!")
+
+            # Aktív ablak detektálás
+            paste_key = "ctrl+v"  # Alapértelmezett
+            try:
+                # Ablak neve és osztálya lekérése
+                window_name = subprocess.run(
+                    ['xdotool', 'getactivewindow', 'getwindowname'],
+                    capture_output=True, text=True
+                ).stdout.strip().lower()
+
+                window_class = subprocess.run(
+                    ['xdotool', 'getactivewindow', 'getwindowclassname'],
+                    capture_output=True, text=True
+                ).stdout.strip().lower()
+
+                print(f"[DEBUG] Ablak: {window_name} ({window_class})")
+
+                # Terminálok és Cursor detektálása - ezek Ctrl+Shift+V-t használnak
+                ctrl_shift_v_apps = [
+                    'terminal', 'terminator', 'konsole', 'xterm', 'urxvt', 'alacritty',
+                    'kitty', 'tilix', 'guake', 'yakuake', 'gnome-terminal', 'xfce4-terminal',
+                    'cursor', 'code', 'vscode', 'vscodium'  # Cursor és VS Code
+                ]
+
+                for app in ctrl_shift_v_apps:
+                    if app in window_name or app in window_class:
+                        paste_key = "ctrl+shift+v"
+                        print(f"[INFO] Detektalva: {app} -> Ctrl+Shift+V")
+                        break
+
+            except Exception as detect_err:
+                print(f"[DEBUG] Ablak detektalas sikertelen: {detect_err}")
+
+            subprocess.run(['xdotool', 'key', paste_key], check=True)
+            print(f"[INFO] Beillesztve ({paste_key})!")
         except Exception as e:
             print(f"[FIGYELEM] Beillesztes sikertelen: {e}")
         print("="*60)
