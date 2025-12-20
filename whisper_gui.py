@@ -63,6 +63,14 @@ def quit_app(icon, item):
         stream.close()
     icon.stop()
 
+def open_settings(icon, item):
+    """Beállítások ablak megnyitása"""
+    print("[INFO] Beállítások megnyitása...")
+    import subprocess
+    import sys
+    # Beállítások ablak indítása külön folyamatban
+    subprocess.Popen([sys.executable, os.path.join(os.path.dirname(__file__), 'settings_window.py')])
+
 # Modell betöltés
 def load_model():
     global model
@@ -279,6 +287,8 @@ def main():
     
     # System Tray ikon menüvel (klikk -> menü)
     menu = Menu(
+        MenuItem("Beállítások", open_settings),
+        Menu.SEPARATOR,
         MenuItem("Kilépés", quit_app)
     )
     tray_icon = Icon("WhisperTalk", create_icon('gray'), "WhisperTalk", menu)
