@@ -42,15 +42,21 @@
 
 ```
 whisper-test/
-├── whisper_gui.py      # Fő alkalmazás (System Tray verzió)
-├── whisper_app.py      # CLI verzió
-├── config.json         # Konfiguráció (hotkey, modell, nyelv)
-├── start.sh            # Indító script (CUDA env beállítás)
-├── install.sh          # Telepítő script
-├── requirements.txt    # Python függőségek
-├── tasks/              # Todo és tervek
-│   └── todo.md
-└── CLAUDE.md           # Ez a fájl
+├── whisper_gui.py        # Fő alkalmazás (System Tray verzió)
+├── whisper_app.py        # CLI verzió
+├── settings_window.py    # Beállítások ablak (PyQt6)
+├── model_manager.py      # Whisper modellek cache kezelése
+├── download_manager.py   # Modell letöltések kezelése
+├── config.json           # Konfiguráció (hotkey, modell, nyelv)
+├── start.sh              # Indító script (CUDA env beállítás)
+├── install.sh            # Telepítő script
+├── requirements.txt      # Python függőségek
+├── whispertalk.desktop   # Linux app launcher
+├── assets/
+│   └── whispertalk.png   # Alkalmazás ikon (256x256)
+├── tasks/
+│   └── todo.md           # Todo és tervek
+└── CLAUDE.md             # Ez a fájl
 ```
 
 ### Konfiguráció (config.json)
@@ -83,7 +89,13 @@ pkill -f whisper_gui.py
 ## Tervezett Fejlesztések
 
 - [ ] Popup ablak hullámforma vizualizációval (SuperWhisper stílusú)
-- [ ] System Tray menü (jobb klikk → Settings, Quit)
-- [ ] Modern beállítások UI
-- [ ] Telepíthető alkalmazás (.desktop fájl, ikon)
 - [ ] Cross-platform támogatás (Windows, macOS)
+
+## Elkészült Fejlesztések
+
+- [x] System Tray menü (jobb klikk → Settings, Quit)
+- [x] Modern beállítások UI (PyQt6, tab-ok, modell letöltés)
+- [x] Telepíthető alkalmazás (.desktop fájl, ikon)
+- [x] Modell kezelés (letöltés, törlés, cache méret)
+- [x] Autostart támogatás
+- [x] Hangjelzések felvétel indításkor/leállításkor

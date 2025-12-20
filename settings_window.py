@@ -75,7 +75,9 @@ def load_config():
             "device": "cuda",
             "compute_type": "float16",
             "language": "hu",
-            "sample_rate": 16000
+            "sample_rate": 16000,
+            "input_device": None,
+            "output_device": None
         }
 
 
@@ -118,7 +120,7 @@ class SettingsWindow(QMainWindow):
     def init_ui(self):
         """UI inicializálása"""
         self.setWindowTitle("WhisperTalk Beállítások")
-        self.setFixedSize(500, 520)
+        self.setFixedSize(500, 480)
 
         # Központi widget
         central = QWidget()
@@ -220,7 +222,7 @@ class SettingsWindow(QMainWindow):
         form_layout2 = QFormLayout()
         form_layout2.setSpacing(10)
 
-        # Device
+        # Device (GPU/CPU)
         self.device_combo = QComboBox()
         for code, name in DEVICES:
             self.device_combo.addItem(name, code)

@@ -6,6 +6,21 @@ _Nincs aktív feladat_
 
 ---
 
+## Befejezett: Hangjelzések felvétel indításkor/leállításkor
+
+**Cél:** Hangvisszajelzés, hogy a felhasználó tudja, mikor indul/áll le a felvétel.
+
+**Megoldás:**
+- [x] `play_sound()` függvény létrehozása (`paplay` használata)
+- [x] Hang lejátszása `start_recording()` és `stop_recording()` függvényben
+- [x] `--volume=65536` paraméter a hangerő garantálásához
+- [x] Warmup hang az alkalmazás indításakor
+- [x] Tesztelés - működik!
+
+**Megjegyzés:** Az eredeti terv tartalmazott Input/Output eszközválasztókat, de ezek eltávolításra kerültek a megbízhatóság érdekében. Az alkalmazás mindig a rendszer alapértelmezett audio eszközeit használja (GNOME Settings-ben állítható).
+
+---
+
 ## Tervezett Fejlesztések
 
 - [ ] Popup ablak hullámforma vizualizációval

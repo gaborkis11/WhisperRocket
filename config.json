@@ -4,5 +4,7 @@
   "device": "cuda",
   "compute_type": "float16",
   "language": "hu",
-  "sample_rate": 16000
+  "sample_rate": 16000,
+  "input_device": null,
+  "output_device": null
 }

@@ -16,6 +16,11 @@ from PIL import Image, ImageDraw
 # Konfiguráció
 CONFIG_FILE = os.path.join(os.path.dirname(__file__), 'config.json')
 
+# Hangfájlok
+ASSETS_DIR = os.path.join(os.path.dirname(__file__), 'assets')
+SOUND_START = os.path.join(ASSETS_DIR, 'start_soft_click_smooth.wav')
+SOUND_STOP = os.path.join(ASSETS_DIR, 'stop_soft_click_smooth.wav')
+
 def load_config():
     try:
         with open(CONFIG_FILE, 'r') as f:
@@ -27,7 +32,9 @@ def load_config():
             "device": "cuda",
             "compute_type": "float16",
             "language": "hu",
-            "sample_rate": 16000
+            "sample_rate": 16000,
+            "input_device": None,
+            "output_device": None
         }
 
 # Globális változók
@@ -38,6 +45,23 @@ audio_data = []
 stream = None
 tray_icon = None
 hotkey_pressed = {}
+actual_sample_rate = config.get("sample_rate", 16000)  # Tényleges sample rate
+
+# Hang lejátszás háttérszálban (paplay használata - megbízhatóbb)
+def play_sound(sound_file):
+    """Hangfájl lejátszása háttérszálban"""
+    def _play():
+        try:
+            if os.path.exists(sound_file):
+                import subprocess
+                # HDMI audio "felébresztése" - csendes ping + várakozás
+                subprocess.run(['paplay', '--volume=1', sound_file], capture_output=True, timeout=2)
+                time.sleep(0.15)  # Várunk, hogy az HDMI felébredjen
+                # Tényleges lejátszás
+                subprocess.run(['paplay', '--volume=65536', sound_file], capture_output=True, timeout=2)
+        except Exception as e:
+            print(f"[FIGYELEM] Hang lejátszás sikertelen: {e}")
+    threading.Thread(target=_play, daemon=True).start()
 
 # Színes ikon létrehozása
 def create_icon(color='blue'):
@@ -102,11 +126,11 @@ def process_audio(audio_copy):
     try:
         # Audio összefűzés
         audio_array = np.concatenate(audio_copy, axis=0)
-        print(f"[INFO] Audio hossz: {len(audio_array)/config['sample_rate']:.2f}s")
-        
-        # Temp fájl
+        print(f"[INFO] Audio hossz: {len(audio_array)/actual_sample_rate:.2f}s")
+
+        # Temp fájl (Whisper automatikusan resample-öl)
         temp_file = tempfile.NamedTemporaryFile(delete=False, suffix=".wav")
-        sf.write(temp_file.name, audio_array, config["sample_rate"])
+        sf.write(temp_file.name, audio_array, actual_sample_rate)
         
         # Whisper transcribe
         print("[INFO] Whisper feldolgozas...")
@@ -197,6 +221,7 @@ def start_recording():
     if not recording:
         recording = True
         audio_data = []
+        play_sound(SOUND_START)
         print("\n[ROGZITES] Indul...")
         update_icon('red', 'Whisper - ROGZITES')
 
@@ -204,6 +229,7 @@ def stop_recording():
     global recording, audio_data
     if recording:
         recording = False
+        play_sound(SOUND_STOP)
         print("[ROGZITES] Megall")
         update_icon('yellow', 'Whisper - Feldolgozas...')
         
@@ -272,14 +298,28 @@ def on_release(key):
 def main():
     global stream, tray_icon
     
-    # Audio stream
+    # Audio stream (rendszer alapértelmezett mikrofon)
+    global actual_sample_rate
+    try:
+        # Lekérdezzük az alapértelmezett input device sample rate-jét
+        default_input = sd.query_devices(kind='input')
+        actual_sample_rate = int(default_input['default_samplerate'])
+        print(f"[INFO] Mikrofon sample rate: {actual_sample_rate} Hz")
+    except:
+        actual_sample_rate = 48000  # Biztonságos alapértelmezett
+
     stream = sd.InputStream(
-        samplerate=config["sample_rate"],
+        samplerate=actual_sample_rate,
         channels=1,
         callback=audio_callback,
         dtype=np.float32
     )
     stream.start()
+
+    # Audio rendszer "felébresztése" - csendes warmup
+    import subprocess
+    subprocess.run(['paplay', '--volume=1', SOUND_START], capture_output=True, timeout=2)
+    print("[INFO] Audio rendszer inicializálva")
     
     # Hotkey listener
     listener = keyboard.Listener(on_press=on_press, on_release=on_release)
