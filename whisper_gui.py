@@ -10,7 +10,7 @@ import pyperclip
 from pynput import keyboard
 from faster_whisper import WhisperModel
 import numpy as np
-from pystray import Icon
+from pystray import Icon, Menu, MenuItem
 from PIL import Image, ImageDraw
 
 # Konfiguráció
@@ -53,6 +53,15 @@ def update_icon(color, title):
     if tray_icon:
         tray_icon.icon = create_icon(color)
         tray_icon.title = title
+
+def quit_app(icon, item):
+    """Alkalmazás leállítása"""
+    global stream
+    print("[INFO] Kilépés...")
+    if stream:
+        stream.stop()
+        stream.close()
+    icon.stop()
 
 # Modell betöltés
 def load_model():
@@ -268,8 +277,11 @@ def main():
     listener = keyboard.Listener(on_press=on_press, on_release=on_release)
     listener.start()
     
-    # System Tray ikon - NINCS MENU, csak ikon!
-    tray_icon = Icon("Whisper STT", create_icon('gray'), "Whisper - Indul...")
+    # System Tray ikon menüvel (klikk -> menü)
+    menu = Menu(
+        MenuItem("Kilépés", quit_app)
+    )
+    tray_icon = Icon("WhisperTalk", create_icon('gray'), "WhisperTalk", menu)
     
     # Modell betöltés háttérben
     threading.Thread(target=load_model, daemon=True).start()
@@ -287,7 +299,7 @@ def main():
     print("    SARGA   = Feldolgozas")
     print("    ZOLD    = Kesz! (Ctrl+V beillesztes)")
     print("")
-    print("  Leallit: pkill -f whisper_gui.py")
+    print("  Leallit: Jobb klikk tray ikonra -> Kilépés")
     print("  Config:  nano config.json")
     print("="*60)
     print("")

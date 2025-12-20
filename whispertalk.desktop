@@ -1,0 +1,11 @@
+[Desktop Entry]
+Name=WhisperTalk
+Comment=Speech-to-Text alkalmazás magyar nyelven
+GenericName=Speech Recognition
+Exec=/home/gaborkis/whisper-test/start.sh
+Icon=/home/gaborkis/whisper-test/assets/whispertalk.png
+Terminal=false
+Type=Application
+Categories=Utility;Audio;AudioVideo;
+Keywords=speech;voice;whisper;dictation;transcribe;
+StartupNotify=false
