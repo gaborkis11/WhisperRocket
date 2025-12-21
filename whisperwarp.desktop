@@ -2,7 +2,7 @@
 Name=WhisperWarp
 Comment=Silent speech-to-text — Local, fast, private
 GenericName=Speech Recognition
-Exec=/home/gaborkis/whisper-test/start.sh
+Exec=/home/gaborkis/WhisperWarp/start.sh
 Icon=whisperwarp
 Terminal=false
 Type=Application

@@ -26,16 +26,30 @@ ASSETS_DIR = os.path.join(os.path.dirname(__file__), 'assets')
 SOUND_START = os.path.join(ASSETS_DIR, 'start_soft_click_smooth.wav')
 SOUND_STOP = os.path.join(ASSETS_DIR, 'stop_soft_click_smooth.wav')
 
+
+def detect_device():
+    """CUDA elérhetőség automatikus detektálása"""
+    try:
+        import subprocess
+        result = subprocess.run(['nvidia-smi'], capture_output=True, timeout=5)
+        if result.returncode == 0:
+            return "cuda", "float16"
+    except:
+        pass
+    return "cpu", "int8"
+
+
 def load_config():
     try:
         with open(CONFIG_FILE, 'r') as f:
             return json.load(f)
     except:
+        device, compute_type = detect_device()
         return {
             "hotkey": "alt+s",
             "model": "large-v3",
-            "device": "cuda",
-            "compute_type": "float16",
+            "device": device,
+            "compute_type": compute_type,
             "language": "hu",
             "sample_rate": 16000,
             "input_device": None,
