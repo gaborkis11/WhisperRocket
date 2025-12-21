@@ -4,6 +4,17 @@
 
 WhisperWarp is a desktop application that converts speech to text in real-time using the Whisper AI model. It runs entirely locally on your machine - no cloud services, no API keys, complete privacy.
 
+## Screenshots
+
+<p align="center">
+  <img src="assets/screenshots/modern_screenshot_2.png" width="400" alt="Recording">
+  <img src="assets/screenshots/modern_screenshot_3.png" width="400" alt="Processing">
+</p>
+<p align="center">
+  <img src="assets/screenshots/modern_screenshot_4.png" width="400" alt="Settings">
+  <img src="assets/screenshots/modern_screenshot_1.png" width="400" alt="System Tray">
+</p>
+
 ## Features
 
 - **Real-time transcription** - Whisper large-v3 model with multi-language support
