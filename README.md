@@ -173,7 +173,19 @@ The installer has been tested on:
 
 ## License
 
-See [LICENSE](LICENSE) for details.
+**Source Available License** - Free for personal, non-commercial use only.
+
+You MAY:
+- ✅ Use for personal purposes
+- ✅ View and study the source code
+- ✅ Report bugs and suggest features
+
+You MAY NOT:
+- ❌ Sell or distribute for payment
+- ❌ Use commercially
+- ❌ Create competing products
+
+See [LICENSE](LICENSE) for full details. For commercial licensing, contact the author.
 
 ## Acknowledgments
 

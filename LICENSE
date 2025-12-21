@@ -1,0 +1,118 @@
+WhisperWarp - Source Available License
+Copyright (c) 2024 Gabor Kis. All rights reserved.
+
+================================================================================
+ENGLISH VERSION
+================================================================================
+
+TERMS AND CONDITIONS
+
+1. DEFINITIONS
+   "Software" refers to WhisperWarp and all associated source code,
+   documentation, and assets.
+   "Personal Use" means use by an individual for non-commercial purposes.
+   "Commercial Use" means any use intended for or directed toward commercial
+   advantage or monetary compensation.
+
+2. GRANT OF LICENSE
+   Subject to the terms of this license, you are granted a free, non-exclusive,
+   non-transferable license to:
+   - Use the Software for Personal Use only
+   - View and study the source code for educational purposes
+   - Report bugs and suggest improvements via GitHub Issues
+
+3. RESTRICTIONS
+   You may NOT:
+   - Use the Software for any Commercial Use
+   - Sell, rent, lease, sublicense, or distribute the Software for payment
+   - Modify and redistribute the Software for commercial purposes
+   - Create derivative works for commercial distribution
+   - Use the Software to create a competing product or service
+   - Remove or modify this license notice from any copy of the Software
+   - Use the Software in any product or service that is sold or monetized
+
+4. CONTRIBUTIONS
+   By submitting issues, pull requests, or any other contributions to this
+   project, you agree that:
+   - Your contributions may be used in any version of the Software
+   - Your contributions may be included in future commercial versions
+   - You grant the copyright holder a perpetual, worldwide, royalty-free license
+     to use, modify, and distribute your contributions
+
+5. NO WARRANTY
+   THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+   IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+   FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+   AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+   LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+   OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+   SOFTWARE.
+
+6. TERMINATION
+   This license is automatically terminated if you violate any of these terms.
+   Upon termination, you must destroy all copies of the Software in your
+   possession.
+
+7. COMMERCIAL LICENSING
+   For commercial licensing inquiries, please contact the copyright holder.
+
+================================================================================
+MAGYAR VERZIÓ
+================================================================================
+
+FELHASZNÁLÁSI FELTÉTELEK
+
+1. DEFINÍCIÓK
+   "Szoftver" a WhisperWarp és minden kapcsolódó forráskód, dokumentáció és
+   egyéb anyag.
+   "Személyes használat" egyén általi, nem kereskedelmi célú használatot jelent.
+   "Kereskedelmi használat" bármely kereskedelmi előny vagy pénzbeli
+   ellenszolgáltatás megszerzésére irányuló használatot jelent.
+
+2. LICENC MEGADÁSA
+   A jelen licenc feltételei szerint ingyenes, nem kizárólagos, nem
+   átruházható licencet kap a következőkre:
+   - A Szoftver kizárólag Személyes használata
+   - A forráskód megtekintése és tanulmányozása oktatási célból
+   - Hibák jelentése és javaslatok küldése GitHub Issues-on keresztül
+
+3. KORLÁTOZÁSOK
+   TILOS:
+   - A Szoftver bármilyen Kereskedelmi használata
+   - A Szoftver értékesítése, bérbeadása, allicencelése vagy terjesztése
+     ellenérték fejében
+   - A Szoftver módosítása és kereskedelmi célú továbbértékesítése
+   - Származékos művek létrehozása kereskedelmi terjesztés céljából
+   - A Szoftver felhasználása konkurens termék vagy szolgáltatás létrehozására
+   - A licencfeltételek eltávolítása vagy módosítása a Szoftver bármely
+     példányáról
+   - A Szoftver felhasználása bármely értékesített vagy monetizált termékben
+     vagy szolgáltatásban
+
+4. HOZZÁJÁRULÁSOK
+   Hibajegyek, pull requestek vagy bármilyen más hozzájárulás beküldésével
+   elfogadja, hogy:
+   - Hozzájárulásai felhasználhatók a Szoftver bármely verziójában
+   - Hozzájárulásai bekerülhetnek a jövőbeli kereskedelmi verziókba
+   - Örökös, világméretű, jogdíjmentes licencet ad a szerzői jog tulajdonosának
+     hozzájárulásai használatára, módosítására és terjesztésére
+
+5. GARANCIA KIZÁRÁSA
+   A SZOFTVER "JELENLEGI ÁLLAPOTÁBAN" KERÜL ÁTADÁSRA, MINDENFÉLE KIFEJEZETT
+   VAGY VÉLELMEZETT GARANCIA NÉLKÜL, BELEÉRTVE, DE NEM KIZÁRÓLAGOSAN AZ
+   ÉRTÉKESÍTHETŐSÉGRE, ADOTT CÉLRA VALÓ ALKALMASSÁGRA ÉS JOGSÉRTÉSMENTESSÉGRE
+   VONATKOZÓ GARANCIÁKAT. A SZERZŐK VAGY SZERZŐI JOG TULAJDONOSAI SEMMILYEN
+   ESETBEN SEM FELELŐSEK SEMMILYEN KÖVETELÉSÉRT, KÁRÉRT VAGY MÁS
+   FELELŐSSÉGÉRT, SEM SZERZŐDÉSES, SEM SZERZŐDÉSEN KÍVÜLI ALAPON, AMELY A
+   SZOFTVERBŐL VAGY ANNAK HASZNÁLATÁBÓL ERED.
+
+6. MEGSZŰNÉS
+   A jelen licenc automatikusan megszűnik, ha megsérti ezen feltételek
+   bármelyikét. Megszűnés esetén a Szoftver összes birtokában lévő példányát
+   meg kell semmisítenie.
+
+7. KERESKEDELMI LICENCELÉS
+   Kereskedelmi licencelési kérdésekkel kapcsolatban kérjük, vegye fel a
+   kapcsolatot a szerzői jog tulajdonosával.
+
+================================================================================
