@@ -173,10 +173,9 @@ The installer has been tested on:
 
 ## License
 
-MIT License - see [LICENSE](LICENSE) for details.
+See [LICENSE](LICENSE) for details.
 
 ## Acknowledgments
 
 - [OpenAI Whisper](https://github.com/openai/whisper) - The amazing speech recognition model
 - [faster-whisper](https://github.com/guillaumekln/faster-whisper) - CTranslate2-based Whisper implementation
-- Inspired by [SuperWhisper](https://superwhisper.com/)
