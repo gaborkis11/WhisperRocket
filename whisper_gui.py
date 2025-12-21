@@ -72,12 +72,26 @@ def play_sound(sound_file):
             print(f"[FIGYELEM] Hang lejátszás sikertelen: {e}")
     threading.Thread(target=_play, daemon=True).start()
 
-# Színes ikon létrehozása
+# System tray ikon létrehozása
 def create_icon(color='blue'):
-    """Színes kör ikon - kék/piros/sárga/zöld"""
-    image = Image.new('RGB', (64, 64), color=color)
+    """Mikrofon ikon lekerekített színes háttérrel"""
+    # 64x64 átlátszó háttér
+    image = Image.new('RGBA', (64, 64), color=(0, 0, 0, 0))
     dc = ImageDraw.Draw(image)
-    dc.ellipse([8, 8, 56, 56], fill='white')
+
+    # Lekerekített színes háttér
+    dc.rounded_rectangle([0, 0, 63, 63], radius=12, fill=color)
+
+    # Egyszerű mikrofon silhouette (fehér)
+    # Mikrofon fej (lekerekített téglalap)
+    dc.rounded_rectangle([24, 8, 40, 32], radius=8, fill='white')
+    # Mikrofon állvány ív
+    dc.arc([16, 20, 48, 48], start=0, end=180, fill='white', width=4)
+    # Függőleges rúd
+    dc.rectangle([30, 44, 34, 52], fill='white')
+    # Talp
+    dc.rectangle([22, 52, 42, 56], fill='white')
+
     return image
 
 def update_icon(color, title):

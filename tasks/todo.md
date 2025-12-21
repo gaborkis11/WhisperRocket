@@ -6,6 +6,30 @@ _Nincs aktív feladat_
 
 ---
 
+## Befejezett: System Tray + Alkalmazás ikon frissítés
+
+**Cél:**
+1. System Tray: Egyszerű mikrofon ikon színes háttérrel (státusz szerint változik)
+2. Alkalmazás launcher: Rakéta ikon + név javítás (WhisperTalk → WhisperWarp)
+
+**Megoldás:**
+- [x] `create_icon()` átírva - mikrofon silhouette + színes háttér
+- [x] Rakéta kód eltávolítva (ROCKET_ICON, rocket_base_icon, load_rocket_icon())
+- [x] `whisperwarp.desktop` ikon útvonal frissítve → rocket_no_background.png
+- [x] Régi `whispertalk.desktop` törölve
+- [x] Új `whisperwarp.desktop` telepítve
+
+**System Tray működés:**
+- Mikrofon silhouette fehér színben
+- Háttér színe jelzi a státuszt (kék/piros/sárga/zöld/narancs/szürke)
+- Kis méretben is jól látható
+
+**Alkalmazás launcher:**
+- Rakéta ikon (1024x1024)
+- Név: "WhisperWarp"
+
+---
+
 ## Befejezett: Popup szöveg megjelenítés + kibővítés
 
 **Cél:** Transzkripció után a popup mutassa a leiratott szöveget, kattintásra kibővíthető Copy gombbal.
