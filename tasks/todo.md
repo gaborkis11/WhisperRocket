@@ -1,4 +1,4 @@
-# WhisperTalk - Todo Lista
+# WhisperWarp - Todo Lista
 
 ## Aktuális Feladat
 
@@ -56,7 +56,7 @@ _Nincs aktív feladat_
 - [x] Smart paste (Ctrl+V vs Ctrl+Shift+V terminálokhoz)
 - [x] System Tray menü (jobb klikk → Kilépés)
 - [x] Linux app launcher (.desktop fájl)
-- [x] Alkalmazás ikon (assets/whispertalk.png)
+- [x] Alkalmazás ikon (assets/whisperwarp.png)
 - [x] Popup ablak waveform vizualizációval
 - [x] Modern beállítások UI (PyQt6)
 - [x] Popup szöveg megjelenítés + kibővítés
@@ -74,13 +74,13 @@ _Nincs aktív feladat_
 - Jobb klikk a tray ikonra → "Kilépés" opció
 
 **2. Linux App Launcher**
-- `assets/whispertalk.png`: 256x256 mikrofon ikon generálva
-- `whispertalk.desktop`: Freedesktop szabványú launcher fájl
+- `assets/whisperwarp.png`: 256x256 mikrofon ikon generálva
+- `whisperwarp.desktop`: Freedesktop szabványú launcher fájl
 - `install.sh`: Frissítve desktop fájl telepítéssel
 
 ### Új fájlok
-- `assets/whispertalk.png`
-- `whispertalk.desktop`
+- `assets/whisperwarp.png`
+- `whisperwarp.desktop`
 
 ### Módosított fájlok
 - `whisper_gui.py` (3 módosítás)
@@ -89,4 +89,4 @@ _Nincs aktív feladat_
 ### Tesztelés
 - System Tray menü működik
 - Alkalmazás megjelenik az alkalmazások menüben
-- Desktop fájl telepítve: `~/.local/share/applications/whispertalk.desktop`
+- Desktop fájl telepítve: `~/.local/share/applications/whisperwarp.desktop`

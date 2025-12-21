@@ -3,7 +3,7 @@ cd ~/whisper-test
 
 # Ellenőrzés: fut-e már az alkalmazás
 if pgrep -f "python whisper_gui.py" > /dev/null; then
-    echo "WhisperTalk már fut!"
+    echo "WhisperWarp már fut!"
     exit 0
 fi
 

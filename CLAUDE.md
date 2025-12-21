@@ -1,4 +1,4 @@
-# WhisperTalk - Speech-to-Text Alkalmazás
+# WhisperWarp - Silent Speech-to-Text
 
 ## Claude Rules
 
@@ -17,7 +17,7 @@
 
 ## Projekt Leírás
 
-**WhisperTalk** egy lokális speech-to-text (beszédfelismerő) alkalmazás, amely az OpenAI Whisper modellt használja (faster-whisper implementáció) valós idejű beszédfelismerésre.
+**WhisperWarp** egy lokális speech-to-text (beszédfelismerő) alkalmazás, amely az OpenAI Whisper modellt használja (faster-whisper implementáció) valós idejű beszédfelismerésre.
 
 ### Fő Funkciók
 
@@ -55,9 +55,9 @@ whisper-test/
 ├── start.sh              # Indító script (CUDA env beállítás)
 ├── install.sh            # Telepítő script
 ├── requirements.txt      # Python függőségek
-├── whispertalk.desktop   # Linux app launcher
+├── whisperwarp.desktop   # Linux app launcher
 ├── assets/
-│   ├── whispertalk.png   # Alkalmazás ikon (256x256)
+│   ├── whisperwarp.png   # Alkalmazás ikon (256x256)
 │   ├── start_soft_click_smooth.wav  # Felvétel indítás hang
 │   └── stop_soft_click_smooth.wav   # Felvétel leállítás hang
 ├── tasks/

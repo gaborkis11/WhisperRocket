@@ -1,8 +1,8 @@
-# WhisperTalk
+# WhisperWarp
 
-**Local Speech-to-Text application powered by OpenAI Whisper**
+**Silent speech-to-text — Local, fast, private**
 
-WhisperTalk is a desktop application that converts speech to text in real-time using the Whisper AI model. It runs entirely locally on your machine - no cloud services, no API keys, complete privacy.
+WhisperWarp is a desktop application that converts speech to text in real-time using the Whisper AI model. It runs entirely locally on your machine - no cloud services, no API keys, complete privacy.
 
 ## Features
 
@@ -34,8 +34,8 @@ WhisperTalk is a desktop application that converts speech to text in real-time u
 ### 1. Clone the repository
 
 ```bash
-git clone https://github.com/yourusername/whisper-test.git
-cd whisper-test
+git clone https://github.com/gaborkis11/WhisperWarp.git
+cd WhisperWarp
 ```
 
 ### 2. Run the installer
@@ -57,7 +57,7 @@ This will:
 ./start.sh
 ```
 
-Or launch "WhisperTalk" from your application menu.
+Or launch "WhisperWarp" from your application menu.
 
 ## Usage
 

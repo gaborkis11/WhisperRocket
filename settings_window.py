@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-WhisperTalk Beállítások ablak v2
+WhisperWarp Beállítások ablak v2
 PyQt6 alapú modern UI tab-okkal
 """
 import os
@@ -25,9 +25,9 @@ from download_manager import get_download_manager
 
 # Konfiguráció útvonal
 CONFIG_FILE = os.path.join(os.path.dirname(__file__), 'config.json')
-DESKTOP_FILE = os.path.join(os.path.dirname(__file__), 'whispertalk.desktop')
+DESKTOP_FILE = os.path.join(os.path.dirname(__file__), 'whisperwarp.desktop')
 AUTOSTART_DIR = os.path.expanduser('~/.config/autostart')
-AUTOSTART_FILE = os.path.join(AUTOSTART_DIR, 'whispertalk.desktop')
+AUTOSTART_FILE = os.path.join(AUTOSTART_DIR, 'whisperwarp.desktop')
 
 # Támogatott nyelvek
 LANGUAGES = [
@@ -119,7 +119,7 @@ class SettingsWindow(QMainWindow):
 
     def init_ui(self):
         """UI inicializálása"""
-        self.setWindowTitle("WhisperTalk Beállítások")
+        self.setWindowTitle("WhisperWarp Beállítások")
         self.setFixedSize(500, 480)
 
         # Központi widget
@@ -130,7 +130,7 @@ class SettingsWindow(QMainWindow):
         layout.setContentsMargins(15, 15, 15, 15)
 
         # Cím
-        title = QLabel("WhisperTalk Beállítások")
+        title = QLabel("WhisperWarp Beállítások")
         title.setFont(QFont("Sans", 14, QFont.Weight.Bold))
         title.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(title)

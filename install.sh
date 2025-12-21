@@ -31,9 +31,9 @@ fi
 # Desktop fájl telepítése (alkalmazás launcher)
 echo "[5/5] Alkalmazás launcher telepítése..."
 mkdir -p ~/.local/share/applications
-cp whispertalk.desktop ~/.local/share/applications/
+cp whisperwarp.desktop ~/.local/share/applications/
 chmod +x start.sh
-echo "WhisperTalk hozzáadva az alkalmazások menühöz"
+echo "WhisperWarp hozzáadva az alkalmazások menühöz"
 
 echo ""
 echo "======================================"
@@ -41,6 +41,6 @@ echo "Telepítés sikeres!"
 echo "======================================"
 echo ""
 echo "Indítás:"
-echo "  - Alkalmazások menüből: WhisperTalk"
+echo "  - Alkalmazások menüből: WhisperWarp"
 echo "  - Terminálból: ./start.sh"
 echo ""

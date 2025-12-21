@@ -421,7 +421,7 @@ def main():
         Menu.SEPARATOR,
         MenuItem("Kilépés", quit_app)
     )
-    tray_icon = Icon("WhisperTalk", create_icon('gray'), "WhisperTalk", menu)
+    tray_icon = Icon("WhisperWarp", create_icon('gray'), "WhisperWarp", menu)
 
     # Modell betöltés háttérben
     threading.Thread(target=load_model, daemon=True).start()
