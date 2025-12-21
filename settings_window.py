@@ -7,14 +7,14 @@ import os
 import json
 import sys
 import shutil
-from PyQt6.QtWidgets import (
+from PySide6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QLabel, QComboBox, QLineEdit, QPushButton, QCheckBox,
     QGroupBox, QFormLayout, QMessageBox, QTabWidget,
     QProgressBar, QListWidget, QListWidgetItem, QFrame, QSpinBox
 )
-from PyQt6.QtCore import Qt, QTimer
-from PyQt6.QtGui import QFont
+from PySide6.QtCore import Qt, QTimer
+from PySide6.QtGui import QFont
 
 from model_manager import (
     get_downloaded_models, get_active_model, delete_model,

@@ -12,10 +12,27 @@ import pyperclip
 from pynput import keyboard
 from faster_whisper import WhisperModel
 import numpy as np
-from pystray import Icon, Menu, MenuItem
-from PIL import Image, ImageDraw
-from PyQt6.QtWidgets import QApplication
-from PyQt6.QtCore import QTimer
+from PySide6.QtWidgets import QApplication, QSystemTrayIcon, QMenu
+from PySide6.QtCore import QTimer, Slot, Signal, QObject
+from PySide6.QtGui import QIcon, QPixmap, QPainter, QColor, QBrush, QPen, QAction
+
+
+class TrayIconUpdater(QObject):
+    """Helper osztály thread-safe tray ikon frissítéshez"""
+    update_requested = Signal(str, str)  # color, title
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.update_requested.connect(self._do_update)
+
+    @Slot(str, str)
+    def _do_update(self, color, title):
+        global tray_icon
+        if tray_icon:
+            tray_icon.setIcon(create_icon(color))
+            tray_icon.setToolTip(title)
+
+
 from translations import t
 
 # Konfiguráció
@@ -70,6 +87,7 @@ actual_sample_rate = config.get("sample_rate", 16000)  # Tényleges sample rate
 # Popup ablak változók
 amplitude_queue = Queue(maxsize=100)  # Thread-safe queue a waveform adatokhoz
 popup_window = None
+tray_icon_updater = None  # Thread-safe tray ikon frissítő
 qt_app = None
 
 # Hang lejátszás háttérszálban (paplay használata - megbízhatóbb)
@@ -88,53 +106,78 @@ def play_sound(sound_file):
             print(f"[FIGYELEM] Hang lejátszás sikertelen: {e}")
     threading.Thread(target=_play, daemon=True).start()
 
-# System tray ikon létrehozása
+# System tray ikon létrehozása (Qt verzió)
 def create_icon(color='blue'):
-    """Mikrofon ikon lekerekített színes háttérrel"""
-    # 64x64 átlátszó háttér
-    image = Image.new('RGBA', (64, 64), color=(0, 0, 0, 0))
-    dc = ImageDraw.Draw(image)
+    """Mikrofon ikon lekerekített színes háttérrel - QIcon"""
+    # Szín map
+    color_map = {
+        'blue': QColor(59, 130, 246),
+        'red': QColor(239, 68, 68),
+        'yellow': QColor(234, 179, 8),
+        'orange': QColor(249, 115, 22),
+        'green': QColor(34, 197, 94),
+        'gray': QColor(107, 114, 128),
+    }
+    bg_color = color_map.get(color, QColor(59, 130, 246))
+
+    # 64x64 pixmap
+    pixmap = QPixmap(64, 64)
+    pixmap.fill(QColor(0, 0, 0, 0))  # Átlátszó háttér
+
+    painter = QPainter(pixmap)
+    painter.setRenderHint(QPainter.RenderHint.Antialiasing)
 
     # Lekerekített színes háttér
-    dc.rounded_rectangle([0, 0, 63, 63], radius=12, fill=color)
+    painter.setBrush(QBrush(bg_color))
+    painter.setPen(QPen(QColor(0, 0, 0, 0)))
+    painter.drawRoundedRect(0, 0, 64, 64, 12, 12)
 
-    # Egyszerű mikrofon silhouette (fehér)
-    # Mikrofon fej (lekerekített téglalap)
-    dc.rounded_rectangle([24, 8, 40, 32], radius=8, fill='white')
+    # Mikrofon (fehér)
+    painter.setBrush(QBrush(QColor(255, 255, 255)))
+    painter.setPen(QPen(QColor(0, 0, 0, 0)))
+
+    # Mikrofon fej
+    painter.drawRoundedRect(24, 8, 16, 24, 8, 8)
+
     # Mikrofon állvány ív
-    dc.arc([16, 20, 48, 48], start=0, end=180, fill='white', width=4)
-    # Függőleges rúd
-    dc.rectangle([30, 44, 34, 52], fill='white')
-    # Talp
-    dc.rectangle([22, 52, 42, 56], fill='white')
+    painter.setBrush(QBrush(QColor(0, 0, 0, 0)))
+    painter.setPen(QPen(QColor(255, 255, 255), 4))
+    painter.drawArc(16, 20, 32, 28, 0, 180 * 16)
 
-    return image
+    # Függőleges rúd
+    painter.setBrush(QBrush(QColor(255, 255, 255)))
+    painter.setPen(QPen(QColor(0, 0, 0, 0)))
+    painter.drawRect(30, 44, 4, 8)
+
+    # Talp
+    painter.drawRect(22, 52, 20, 4)
+
+    painter.end()
+
+    return QIcon(pixmap)
 
 def update_icon(color, title):
-    """Ikon és cím frissítése"""
-    global tray_icon
-    if tray_icon:
-        tray_icon.icon = create_icon(color)
-        tray_icon.title = title
+    """Ikon és cím frissítése (thread-safe Signal-alapú)"""
+    global tray_icon_updater
+    if tray_icon_updater:
+        tray_icon_updater.update_requested.emit(color, title)
 
-def quit_app(icon, item):
+@Slot()
+def quit_app():
     """Alkalmazás leállítása"""
     global stream, qt_app
     print("[INFO] Kilépés...")
     if stream:
         stream.stop()
         stream.close()
-    icon.stop()
-    # Qt alkalmazás leállítása
     if qt_app:
         qt_app.quit()
 
-def open_settings(icon, item):
+@Slot()
+def open_settings():
     """Beállítások ablak megnyitása"""
     print("[INFO] Beállítások megnyitása...")
     import subprocess
-    import sys
-    # Beállítások ablak indítása külön folyamatban
     subprocess.Popen([sys.executable, os.path.join(os.path.dirname(__file__), 'settings_window.py')])
 
 # Modell betöltés
@@ -269,34 +312,31 @@ def process_audio(audio_copy):
         hide_popup()
         update_icon('blue', t("tray_ready", ui_lang))
 
-# Popup kezelés
+# Popup kezelés (Signal-alapú thread-safe kommunikáció)
 def show_popup():
     """Popup ablak megjelenítése (thread-safe)"""
     global popup_window
     if popup_window:
-        # Qt-nek főszálból kell hívni - QTimer.singleShot használata
-        QTimer.singleShot(0, popup_window.show_popup)
+        popup_window.request_show_popup.emit()
 
 def show_text_popup(text: str):
     """Szöveg megjelenítése a popup-ban (thread-safe)"""
     global popup_window
     print(f"[DEBUG] show_text_popup() hívva, text='{text[:30]}...'")
     if popup_window:
-        # Szöveg tárolása a popup objektumon és metódus hívás
-        popup_window.pending_text = text
-        QTimer.singleShot(0, popup_window.show_pending_text)
+        popup_window.request_show_text.emit(text)
 
 def show_processing_popup():
     """Processing állapot megjelenítése (thread-safe)"""
     global popup_window
     if popup_window:
-        QTimer.singleShot(0, popup_window.show_processing)
+        popup_window.request_show_processing.emit()
 
 def hide_popup():
     """Popup ablak elrejtése (thread-safe)"""
     global popup_window
     if popup_window:
-        QTimer.singleShot(0, popup_window.hide_popup)
+        popup_window.request_hide_popup.emit()
 
 # Rögzítés
 def start_recording():
@@ -405,7 +445,7 @@ def on_release(key):
 
 # Fő program
 def main():
-    global stream, tray_icon, qt_app, popup_window
+    global stream, tray_icon, qt_app, popup_window, tray_icon_updater
 
     # PyQt6 inicializálás (először kell lennie)
     qt_app = QApplication(sys.argv)
@@ -446,13 +486,25 @@ def main():
     listener = keyboard.Listener(on_press=on_press, on_release=on_release)
     listener.start()
 
-    # System Tray ikon menüvel (klikk -> menü)
-    menu = Menu(
-        MenuItem(t("tray_settings", ui_lang), open_settings),
-        Menu.SEPARATOR,
-        MenuItem(t("tray_quit", ui_lang), quit_app)
-    )
-    tray_icon = Icon("WhisperWarp", create_icon('gray'), "WhisperWarp", menu)
+    # System Tray ikon menüvel (Qt QSystemTrayIcon)
+    tray_icon = QSystemTrayIcon(create_icon('gray'), qt_app)
+    tray_icon.setToolTip("WhisperWarp")
+
+    # Tray ikon frissítő (thread-safe)
+    tray_icon_updater = TrayIconUpdater(qt_app)
+
+    # Menü létrehozása
+    tray_menu = QMenu()
+    settings_action = QAction(t("tray_settings", ui_lang), qt_app)
+    settings_action.triggered.connect(open_settings)
+    tray_menu.addAction(settings_action)
+    tray_menu.addSeparator()
+    quit_action = QAction(t("tray_quit", ui_lang), qt_app)
+    quit_action.triggered.connect(quit_app)
+    tray_menu.addAction(quit_action)
+
+    tray_icon.setContextMenu(tray_menu)
+    tray_icon.show()
 
     # Modell betöltés háttérben
     threading.Thread(target=load_model, daemon=True).start()
@@ -474,9 +526,6 @@ def main():
     print("  Config:  nano config.json")
     print("="*60)
     print("")
-
-    # Tray ikon futtatása háttérszálban
-    tray_icon.run_detached()
 
     # Qt event loop futtatása (főszál)
     sys.exit(qt_app.exec())

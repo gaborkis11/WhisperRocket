@@ -1,5 +1,5 @@
 #!/bin/bash
-cd ~/whisper-test
+cd ~/WhisperWarp
 
 # Ellenőrzés: fut-e már az alkalmazás
 if pgrep -f "python whisper_gui.py" > /dev/null; then

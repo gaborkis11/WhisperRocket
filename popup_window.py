@@ -4,9 +4,9 @@ WhisperWarp - Recording Popup Window
 Valós idejű waveform vizualizáció felvétel közben
 Transzkripció utáni szöveg megjelenítés
 """
-from PyQt6.QtWidgets import QWidget, QApplication
-from PyQt6.QtCore import Qt, QTimer, QPoint, QRectF
-from PyQt6.QtGui import QPainter, QColor, QPen, QBrush, QPainterPath, QFont
+from PySide6.QtWidgets import QWidget, QApplication
+from PySide6.QtCore import Qt, QTimer, QPoint, QRectF, Slot, Signal
+from PySide6.QtGui import QPainter, QColor, QPen, QBrush, QPainterPath, QFont
 from queue import Queue, Empty
 from enum import Enum, auto
 from translations import t
@@ -27,6 +27,12 @@ class PopupState(Enum):
 
 class RecordingPopup(QWidget):
     """Frameless popup ablak waveform vizualizációval"""
+
+    # Signalok thread-safe kommunikációhoz
+    request_show_popup = Signal()
+    request_show_processing = Signal()
+    request_show_text = Signal(str)
+    request_hide_popup = Signal()
 
     def __init__(self, amplitude_queue: Queue, hotkey: str = "Alt+S", popup_duration: int = 5, ui_language: str = "en"):
         super().__init__()
@@ -134,6 +140,12 @@ class RecordingPopup(QWidget):
         # Középre pozícionálás
         self._center_on_screen()
 
+        # Signal-slot összekötések (thread-safe)
+        self.request_show_popup.connect(self.show_popup)
+        self.request_show_processing.connect(self.show_processing)
+        self.request_show_text.connect(self.show_text)
+        self.request_hide_popup.connect(self.hide_popup)
+
         # Timer a waveform frissítéséhez (60 FPS)
         self.update_timer = QTimer()
         self.update_timer.timeout.connect(self._update_waveform)
@@ -151,6 +163,7 @@ class RecordingPopup(QWidget):
                 y = (geometry.height() - self.height()) // 2
                 self.move(x, y)
 
+    @Slot()
     def _update_waveform(self):
         """Waveform adatok frissítése a queue-ból"""
         try:
@@ -429,6 +442,7 @@ class RecordingPopup(QWidget):
         # Frame növelés (animáció)
         self.animation_frame = (self.animation_frame + 1) % 60
 
+    @Slot()
     def _next_message(self):
         """Következő üzenet - RANDOM választás"""
         self.current_message = random.choice(self.processing_messages)
@@ -662,8 +676,10 @@ class RecordingPopup(QWidget):
             self.saved_position = new_pos  # Pozíció mentése
             event.accept()
 
+    @Slot()
     def show_popup(self):
         """Popup megjelenítése felvételhez"""
+        print("[DEBUG] show_popup() SLOT meghívva!")
         self.state = PopupState.RECORDING
         self.auto_hide_timer.stop()  # Timer leállítása ha fut
         self.setFixedSize(self.base_width, self.base_height)
@@ -671,9 +687,13 @@ class RecordingPopup(QWidget):
             self.move(self.saved_position)
         else:
             self._center_on_screen()
+        print(f"[DEBUG] Popup méret: {self.width()}x{self.height()}, pozíció: {self.x()},{self.y()}")
         self.show()
         self.raise_()
+        self.activateWindow()
+        print(f"[DEBUG] Popup visible: {self.isVisible()}")
 
+    @Slot()
     def show_processing(self):
         """Processing állapot megjelenítése (feldolgozás közben)"""
         self.state = PopupState.PROCESSING
@@ -683,6 +703,7 @@ class RecordingPopup(QWidget):
         self.setFixedSize(self.base_width, self.base_height)
         self.update()
 
+    @Slot()
     def show_pending_text(self):
         """Pending szöveg megjelenítése (QTimer callback)"""
         if hasattr(self, 'pending_text') and self.pending_text:
@@ -705,6 +726,7 @@ class RecordingPopup(QWidget):
         # Auto-hide timer indítása
         self.auto_hide_timer.start(self.auto_hide_seconds * 1000)
 
+    @Slot()
     def _update_countdown(self):
         """Visszaszámláló frissítése"""
         if self.countdown_remaining > 0:
@@ -713,12 +735,14 @@ class RecordingPopup(QWidget):
         else:
             self.countdown_timer.stop()
 
+    @Slot()
     def _auto_hide(self):
         """Automatikus elrejtés timer után"""
         self.countdown_timer.stop()
         if self.state == PopupState.TEXT_PREVIEW:
             self.hide_popup()
 
+    @Slot()
     def hide_popup(self):
         """Popup elrejtése"""
         self.state = PopupState.HIDDEN

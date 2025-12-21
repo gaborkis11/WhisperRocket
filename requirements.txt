@@ -8,4 +8,4 @@ pillow
 numpy
 nvidia-cudnn-cu12
 nvidia-cublas-cu12
-PyQt6
+PySide6
