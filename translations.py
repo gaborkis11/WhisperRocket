@@ -1,0 +1,177 @@
+#!/usr/bin/env python3
+"""
+WhisperWarp - Többnyelvű UI támogatás
+Angol alapértelmezett, magyar választható
+"""
+
+TRANSLATIONS = {
+    "en": {
+        # System tray
+        "tray_settings": "Settings",
+        "tray_quit": "Quit",
+        "tray_loading": "WhisperWarp - Loading...",
+        "tray_ready": "WhisperWarp - Ready",
+        "tray_recording": "WhisperWarp - RECORDING",
+        "tray_processing": "WhisperWarp - Processing...",
+        "tray_done": "WhisperWarp - Done! Ctrl+V",
+        "tray_error": "WhisperWarp - ERROR!",
+
+        # Popup
+        "popup_recording": "Recording",
+        "popup_done": "Done",
+        "popup_finish": "Finish",
+        "popup_cancel": "Cancel",
+        "popup_expand": "Click to expand",
+        "popup_copy": "Copy",
+
+        # Settings - general
+        "settings_title": "WhisperWarp Settings",
+        "tab_settings": "Settings",
+        "tab_models": "Models",
+        "label_ui_language": "UI Language:",
+        "label_language": "Language:",
+        "label_hotkey": "Hotkey:",
+        "label_model": "Model:",
+        "label_device": "Device:",
+        "label_popup_duration": "Popup duration:",
+        "suffix_seconds": " sec",
+        "btn_record": "Record",
+        "btn_save": "Save",
+        "btn_save_restart": "Save and restart",
+        "btn_cancel": "Cancel",
+        "autostart": "Start on system boot",
+        "info_restart": "Note: Model/UI language changes require restart.",
+
+        # Settings - models tab
+        "models_downloaded": "Downloaded models:",
+        "storage_info": "Total: {total} | Freeable: {free}",
+        "info_active_model": "Active model cannot be deleted.",
+        "btn_refresh": "Refresh",
+        "btn_delete_selected": "Delete selected",
+        "btn_delete_all": "Delete all unused",
+        "btn_close": "Close",
+
+        # Dialogs
+        "dlg_warning": "Warning",
+        "dlg_confirm": "Confirm",
+        "dlg_success": "Success",
+        "dlg_error": "Error",
+        "dlg_info": "Info",
+        "dlg_saved": "Saved",
+        "dlg_select_model": "Select a model to delete!",
+        "dlg_active_no_delete": "Active model cannot be deleted!",
+        "dlg_confirm_delete": "Delete {model}?",
+        "dlg_confirm_delete_all": "Delete all unused models?\n\nFreeable space: {size}",
+        "dlg_deleted": "{count} model(s) deleted!\nFreed space: {size}",
+        "dlg_no_deletable": "No models to delete!",
+        "dlg_download": "Download Model",
+        "dlg_download_ask": "{model} is not downloaded.\n\nDownload now?",
+        "dlg_settings_saved": "Settings saved!\n\nChanges take effect after restart.",
+        "dlg_download_in_progress": "A download is in progress.\n\nCancel and switch to new model?",
+
+        # Download
+        "download_title": "Downloading: {model}",
+        "download_starting": "Starting...",
+        "download_done": "Downloaded: {model}",
+        "download_complete": "Download complete!",
+        "download_error": "Error: {model}",
+        "download_cancelled": "Download cancelled",
+        "download_stall": "Downloading... (writing large file)",
+
+        # Hotkey
+        "hotkey_press": "Press key combination...",
+    },
+    "hu": {
+        # System tray
+        "tray_settings": "Beállítások",
+        "tray_quit": "Kilépés",
+        "tray_loading": "WhisperWarp - Betöltés...",
+        "tray_ready": "WhisperWarp - Készen áll",
+        "tray_recording": "WhisperWarp - FELVÉTEL",
+        "tray_processing": "WhisperWarp - Feldolgozás...",
+        "tray_done": "WhisperWarp - Kész! Ctrl+V",
+        "tray_error": "WhisperWarp - HIBA!",
+
+        # Popup
+        "popup_recording": "Felvétel",
+        "popup_done": "Kész",
+        "popup_finish": "Befejez",
+        "popup_cancel": "Mégse",
+        "popup_expand": "Kattints a kibontáshoz",
+        "popup_copy": "Másolás",
+
+        # Settings - general
+        "settings_title": "WhisperWarp Beállítások",
+        "tab_settings": "Beállítások",
+        "tab_models": "Modellek",
+        "label_ui_language": "UI Nyelv:",
+        "label_language": "Nyelv:",
+        "label_hotkey": "Hotkey:",
+        "label_model": "Modell:",
+        "label_device": "Eszköz:",
+        "label_popup_duration": "Popup időtartam:",
+        "suffix_seconds": " mp",
+        "btn_record": "Rögzít",
+        "btn_save": "Mentés",
+        "btn_save_restart": "Mentés és újraindítás",
+        "btn_cancel": "Mégse",
+        "autostart": "Indítás rendszerindításkor",
+        "info_restart": "Megjegyzés: Modell/UI nyelv váltás újraindítást igényel.",
+
+        # Settings - models tab
+        "models_downloaded": "Letöltött modellek:",
+        "storage_info": "Összesen: {total} | Felszabadítható: {free}",
+        "info_active_model": "Az aktív modell nem törölhető.",
+        "btn_refresh": "Frissítés",
+        "btn_delete_selected": "Kijelölt törlése",
+        "btn_delete_all": "Összes nem használt törlése",
+        "btn_close": "Bezár",
+
+        # Dialogs
+        "dlg_warning": "Figyelmeztetés",
+        "dlg_confirm": "Megerősítés",
+        "dlg_success": "Siker",
+        "dlg_error": "Hiba",
+        "dlg_info": "Info",
+        "dlg_saved": "Mentve",
+        "dlg_select_model": "Válassz ki egy modellt a törléshez!",
+        "dlg_active_no_delete": "Az aktív modell nem törölhető!",
+        "dlg_confirm_delete": "Törlöd a(z) {model} modellt?",
+        "dlg_confirm_delete_all": "Törlöd az összes nem használt modellt?\n\nFelszabaduló tárhely: {size}",
+        "dlg_deleted": "{count} modell törölve!\nFelszabadított tárhely: {size}",
+        "dlg_no_deletable": "Nincs törölhető modell!",
+        "dlg_download": "Modell letöltése",
+        "dlg_download_ask": "A(z) {model} modell nincs letöltve.\n\nLetöltöd most?",
+        "dlg_settings_saved": "Beállítások elmentve!\n\nA változások újraindítás után lépnek érvénybe.",
+        "dlg_download_in_progress": "Letöltés folyamatban.\n\nMegszakítod és váltasz az új modellre?",
+
+        # Download
+        "download_title": "Letöltés: {model}",
+        "download_starting": "Indítás...",
+        "download_done": "Letöltve: {model}",
+        "download_complete": "Letöltés kész!",
+        "download_error": "Hiba: {model}",
+        "download_cancelled": "Letöltés megszakítva",
+        "download_stall": "Letöltés... (nagy fájl írása)",
+
+        # Hotkey
+        "hotkey_press": "Nyomd meg a billentyűkombinációt...",
+    }
+}
+
+
+def t(key: str, lang: str = "en", **kwargs) -> str:
+    """
+    Fordítás lekérése.
+
+    Használat:
+        t("tray_ready", "hu")
+        t("dlg_confirm_delete", "en", model="large-v3")
+    """
+    text = TRANSLATIONS.get(lang, TRANSLATIONS["en"]).get(key, key)
+    if kwargs:
+        try:
+            text = text.format(**kwargs)
+        except KeyError:
+            pass  # Ha hiányzik paraméter, eredeti szöveg marad
+    return text

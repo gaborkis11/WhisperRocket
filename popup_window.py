@@ -9,6 +9,7 @@ from PyQt6.QtCore import Qt, QTimer, QPoint, QRectF
 from PyQt6.QtGui import QPainter, QColor, QPen, QBrush, QPainterPath, QFont
 from queue import Queue, Empty
 from enum import Enum, auto
+from translations import t
 import sys
 import math
 import random
@@ -27,11 +28,12 @@ class PopupState(Enum):
 class RecordingPopup(QWidget):
     """Frameless popup ablak waveform vizualizációval"""
 
-    def __init__(self, amplitude_queue: Queue, hotkey: str = "Alt+S", popup_duration: int = 5):
+    def __init__(self, amplitude_queue: Queue, hotkey: str = "Alt+S", popup_duration: int = 5, ui_language: str = "en"):
         super().__init__()
         self.amplitude_queue = amplitude_queue
         self.hotkey = hotkey  # Beállított hotkey megjelenítéshez
         self.popup_duration = popup_duration  # Popup megjelenítési idő (másodperc)
+        self.ui_lang = ui_language  # UI nyelv
         self.current_amplitude = 0.0  # Aktuális hangerő (nyers)
         self.smoothed_amplitude = 0.0  # Simított hangerő (megjelenítéshez)
         self.bar_count = 45  # Oszlopok száma
@@ -254,7 +256,7 @@ class RecordingPopup(QWidget):
 
         painter.setPen(QPen(QColor(160, 160, 160)))
         painter.setFont(QFont("Sans", 9))
-        painter.drawText(circle_x + 12, circle_y + 4, "Recording")
+        painter.drawText(circle_x + 12, circle_y + 4, t("popup_recording", self.ui_lang))
 
         # Hotkey gombok jobb oldalon: "Finish [Alt+S]" | "Cancel [Esc]"
         btn_y = self.height() - 28
@@ -282,7 +284,7 @@ class RecordingPopup(QWidget):
 
         # "Cancel" label
         painter.setPen(QPen(QColor(120, 120, 120)))
-        painter.drawText(int(cancel_btn_x - 45), int(btn_y + 14), "Cancel")
+        painter.drawText(int(cancel_btn_x - 45), int(btn_y + 14), t("popup_cancel", self.ui_lang))
 
         # Finish gomb (Cancel előtt)
         finish_text = hotkey_display
@@ -300,7 +302,7 @@ class RecordingPopup(QWidget):
 
         # "Finish" label
         painter.setPen(QPen(QColor(120, 120, 120)))
-        painter.drawText(int(finish_btn_x - 40), int(btn_y + 14), "Finish")
+        painter.drawText(int(finish_btn_x - 40), int(btn_y + 14), t("popup_finish", self.ui_lang))
 
     def _init_stars(self):
         """Csillagok inicializálása a háttérhez"""
@@ -453,7 +455,7 @@ class RecordingPopup(QWidget):
         painter.drawText(padding, 78, f'"{display_text}"')
 
         # 4. "Click to expand" gomb - zöldes háttérrel
-        btn_text = "Click to expand"
+        btn_text = t("popup_expand", self.ui_lang)
         btn_font = QFont("Sans", 9)
         painter.setFont(btn_font)
         fm = painter.fontMetrics()
@@ -523,7 +525,7 @@ class RecordingPopup(QWidget):
 
         painter.setPen(QPen(QColor(160, 160, 160)))
         painter.setFont(QFont("Sans", 9))
-        painter.drawText(circle_x + 12, circle_y + 4, "Done")
+        painter.drawText(circle_x + 12, circle_y + 4, t("popup_done", self.ui_lang))
 
         # Kisimult equalizer (jobb oldalon, alacsony vonalak) - rövidebb, hogy a close gomb elférjen
         bar_width = 3
@@ -616,7 +618,7 @@ class RecordingPopup(QWidget):
         # Gomb szöveg
         painter.setPen(QPen(QColor(200, 200, 200)))
         painter.setFont(QFont("Sans", 9))
-        painter.drawText(int(btn_x + 22), int(btn_y + 18), "Copy")
+        painter.drawText(int(btn_x + 22), int(btn_y + 18), t("popup_copy", self.ui_lang))
 
     def mousePressEvent(self, event):
         """Kattintás kezelése - állapot alapján"""

@@ -16,6 +16,7 @@ from pystray import Icon, Menu, MenuItem
 from PIL import Image, ImageDraw
 from PyQt6.QtWidgets import QApplication
 from PyQt6.QtCore import QTimer
+from translations import t
 
 # Konfiguráció
 CONFIG_FILE = os.path.join(os.path.dirname(__file__), 'config.json')
@@ -43,6 +44,7 @@ def load_config():
 
 # Globális változók
 config = load_config()
+ui_lang = config.get("ui_language", "en")
 model = None
 recording = False
 audio_data = []
@@ -125,8 +127,8 @@ def open_settings(icon, item):
 def load_model():
     global model
     print("[INFO] Whisper modell betoltese...")
-    update_icon('orange', 'Whisper - Modell betoltes...')
-    
+    update_icon('orange', t("tray_loading", ui_lang))
+
     try:
         model = WhisperModel(
             config["model"],
@@ -134,10 +136,10 @@ def load_model():
             compute_type=config["compute_type"]
         )
         print("[INFO] Modell betoltve!")
-        update_icon('blue', 'Whisper - Keszen all')
+        update_icon('blue', t("tray_ready", ui_lang))
     except Exception as e:
         print(f"[HIBA] Modell betoltes: {e}")
-        update_icon('red', 'Whisper - Modell HIBA!')
+        update_icon('red', t("tray_error", ui_lang))
 
 # Audio callback
 def audio_callback(indata, frames, time_info, status):
@@ -234,24 +236,24 @@ def process_audio(audio_copy):
         os.unlink(temp_file.name)
 
         # Ikon frissítés
-        update_icon('green', 'Whisper - Kesz! Ctrl+V')
+        update_icon('green', t("tray_done", ui_lang))
 
         # Szöveg megjelenítése a popup-ban (3mp-ig látszik, kattintásra expand)
         show_text_popup(text)
 
         # Ikon visszaállítás késleltetéssel
         time.sleep(3)
-        update_icon('blue', 'Whisper - Keszen all')
+        update_icon('blue', t("tray_ready", ui_lang))
 
     except Exception as e:
         print("\n" + "="*60)
         print(f"[HIBA] {e}")
         print("="*60 + "\n")
 
-        update_icon('red', 'Whisper - HIBA!')
+        update_icon('red', t("tray_error", ui_lang))
         time.sleep(2)
         hide_popup()
-        update_icon('blue', 'Whisper - Keszen all')
+        update_icon('blue', t("tray_ready", ui_lang))
 
 # Popup kezelés
 def show_popup():
@@ -297,7 +299,7 @@ def start_recording():
         show_popup()
         play_sound(SOUND_START)
         print("\n[ROGZITES] Indul...")
-        update_icon('red', 'Whisper - ROGZITES')
+        update_icon('red', t("tray_recording", ui_lang))
 
 def stop_recording():
     global recording, audio_data
@@ -305,7 +307,7 @@ def stop_recording():
         recording = False
         play_sound(SOUND_STOP)
         print("[ROGZITES] Megall")
-        update_icon('yellow', 'Whisper - Feldolgozas...')
+        update_icon('yellow', t("tray_processing", ui_lang))
 
         if len(audio_data) > 0:
             show_processing_popup()  # Processing animáció indítása
@@ -315,7 +317,7 @@ def stop_recording():
         else:
             print("[FIGYELEM] Nincs rogzitett hang!")
             hide_popup()
-            update_icon('blue', 'Whisper - Keszen all')
+            update_icon('blue', t("tray_ready", ui_lang))
 
 def cancel_recording():
     """Felvétel megszakítása (Escape) - nem dolgozza fel"""
@@ -325,7 +327,7 @@ def cancel_recording():
         audio_data = []
         hide_popup()
         print("[ROGZITES] Megszakítva (Cancel)")
-        update_icon('blue', 'Whisper - Keszen all')
+        update_icon('blue', t("tray_ready", ui_lang))
 
 # Hotkey
 def parse_hotkey(hotkey_str):
@@ -394,12 +396,13 @@ def main():
     # PyQt6 inicializálás (először kell lennie)
     qt_app = QApplication(sys.argv)
 
-    # Popup ablak létrehozása (hotkey átadása)
+    # Popup ablak létrehozása (hotkey és nyelv átadása)
     from popup_window import RecordingPopup
     popup_window = RecordingPopup(
         amplitude_queue,
         config["hotkey"],
-        config.get("popup_display_duration", 5)
+        config.get("popup_display_duration", 5),
+        ui_lang
     )
 
     # Audio stream (rendszer alapértelmezett mikrofon)
@@ -431,9 +434,9 @@ def main():
 
     # System Tray ikon menüvel (klikk -> menü)
     menu = Menu(
-        MenuItem("Beállítások", open_settings),
+        MenuItem(t("tray_settings", ui_lang), open_settings),
         Menu.SEPARATOR,
-        MenuItem("Kilépés", quit_app)
+        MenuItem(t("tray_quit", ui_lang), quit_app)
     )
     tray_icon = Icon("WhisperWarp", create_icon('gray'), "WhisperWarp", menu)
 

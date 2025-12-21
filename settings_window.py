@@ -22,6 +22,7 @@ from model_manager import (
     format_size, is_model_downloaded
 )
 from download_manager import get_download_manager
+from translations import t
 
 # Konfiguráció útvonal
 CONFIG_FILE = os.path.join(os.path.dirname(__file__), 'config.json')
@@ -60,6 +61,12 @@ MODELS = [
 DEVICES = [
     ("cuda", "GPU (CUDA)"),
     ("cpu", "CPU"),
+]
+
+# UI nyelvek
+UI_LANGUAGES = [
+    ("en", "English"),
+    ("hu", "Magyar"),
 ]
 
 
@@ -109,6 +116,7 @@ class SettingsWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         self.config = load_config()
+        self.ui_lang = self.config.get("ui_language", "en")
         self.download_manager = get_download_manager()
         self.init_ui()
 
@@ -119,8 +127,8 @@ class SettingsWindow(QMainWindow):
 
     def init_ui(self):
         """UI inicializálása"""
-        self.setWindowTitle("WhisperWarp Beállítások")
-        self.setFixedSize(500, 480)
+        self.setWindowTitle(t("settings_title", self.ui_lang))
+        self.setFixedSize(500, 520)
 
         # Központi widget
         central = QWidget()
@@ -130,15 +138,15 @@ class SettingsWindow(QMainWindow):
         layout.setContentsMargins(15, 15, 15, 15)
 
         # Cím
-        title = QLabel("WhisperWarp Beállítások")
+        title = QLabel(t("settings_title", self.ui_lang))
         title.setFont(QFont("Sans", 14, QFont.Weight.Bold))
         title.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(title)
 
         # Tab widget
         self.tabs = QTabWidget()
-        self.tabs.addTab(self.create_settings_tab(), "Beállítások")
-        self.tabs.addTab(self.create_models_tab(), "Modellek")
+        self.tabs.addTab(self.create_settings_tab(), t("tab_settings", self.ui_lang))
+        self.tabs.addTab(self.create_models_tab(), t("tab_models", self.ui_lang))
         layout.addWidget(self.tabs)
 
         # Hotkey rögzítés állapota
@@ -154,12 +162,19 @@ class SettingsWindow(QMainWindow):
         form_layout = QFormLayout()
         form_layout.setSpacing(10)
 
-        # Nyelv
+        # UI Nyelv (felület nyelve)
+        self.ui_lang_combo = QComboBox()
+        for code, name in UI_LANGUAGES:
+            self.ui_lang_combo.addItem(name, code)
+        self.set_combo_value(self.ui_lang_combo, self.ui_lang)
+        form_layout.addRow(t("label_ui_language", self.ui_lang), self.ui_lang_combo)
+
+        # Nyelv (Whisper nyelve)
         self.language_combo = QComboBox()
         for code, name in LANGUAGES:
             self.language_combo.addItem(f"{name} ({code})", code)
         self.set_combo_value(self.language_combo, self.config.get("language", "hu"))
-        form_layout.addRow("Nyelv:", self.language_combo)
+        form_layout.addRow(t("label_language", self.ui_lang), self.language_combo)
 
         # Hotkey
         hotkey_layout = QHBoxLayout()
@@ -167,14 +182,14 @@ class SettingsWindow(QMainWindow):
         self.hotkey_edit.setReadOnly(True)
         hotkey_layout.addWidget(self.hotkey_edit)
 
-        self.record_btn = QPushButton("Rögzít")
-        self.record_btn.setFixedWidth(70)
+        self.record_btn = QPushButton(t("btn_record", self.ui_lang))
+        self.record_btn.setFixedWidth(80)
         self.record_btn.clicked.connect(self.start_hotkey_recording)
         hotkey_layout.addWidget(self.record_btn)
 
         hotkey_widget = QWidget()
         hotkey_widget.setLayout(hotkey_layout)
-        form_layout.addRow("Hotkey:", hotkey_widget)
+        form_layout.addRow(t("label_hotkey", self.ui_lang), hotkey_widget)
 
         # Modell
         self.model_combo = QComboBox()
@@ -183,7 +198,7 @@ class SettingsWindow(QMainWindow):
             self.model_combo.addItem(f"{name}{downloaded}", code)
         self.set_combo_value(self.model_combo, self.config.get("model", "large-v3"))
         self.model_combo.currentIndexChanged.connect(self.on_model_changed)
-        form_layout.addRow("Modell:", self.model_combo)
+        form_layout.addRow(t("label_model", self.ui_lang), self.model_combo)
 
         layout.addLayout(form_layout)
 
@@ -209,7 +224,7 @@ class SettingsWindow(QMainWindow):
 
         progress_btn_layout = QHBoxLayout()
         progress_btn_layout.addStretch()
-        self.cancel_btn = QPushButton("Mégse")
+        self.cancel_btn = QPushButton(t("btn_cancel", self.ui_lang))
         self.cancel_btn.setFixedWidth(80)
         self.cancel_btn.clicked.connect(self.cancel_download)
         progress_btn_layout.addWidget(self.cancel_btn)
@@ -227,24 +242,24 @@ class SettingsWindow(QMainWindow):
         for code, name in DEVICES:
             self.device_combo.addItem(name, code)
         self.set_combo_value(self.device_combo, self.config.get("device", "cuda"))
-        form_layout2.addRow("Device:", self.device_combo)
+        form_layout2.addRow(t("label_device", self.ui_lang), self.device_combo)
 
         # Popup megjelenítési idő
         self.popup_duration_spin = QSpinBox()
         self.popup_duration_spin.setRange(1, 30)
-        self.popup_duration_spin.setSuffix(" mp")
+        self.popup_duration_spin.setSuffix(t("suffix_seconds", self.ui_lang))
         self.popup_duration_spin.setValue(self.config.get("popup_display_duration", 5))
-        form_layout2.addRow("Popup időtartam:", self.popup_duration_spin)
+        form_layout2.addRow(t("label_popup_duration", self.ui_lang), self.popup_duration_spin)
 
         layout.addLayout(form_layout2)
 
         # Autostart checkbox
-        self.autostart_check = QCheckBox("Indítás rendszerindításkor")
+        self.autostart_check = QCheckBox(t("autostart", self.ui_lang))
         self.autostart_check.setChecked(is_autostart_enabled())
         layout.addWidget(self.autostart_check)
 
         # Info label
-        info_label = QLabel("Megjegyzés: A modell váltás után újra kell indítani az alkalmazást.")
+        info_label = QLabel(t("info_restart", self.ui_lang))
         info_label.setStyleSheet("color: gray; font-size: 11px;")
         info_label.setWordWrap(True)
         layout.addWidget(info_label)
@@ -256,20 +271,20 @@ class SettingsWindow(QMainWindow):
         button_layout = QHBoxLayout()
         button_layout.addStretch()
 
-        save_btn = QPushButton("Mentés")
+        save_btn = QPushButton(t("btn_save", self.ui_lang))
         save_btn.setFixedWidth(100)
         save_btn.clicked.connect(self.save_settings)
         button_layout.addWidget(save_btn)
 
-        restart_btn = QPushButton("Mentés és újraindítás")
-        restart_btn.setFixedWidth(150)
+        restart_btn = QPushButton(t("btn_save_restart", self.ui_lang))
+        restart_btn.setFixedWidth(160)
         restart_btn.clicked.connect(self.save_and_restart)
         button_layout.addWidget(restart_btn)
 
-        cancel_btn = QPushButton("Mégse")
-        cancel_btn.setFixedWidth(100)
-        cancel_btn.clicked.connect(self.close)
-        button_layout.addWidget(cancel_btn)
+        close_btn = QPushButton(t("btn_cancel", self.ui_lang))
+        close_btn.setFixedWidth(100)
+        close_btn.clicked.connect(self.close)
+        button_layout.addWidget(close_btn)
 
         layout.addLayout(button_layout)
 
@@ -282,7 +297,7 @@ class SettingsWindow(QMainWindow):
         layout.setSpacing(12)
 
         # Cím
-        title_label = QLabel("Letöltött modellek:")
+        title_label = QLabel(t("models_downloaded", self.ui_lang))
         title_label.setFont(QFont("Sans", 11, QFont.Weight.Bold))
         layout.addWidget(title_label)
 
@@ -304,29 +319,29 @@ class SettingsWindow(QMainWindow):
         layout.addWidget(self.models_list)
 
         # Összesítés
-        self.storage_label = QLabel("Összesen: - | Felszabadítható: -")
+        self.storage_label = QLabel("-")
         self.storage_label.setStyleSheet("color: #666;")
         layout.addWidget(self.storage_label)
 
         # Info
-        info_label = QLabel("ℹ Az aktív modell (●) nem törölhető.")
+        info_label = QLabel("ℹ " + t("info_active_model", self.ui_lang))
         info_label.setStyleSheet("color: gray; font-size: 11px;")
         layout.addWidget(info_label)
 
         # Gombok
         button_layout = QHBoxLayout()
 
-        refresh_btn = QPushButton("Frissítés")
+        refresh_btn = QPushButton(t("btn_refresh", self.ui_lang))
         refresh_btn.clicked.connect(self.refresh_models_list)
         button_layout.addWidget(refresh_btn)
 
         button_layout.addStretch()
 
-        delete_selected_btn = QPushButton("Kijelölt törlése")
+        delete_selected_btn = QPushButton(t("btn_delete_selected", self.ui_lang))
         delete_selected_btn.clicked.connect(self.delete_selected_model)
         button_layout.addWidget(delete_selected_btn)
 
-        delete_all_btn = QPushButton("Összes nem használt törlése")
+        delete_all_btn = QPushButton(t("btn_delete_all", self.ui_lang))
         delete_all_btn.clicked.connect(self.delete_all_unused_models)
         button_layout.addWidget(delete_all_btn)
 
@@ -360,7 +375,7 @@ class SettingsWindow(QMainWindow):
         # Összesítés frissítése
         total = format_size(get_total_cache_size())
         freeable = format_size(get_freeable_size())
-        self.storage_label.setText(f"Összesen: {total}  |  Felszabadítható: {freeable}")
+        self.storage_label.setText(t("storage_info", self.ui_lang, total=total, free=freeable))
 
         # Modell combo frissítése is
         self.refresh_model_combo()
@@ -382,40 +397,40 @@ class SettingsWindow(QMainWindow):
         """Kijelölt modell törlése"""
         item = self.models_list.currentItem()
         if not item:
-            QMessageBox.warning(self, "Figyelmeztetés", "Válassz ki egy modellt a törléshez!")
+            QMessageBox.warning(self, t("dlg_warning", self.ui_lang), t("dlg_select_model", self.ui_lang))
             return
 
         model_name = item.data(Qt.ItemDataRole.UserRole)
         if model_name == get_active_model():
-            QMessageBox.warning(self, "Figyelmeztetés", "Az aktív modell nem törölhető!")
+            QMessageBox.warning(self, t("dlg_warning", self.ui_lang), t("dlg_active_no_delete", self.ui_lang))
             return
 
         reply = QMessageBox.question(
             self,
-            "Megerősítés",
-            f"Biztosan törlöd a(z) {model_name} modellt?",
+            t("dlg_confirm", self.ui_lang),
+            t("dlg_confirm_delete", self.ui_lang, model=model_name),
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
         )
 
         if reply == QMessageBox.StandardButton.Yes:
             success, message = delete_model(model_name)
             if success:
-                QMessageBox.information(self, "Siker", message)
+                QMessageBox.information(self, t("dlg_success", self.ui_lang), message)
                 self.refresh_models_list()
             else:
-                QMessageBox.warning(self, "Hiba", message)
+                QMessageBox.warning(self, t("dlg_error", self.ui_lang), message)
 
     def delete_all_unused_models(self):
         """Összes nem használt modell törlése"""
         freeable = get_freeable_size()
         if freeable == 0:
-            QMessageBox.information(self, "Info", "Nincs törölhető modell!")
+            QMessageBox.information(self, t("dlg_info", self.ui_lang), t("dlg_no_deletable", self.ui_lang))
             return
 
         reply = QMessageBox.question(
             self,
-            "Megerősítés",
-            f"Biztosan törlöd az összes nem használt modellt?\n\nFelszabaduló tárhely: {format_size(freeable)}",
+            t("dlg_confirm", self.ui_lang),
+            t("dlg_confirm_delete_all", self.ui_lang, size=format_size(freeable)),
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
         )
 
@@ -424,12 +439,12 @@ class SettingsWindow(QMainWindow):
             if deleted > 0:
                 QMessageBox.information(
                     self,
-                    "Siker",
-                    f"{deleted} modell törölve!\nFelszabadított tárhely: {format_size(freed)}"
+                    t("dlg_success", self.ui_lang),
+                    t("dlg_deleted", self.ui_lang, count=deleted, size=format_size(freed))
                 )
                 self.refresh_models_list()
             elif errors:
-                QMessageBox.warning(self, "Hiba", "\n".join(errors))
+                QMessageBox.warning(self, t("dlg_error", self.ui_lang), "\n".join(errors))
 
     def set_combo_value(self, combo, value):
         """ComboBox értékének beállítása"""
@@ -446,8 +461,8 @@ class SettingsWindow(QMainWindow):
         if self.download_manager.is_downloading():
             reply = QMessageBox.question(
                 self,
-                "Figyelmeztetés",
-                "Jelenleg egy modell letöltése folyamatban van.\n\nMegszakítod a letöltést és váltasz az új modellre?",
+                t("dlg_warning", self.ui_lang),
+                t("dlg_download_in_progress", self.ui_lang),
                 QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
             )
             if reply == QMessageBox.StandardButton.No:
@@ -461,8 +476,8 @@ class SettingsWindow(QMainWindow):
         if not is_model_downloaded(model_name):
             reply = QMessageBox.question(
                 self,
-                "Modell letöltése",
-                f"A(z) {model_name} modell nincs letöltve.\n\nLetöltöd most?",
+                t("dlg_download", self.ui_lang),
+                t("dlg_download_ask", self.ui_lang, model=model_name),
                 QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
             )
             if reply == QMessageBox.StandardButton.Yes:
@@ -474,9 +489,9 @@ class SettingsWindow(QMainWindow):
     def start_model_download(self, model_name):
         """Modell letöltés indítása"""
         self.progress_panel.setVisible(True)
-        self.progress_title.setText(f"⬇ Letöltés: {model_name}")
+        self.progress_title.setText("⬇ " + t("download_title", self.ui_lang, model=model_name))
         self.progress_bar.setValue(0)
-        self.progress_info.setText("Indítás...")
+        self.progress_info.setText(t("download_starting", self.ui_lang))
 
         self.download_manager.start_download(model_name)
 
@@ -486,7 +501,7 @@ class SettingsWindow(QMainWindow):
 
         if state.is_downloading:
             self.progress_panel.setVisible(True)
-            self.progress_title.setText(f"⬇ Letöltés: {state.model_name}")
+            self.progress_title.setText("⬇ " + t("download_title", self.ui_lang, model=state.model_name))
 
             # Ha a progress nem változott, pulzáló módba váltunk
             current_progress = state.downloaded_bytes
@@ -505,7 +520,7 @@ class SettingsWindow(QMainWindow):
                 # Indeterminate (pulzáló) progress bar
                 if self.progress_bar.maximum() != 0:
                     self.progress_bar.setRange(0, 0)  # Pulzáló mód
-                self.progress_info.setText("Letöltés folyamatban... (nagy fájl írása)")
+                self.progress_info.setText(t("download_stall", self.ui_lang))
             else:
                 # Normál progress bar
                 if self.progress_bar.maximum() == 0:
@@ -521,12 +536,12 @@ class SettingsWindow(QMainWindow):
 
         elif state.completed:
             self.progress_panel.setVisible(True)
-            self.progress_title.setText(f"✓ Letöltve: {state.model_name}")
+            self.progress_title.setText("✓ " + t("download_done", self.ui_lang, model=state.model_name))
             # Reset progress bar normál módba
             if self.progress_bar.maximum() == 0:
                 self.progress_bar.setRange(0, 100)
             self.progress_bar.setValue(100)
-            self.progress_info.setText("Letöltés befejezve!")
+            self.progress_info.setText(t("download_complete", self.ui_lang))
             self.cancel_btn.setVisible(False)
             # Reset stall counter
             self._last_progress_bytes = 0
@@ -539,10 +554,10 @@ class SettingsWindow(QMainWindow):
 
         elif state.error:
             self.progress_panel.setVisible(True)
-            self.progress_title.setText(f"✗ Hiba: {state.model_name}")
+            self.progress_title.setText("✗ " + t("download_error", self.ui_lang, model=state.model_name))
             self.progress_info.setText(state.error)
-            if self.cancel_btn.text() != "Bezár":
-                self.cancel_btn.setText("Bezár")
+            if self.cancel_btn.text() != t("btn_close", self.ui_lang):
+                self.cancel_btn.setText(t("btn_close", self.ui_lang))
                 try:
                     self.cancel_btn.clicked.disconnect()
                 except:
@@ -551,7 +566,7 @@ class SettingsWindow(QMainWindow):
 
         elif state.cancelled:
             self.progress_panel.setVisible(True)
-            self.progress_title.setText("Letöltés megszakítva")
+            self.progress_title.setText(t("download_cancelled", self.ui_lang))
             self.progress_info.setText("")
             QTimer.singleShot(2000, self.hide_progress_panel)
             self.download_manager.clear_completed()
@@ -565,9 +580,9 @@ class SettingsWindow(QMainWindow):
                 # Ellenőrizzük, hogy a modell tényleg letöltve van-e
                 if is_model_downloaded(state.model_name):
                     self.progress_panel.setVisible(True)
-                    self.progress_title.setText(f"✓ Letöltve: {state.model_name}")
+                    self.progress_title.setText("✓ " + t("download_done", self.ui_lang, model=state.model_name))
                     self.progress_bar.setValue(100)
-                    self.progress_info.setText("Letöltés befejezve!")
+                    self.progress_info.setText(t("download_complete", self.ui_lang))
                     self.cancel_btn.setVisible(False)
                     QTimer.singleShot(3000, self.hide_progress_panel)
                     self.download_manager.clear_completed()
@@ -577,7 +592,7 @@ class SettingsWindow(QMainWindow):
         """Progress panel elrejtése"""
         self.progress_panel.setVisible(False)
         self.cancel_btn.setVisible(True)
-        self.cancel_btn.setText("Mégse")
+        self.cancel_btn.setText(t("btn_cancel", self.ui_lang))
         # Reconnect to cancel_download
         try:
             self.cancel_btn.clicked.disconnect()
@@ -597,7 +612,7 @@ class SettingsWindow(QMainWindow):
     def start_hotkey_recording(self):
         """Hotkey rögzítés indítása"""
         self.recording_hotkey = True
-        self.hotkey_edit.setText("Nyomd meg a billentyűkombinációt...")
+        self.hotkey_edit.setText(t("hotkey_press", self.ui_lang))
         self.hotkey_edit.setFocus()
         self.record_btn.setText("...")
 
@@ -622,13 +637,14 @@ class SettingsWindow(QMainWindow):
                 hotkey = "+".join(parts)
                 self.hotkey_edit.setText(hotkey)
                 self.recording_hotkey = False
-                self.record_btn.setText("Rögzít")
+                self.record_btn.setText(t("btn_record", self.ui_lang))
         else:
             super().keyPressEvent(event)
 
     def save_settings(self):
         """Beállítások mentése"""
         self.config["language"] = self.language_combo.currentData()
+        self.config["ui_language"] = self.ui_lang_combo.currentData()
         self.config["hotkey"] = self.hotkey_edit.text()
         self.config["model"] = self.model_combo.currentData()
         self.config["device"] = self.device_combo.currentData()
@@ -644,14 +660,15 @@ class SettingsWindow(QMainWindow):
 
         QMessageBox.information(
             self,
-            "Mentve",
-            "A beállítások elmentve!\n\nA változások az alkalmazás újraindítása után lépnek érvénybe."
+            t("dlg_saved", self.ui_lang),
+            t("dlg_settings_saved", self.ui_lang)
         )
         self.close()
 
     def save_and_restart(self):
         """Beállítások mentése és alkalmazás újraindítása"""
         self.config["language"] = self.language_combo.currentData()
+        self.config["ui_language"] = self.ui_lang_combo.currentData()
         self.config["hotkey"] = self.hotkey_edit.text()
         self.config["model"] = self.model_combo.currentData()
         self.config["device"] = self.device_combo.currentData()
