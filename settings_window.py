@@ -14,7 +14,7 @@ from PySide6.QtWidgets import (
     QProgressBar, QListWidget, QListWidgetItem, QFrame, QSpinBox
 )
 from PySide6.QtCore import Qt, QTimer
-from PySide6.QtGui import QFont
+from PySide6.QtGui import QFont, QKeySequence
 
 from model_manager import (
     get_downloaded_models, get_active_model, delete_model,
@@ -632,9 +632,18 @@ class SettingsWindow(QMainWindow):
     def keyPressEvent(self, event):
         """Billentyű lenyomás kezelése"""
         if self.recording_hotkey:
-            modifiers = event.modifiers()
+            # Modifier-only billentyűk figyelmen kívül hagyása
+            modifier_keys = [
+                Qt.Key.Key_Control, Qt.Key.Key_Alt, Qt.Key.Key_Shift,
+                Qt.Key.Key_Meta, Qt.Key.Key_AltGr
+            ]
+            if event.key() in modifier_keys:
+                # Csak modifier lett lenyomva, várunk a tényleges billentyűre
+                return
 
+            modifiers = event.modifiers()
             parts = []
+
             if modifiers & Qt.KeyboardModifier.ControlModifier:
                 parts.append("ctrl")
             if modifiers & Qt.KeyboardModifier.AltModifier:
@@ -642,8 +651,11 @@ class SettingsWindow(QMainWindow):
             if modifiers & Qt.KeyboardModifier.ShiftModifier:
                 parts.append("shift")
 
-            key_name = event.text().lower()
-            if key_name and key_name not in ['', ' ']:
+            # Tényleges billentyű neve - mindig event.key()-ből, mert event.text()
+            # üres lehet Ctrl/Shift kombinációkkal
+            key_name = QKeySequence(event.key()).toString().lower()
+
+            if key_name:
                 parts.append(key_name)
 
             if parts:
