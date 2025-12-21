@@ -1,0 +1,3 @@
+# NVIDIA CUDA csomagok (csak NVIDIA GPU-hoz szükséges)
+nvidia-cudnn-cu12
+nvidia-cublas-cu12
