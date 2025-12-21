@@ -80,6 +80,16 @@ TRANSLATIONS = {
 
         # Hotkey
         "hotkey_press": "Press key combination...",
+
+        # History
+        "tray_history": "History",
+        "history_clear": "Clear History",
+        "history_entries": "{count} entries ({size})",
+        "history_empty": "No history yet",
+        "history_copy": "Copy",
+        "history_copied": "Copied!",
+        "history_confirm_clear": "Delete all history entries?",
+        "history_cleared": "History cleared!",
     },
     "hu": {
         # System tray
@@ -156,6 +166,16 @@ TRANSLATIONS = {
 
         # Hotkey
         "hotkey_press": "Nyomd meg a billentyűkombinációt...",
+
+        # History
+        "tray_history": "Előzmények",
+        "history_clear": "Előzmények törlése",
+        "history_entries": "{count} bejegyzés ({size})",
+        "history_empty": "Még nincs előzmény",
+        "history_copy": "Másolás",
+        "history_copied": "Másolva!",
+        "history_confirm_clear": "Törlöd az összes előzményt?",
+        "history_cleared": "Előzmények törölve!",
     }
 }
 

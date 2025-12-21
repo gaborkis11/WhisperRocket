@@ -13,7 +13,7 @@ from pynput import keyboard
 from faster_whisper import WhisperModel
 import numpy as np
 from PySide6.QtWidgets import QApplication, QSystemTrayIcon, QMenu
-from PySide6.QtCore import QTimer, Slot, Signal, QObject
+from PySide6.QtCore import QTimer, Slot, Signal, QObject, Qt
 from PySide6.QtGui import QIcon, QPixmap, QPainter, QColor, QBrush, QPen, QAction
 
 
@@ -33,7 +33,9 @@ class TrayIconUpdater(QObject):
             tray_icon.setToolTip(title)
 
 
-from translations import t
+from translations import t, TRANSLATIONS
+import history_manager
+from functools import partial
 
 # Konfiguráció
 CONFIG_FILE = os.path.join(os.path.dirname(__file__), 'config.json')
@@ -89,6 +91,8 @@ amplitude_queue = Queue(maxsize=100)  # Thread-safe queue a waveform adatokhoz
 popup_window = None
 tray_icon_updater = None  # Thread-safe tray ikon frissítő
 qt_app = None
+history_detail_window = None  # History részlet ablak
+history_menu = None  # History almenü referencia
 
 # Hang lejátszás háttérszálban (paplay használata - megbízhatóbb)
 def play_sound(sound_file):
@@ -179,6 +183,94 @@ def open_settings():
     print("[INFO] Beállítások megnyitása...")
     import subprocess
     subprocess.Popen([sys.executable, os.path.join(os.path.dirname(__file__), 'settings_window.py')])
+
+def show_history_entry(entry_id: str, checked: bool = False):
+    """History bejegyzés megjelenítése külön processben (elkerüli a QSystemTrayIcon crash-t)"""
+    print(f"[DEBUG] show_history_entry() called with id={entry_id}")
+    try:
+        entry = history_manager.get_entry_by_id(entry_id)
+        print(f"[DEBUG] Entry found: {entry is not None}")
+        if entry:
+            import subprocess
+            import json
+            entry_json = json.dumps(entry)
+            # Külön processben indítjuk a viewer-t
+            subprocess.Popen([
+                sys.executable,
+                os.path.join(os.path.dirname(__file__), 'history_viewer.py'),
+                entry_json
+            ])
+            print("[DEBUG] history_viewer.py launched")
+    except Exception as e:
+        print(f"[ERROR] show_history_entry failed: {e}")
+        import traceback
+        traceback.print_exc()
+
+def clear_history_action():
+    """History törlése megerősítés után"""
+    from PySide6.QtWidgets import QMessageBox
+    msg = QMessageBox()
+    msg.setWindowTitle(t("dlg_confirm", ui_lang))
+    msg.setText(t("history_confirm_clear", ui_lang))
+    msg.setStandardButtons(QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+    msg.setDefaultButton(QMessageBox.StandardButton.No)
+    if msg.exec() == QMessageBox.StandardButton.Yes:
+        history_manager.clear_history()
+        refresh_history_menu()
+        print("[INFO] History törölve")
+
+def refresh_history_menu():
+    """History menü frissítése a legújabb adatokkal"""
+    global history_menu
+    print(f"[DEBUG] refresh_history_menu() called, history_menu={history_menu}")
+    if not history_menu:
+        print("[DEBUG] history_menu is None, returning")
+        return
+
+    try:
+        history_menu.clear()
+
+        # Legutóbbi bejegyzések lekérése (max 15)
+        entries = history_manager.get_recent(15)
+        print(f"[DEBUG] Loaded {len(entries)} history entries")
+
+        if entries:
+            for entry in entries:
+                # Előnézet: idő + szöveg első 40 karaktere
+                time_str = history_manager.format_timestamp(entry.get("timestamp", ""))
+                preview = history_manager.format_preview(entry.get("text", ""), 35)
+                label = f"{time_str} - \"{preview}\""
+
+                action = QAction(label, qt_app)
+                entry_id = entry.get("id")
+                # Qt.QueuedConnection megoldja a crash-t QSystemTrayIcon menüből
+                action.triggered.connect(partial(show_history_entry, entry_id), Qt.QueuedConnection)
+                history_menu.addAction(action)
+
+            history_menu.addSeparator()
+
+            # Statisztika
+            stats = history_manager.get_stats()
+            stats_label = t("history_entries", ui_lang, count=stats["count"], size=stats["size_formatted"])
+            stats_action = QAction(f"📊 {stats_label}", qt_app)
+            stats_action.setEnabled(False)
+            history_menu.addAction(stats_action)
+
+            # Törlés gomb
+            clear_action = QAction(f"🗑️ {t('history_clear', ui_lang)}", qt_app)
+            clear_action.triggered.connect(clear_history_action, Qt.QueuedConnection)
+            history_menu.addAction(clear_action)
+        else:
+            # Üres history
+            empty_action = QAction(t("history_empty", ui_lang), qt_app)
+            empty_action.setEnabled(False)
+            history_menu.addAction(empty_action)
+
+        print("[DEBUG] refresh_history_menu() completed")
+    except Exception as e:
+        print(f"[ERROR] refresh_history_menu() failed: {e}")
+        import traceback
+        traceback.print_exc()
 
 # Modell betöltés
 def load_model():
@@ -291,6 +383,13 @@ def process_audio(audio_copy):
         
         # Temp fájl törlés
         os.unlink(temp_file.name)
+
+        # History mentés
+        if text.strip():
+            history_manager.add_entry(text, elapsed, config["language"])
+            # Menü frissítése a főszálban (QTimer.singleShot thread-safe)
+            from PySide6.QtCore import QTimer
+            QTimer.singleShot(0, refresh_history_menu)
 
         # Ikon frissítés
         update_icon('green', t("tray_done", ui_lang))
@@ -445,7 +544,7 @@ def on_release(key):
 
 # Fő program
 def main():
-    global stream, tray_icon, qt_app, popup_window, tray_icon_updater
+    global stream, tray_icon, qt_app, popup_window, tray_icon_updater, history_menu
 
     # PyQt6 inicializálás (először kell lennie)
     qt_app = QApplication(sys.argv)
@@ -498,6 +597,15 @@ def main():
     settings_action = QAction(t("tray_settings", ui_lang), qt_app)
     settings_action.triggered.connect(open_settings)
     tray_menu.addAction(settings_action)
+    tray_menu.addSeparator()
+
+    # History almenü
+    history_menu = QMenu(t("tray_history", ui_lang))
+    tray_menu.addMenu(history_menu)
+
+    # Fő menü aboutToShow frissíti a history-t (submenu aboutToShow nem megbízható)
+    tray_menu.aboutToShow.connect(refresh_history_menu)
+
     tray_menu.addSeparator()
     quit_action = QAction(t("tray_quit", ui_lang), qt_app)
     quit_action.triggered.connect(quit_app)
