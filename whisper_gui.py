@@ -256,6 +256,12 @@ def show_text_popup(text: str):
         popup_window.pending_text = text
         QTimer.singleShot(0, popup_window.show_pending_text)
 
+def show_processing_popup():
+    """Processing állapot megjelenítése (thread-safe)"""
+    global popup_window
+    if popup_window:
+        QTimer.singleShot(0, popup_window.show_processing)
+
 def hide_popup():
     """Popup ablak elrejtése (thread-safe)"""
     global popup_window
@@ -288,11 +294,13 @@ def stop_recording():
         update_icon('yellow', 'Whisper - Feldolgozas...')
 
         if len(audio_data) > 0:
+            show_processing_popup()  # Processing animáció indítása
             audio_copy = audio_data.copy()
             audio_data = []
             threading.Thread(target=process_audio, args=(audio_copy,), daemon=True).start()
         else:
             print("[FIGYELEM] Nincs rogzitett hang!")
+            hide_popup()
             update_icon('blue', 'Whisper - Keszen all')
 
 def cancel_recording():
@@ -374,7 +382,11 @@ def main():
 
     # Popup ablak létrehozása (hotkey átadása)
     from popup_window import RecordingPopup
-    popup_window = RecordingPopup(amplitude_queue, config["hotkey"])
+    popup_window = RecordingPopup(
+        amplitude_queue,
+        config["hotkey"],
+        config.get("popup_display_duration", 5)
+    )
 
     # Audio stream (rendszer alapértelmezett mikrofon)
     global actual_sample_rate

@@ -19,6 +19,7 @@ class PopupState(Enum):
     """Popup állapotok"""
     HIDDEN = auto()
     RECORDING = auto()
+    PROCESSING = auto()  # Feldolgozás közben
     TEXT_PREVIEW = auto()
     TEXT_EXPANDED = auto()
 
@@ -26,10 +27,11 @@ class PopupState(Enum):
 class RecordingPopup(QWidget):
     """Frameless popup ablak waveform vizualizációval"""
 
-    def __init__(self, amplitude_queue: Queue, hotkey: str = "Alt+S"):
+    def __init__(self, amplitude_queue: Queue, hotkey: str = "Alt+S", popup_duration: int = 5):
         super().__init__()
         self.amplitude_queue = amplitude_queue
         self.hotkey = hotkey  # Beállított hotkey megjelenítéshez
+        self.popup_duration = popup_duration  # Popup megjelenítési idő (másodperc)
         self.current_amplitude = 0.0  # Aktuális hangerő (nyers)
         self.smoothed_amplitude = 0.0  # Simított hangerő (megjelenítéshez)
         self.bar_count = 45  # Oszlopok száma
@@ -44,7 +46,7 @@ class RecordingPopup(QWidget):
         self.auto_hide_timer = QTimer()
         self.auto_hide_timer.setSingleShot(True)
         self.auto_hide_timer.timeout.connect(self._auto_hide)
-        self.auto_hide_seconds = 5  # Ennyi másodperc után tűnik el
+        self.auto_hide_seconds = popup_duration  # Konfigurálható időtartam
 
         # Visszaszámláló timer (másodpercenként frissít)
         self.countdown_timer = QTimer()
@@ -60,6 +62,47 @@ class RecordingPopup(QWidget):
         # Gomb területek (expandált nézethez)
         self.close_btn_rect = QRectF(0, 0, 0, 0)
         self.copy_btn_rect = QRectF(0, 0, 0, 0)
+
+        # Processing állapot - vicces üzenetek
+        self.processing_messages = [
+            # Klasszikus
+            "Transcribing your thoughts...",
+            "Converting speech to text...",
+            "Processing your words...",
+            "Almost there...",
+            "Just a moment...",
+            # Vicces / Funny
+            "Making your cocktail...",
+            "Brewing some magic...",
+            "Cooking up your text...",
+            "Summoning the words...",
+            "Decoding your genius...",
+            "Translating brilliance...",
+            "Working overtime here...",
+            "Hold my coffee...",
+            "Doing the heavy lifting...",
+            "Crunching the soundwaves...",
+            "Teaching AI to listen...",
+            "One moment of magic...",
+            "Converting genius to text...",
+            "Whisper is thinking...",
+            "Interpreting your wisdom...",
+            "Almost got it...",
+            "Patience, young padawan...",
+            "Loading awesomeness...",
+            "Shazam! Almost ready...",
+            "BRB, transcribing...",
+        ]
+        self.current_message = random.choice(self.processing_messages)
+        self.animation_frame = 0
+
+        # Üzenet váltó timer (2 másodpercenként)
+        self.message_timer = QTimer()
+        self.message_timer.timeout.connect(self._next_message)
+
+        # Rakéta animáció - csillagok/részecskék
+        self.stars = []  # [(x, y, size, speed), ...]
+        self._init_stars()
 
         # Simítási faktor (0.0-1.0, alacsonyabb = lágyabb)
         self.smoothing_factor = 0.15  # Lassú, lágy követés
@@ -145,6 +188,8 @@ class RecordingPopup(QWidget):
         if self.state == PopupState.RECORDING:
             self._draw_waveform(painter)
             self._draw_recording_label(painter)
+        elif self.state == PopupState.PROCESSING:
+            self._draw_processing(painter)
         elif self.state == PopupState.TEXT_PREVIEW:
             self._draw_text_preview(painter)
         elif self.state == PopupState.TEXT_EXPANDED:
@@ -165,7 +210,7 @@ class RecordingPopup(QWidget):
         painter.setBrush(QBrush(QColor(255, 255, 255)))  # Fehér oszlopok
 
         # Simított amplitude normalizálás
-        normalized_amp = min(self.smoothed_amplitude * 10, 1.0)
+        normalized_amp = min(self.smoothed_amplitude * 35, 1.0)
 
         for i in range(self.bar_count):
             # Gauss súlyozás + enyhe véletlenszerűség (kevésbé agresszív)
@@ -256,6 +301,136 @@ class RecordingPopup(QWidget):
         # "Finish" label
         painter.setPen(QPen(QColor(120, 120, 120)))
         painter.drawText(int(finish_btn_x - 40), int(btn_y + 14), "Finish")
+
+    def _init_stars(self):
+        """Csillagok inicializálása a háttérhez"""
+        self.stars = []
+        for _ in range(15):
+            x = random.randint(0, self.base_width)
+            y = random.randint(10, 55)
+            size = random.uniform(1.5, 3.5)
+            speed = random.uniform(2, 5)
+            self.stars.append([x, y, size, speed])
+
+    def _update_stars(self):
+        """Csillagok mozgatása balra (űrrepülés illúzió)"""
+        for star in self.stars:
+            star[0] -= star[3]  # x -= speed
+            # Ha kilép bal oldalon, újra jobb oldalon
+            if star[0] < -5:
+                star[0] = self.base_width + 5
+                star[1] = random.randint(10, 55)
+                star[2] = random.uniform(1.5, 3.5)
+                star[3] = random.uniform(2, 5)
+
+    def _draw_stars(self, painter: QPainter):
+        """Csillagok rajzolása"""
+        painter.setPen(Qt.PenStyle.NoPen)
+        for star in self.stars:
+            x, y, size, speed = star
+            # Gyorsabb csillagok fényesebbek
+            brightness = int(100 + speed * 30)
+            painter.setBrush(QBrush(QColor(brightness, brightness, brightness, 200)))
+            painter.drawEllipse(QPoint(int(x), int(y)), int(size), int(size))
+
+    def _draw_rocket(self, painter: QPainter, x: int, y: int):
+        """Rakéta rajzolása flat-design stílusban (jobbra néz)"""
+        # Méretezés
+        scale = 0.7
+
+        # Lángok (animált) - ELŐSZÖR rajzoljuk, hogy a rakéta mögött legyen
+        flame_offset = self.animation_frame % 10
+        flame_length = 18 + flame_offset + random.randint(-3, 3)
+
+        # Külső láng (narancssárga)
+        flame_outer = QPainterPath()
+        flame_outer.moveTo(x - 20 * scale, y)
+        flame_outer.quadTo(x - (20 + flame_length) * scale, y - 8 * scale,
+                          x - (25 + flame_length) * scale, y)
+        flame_outer.quadTo(x - (20 + flame_length) * scale, y + 8 * scale,
+                          x - 20 * scale, y)
+        painter.fillPath(flame_outer, QBrush(QColor(255, 140, 0, 200)))
+
+        # Belső láng (sárga)
+        inner_len = flame_length * 0.6
+        flame_inner = QPainterPath()
+        flame_inner.moveTo(x - 20 * scale, y)
+        flame_inner.quadTo(x - (20 + inner_len) * scale, y - 4 * scale,
+                          x - (22 + inner_len) * scale, y)
+        flame_inner.quadTo(x - (20 + inner_len) * scale, y + 4 * scale,
+                          x - 20 * scale, y)
+        painter.fillPath(flame_inner, QBrush(QColor(255, 255, 100, 230)))
+
+        # Rakéta test (világosszürke)
+        body = QPainterPath()
+        body.moveTo(x + 30 * scale, y)  # Orr
+        body.quadTo(x + 25 * scale, y - 12 * scale, x - 5 * scale, y - 12 * scale)
+        body.lineTo(x - 20 * scale, y - 8 * scale)
+        body.lineTo(x - 20 * scale, y + 8 * scale)
+        body.lineTo(x - 5 * scale, y + 12 * scale)
+        body.quadTo(x + 25 * scale, y + 12 * scale, x + 30 * scale, y)
+        painter.fillPath(body, QBrush(QColor(235, 235, 240)))
+
+        # Orrkúp (piros)
+        nose = QPainterPath()
+        nose.moveTo(x + 30 * scale, y)
+        nose.quadTo(x + 28 * scale, y - 8 * scale, x + 15 * scale, y - 10 * scale)
+        nose.lineTo(x + 15 * scale, y + 10 * scale)
+        nose.quadTo(x + 28 * scale, y + 8 * scale, x + 30 * scale, y)
+        painter.fillPath(nose, QBrush(QColor(240, 90, 90)))
+
+        # Felső szárny (piros)
+        fin_top = QPainterPath()
+        fin_top.moveTo(x - 10 * scale, y - 10 * scale)
+        fin_top.lineTo(x - 20 * scale, y - 22 * scale)
+        fin_top.lineTo(x - 22 * scale, y - 10 * scale)
+        fin_top.closeSubpath()
+        painter.fillPath(fin_top, QBrush(QColor(240, 90, 90)))
+
+        # Alsó szárny (piros)
+        fin_bottom = QPainterPath()
+        fin_bottom.moveTo(x - 10 * scale, y + 10 * scale)
+        fin_bottom.lineTo(x - 20 * scale, y + 22 * scale)
+        fin_bottom.lineTo(x - 22 * scale, y + 10 * scale)
+        fin_bottom.closeSubpath()
+        painter.fillPath(fin_bottom, QBrush(QColor(240, 90, 90)))
+
+        # Ablak (kék kör)
+        painter.setBrush(QBrush(QColor(100, 180, 255)))
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.drawEllipse(QPoint(int(x + 5 * scale), int(y)), int(6 * scale), int(6 * scale))
+
+        # Ablak fény (világosabb pont)
+        painter.setBrush(QBrush(QColor(200, 230, 255)))
+        painter.drawEllipse(QPoint(int(x + 3 * scale), int(y - 2 * scale)), int(2 * scale), int(2 * scale))
+
+    def _draw_processing(self, painter: QPainter):
+        """Processing animáció - rakéta + csillagok + vicces szöveg"""
+        # Csillagok frissítése és rajzolása
+        self._update_stars()
+        self._draw_stars(painter)
+
+        # Rakéta középen (kicsit balra, hogy a lángok is látszódjanak)
+        rocket_x = self.width() // 2 + 15
+        rocket_y = 38
+        self._draw_rocket(painter, rocket_x, rocket_y)
+
+        # Vicces szöveg alul - középre igazítva, szebb font
+        painter.setPen(QPen(QColor(200, 200, 200)))
+        font = QFont("Sans", 10)
+        font.setItalic(True)
+        painter.setFont(font)
+        fm = painter.fontMetrics()
+        text_x = (self.width() - fm.horizontalAdvance(self.current_message)) // 2
+        painter.drawText(text_x, 78, self.current_message)
+
+        # Frame növelés (animáció)
+        self.animation_frame = (self.animation_frame + 1) % 60
+
+    def _next_message(self):
+        """Következő üzenet - RANDOM választás"""
+        self.current_message = random.choice(self.processing_messages)
+        self.update()
 
     def _draw_text_preview(self, painter: QPainter):
         """Szöveg előnézet - fejléc + kisimult equalizer + szöveg alatta"""
@@ -497,6 +672,15 @@ class RecordingPopup(QWidget):
         self.show()
         self.raise_()
 
+    def show_processing(self):
+        """Processing állapot megjelenítése (feldolgozás közben)"""
+        self.state = PopupState.PROCESSING
+        self.current_message = random.choice(self.processing_messages)
+        self.animation_frame = 0
+        self.message_timer.start(2000)  # 2 mp-ként új szöveg
+        self.setFixedSize(self.base_width, self.base_height)
+        self.update()
+
     def show_pending_text(self):
         """Pending szöveg megjelenítése (QTimer callback)"""
         if hasattr(self, 'pending_text') and self.pending_text:
@@ -505,6 +689,7 @@ class RecordingPopup(QWidget):
     def show_text(self, text: str):
         """Szöveg megjelenítése transzkripció után"""
         print(f"[DEBUG] show_text() hívva, text='{text[:50]}...' state={self.state}")
+        self.message_timer.stop()  # Processing timer leállítása
         self.transcribed_text = text
         self.state = PopupState.TEXT_PREVIEW
         self.setFixedSize(self.base_width, self.preview_height)
@@ -537,6 +722,7 @@ class RecordingPopup(QWidget):
         self.state = PopupState.HIDDEN
         self.auto_hide_timer.stop()
         self.countdown_timer.stop()
+        self.message_timer.stop()  # Processing timer leállítása
         self.hide()
         # Amplitude reset
         self.current_amplitude = 0.0

@@ -11,7 +11,7 @@ from PyQt6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QLabel, QComboBox, QLineEdit, QPushButton, QCheckBox,
     QGroupBox, QFormLayout, QMessageBox, QTabWidget,
-    QProgressBar, QListWidget, QListWidgetItem, QFrame
+    QProgressBar, QListWidget, QListWidgetItem, QFrame, QSpinBox
 )
 from PyQt6.QtCore import Qt, QTimer
 from PyQt6.QtGui import QFont
@@ -228,6 +228,13 @@ class SettingsWindow(QMainWindow):
             self.device_combo.addItem(name, code)
         self.set_combo_value(self.device_combo, self.config.get("device", "cuda"))
         form_layout2.addRow("Device:", self.device_combo)
+
+        # Popup megjelenítési idő
+        self.popup_duration_spin = QSpinBox()
+        self.popup_duration_spin.setRange(1, 30)
+        self.popup_duration_spin.setSuffix(" mp")
+        self.popup_duration_spin.setValue(self.config.get("popup_display_duration", 5))
+        form_layout2.addRow("Popup időtartam:", self.popup_duration_spin)
 
         layout.addLayout(form_layout2)
 
@@ -625,6 +632,7 @@ class SettingsWindow(QMainWindow):
         self.config["hotkey"] = self.hotkey_edit.text()
         self.config["model"] = self.model_combo.currentData()
         self.config["device"] = self.device_combo.currentData()
+        self.config["popup_display_duration"] = self.popup_duration_spin.value()
 
         if self.config["device"] == "cuda":
             self.config["compute_type"] = "float16"
@@ -647,6 +655,7 @@ class SettingsWindow(QMainWindow):
         self.config["hotkey"] = self.hotkey_edit.text()
         self.config["model"] = self.model_combo.currentData()
         self.config["device"] = self.device_combo.currentData()
+        self.config["popup_display_duration"] = self.popup_duration_spin.value()
 
         if self.config["device"] == "cuda":
             self.config["compute_type"] = "float16"
