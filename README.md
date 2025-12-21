@@ -16,12 +16,6 @@ WhisperWarp is a desktop application that converts speech to text in real-time u
 - **System tray** - Runs quietly in the background with color-coded status
 - **Configurable** - Adjust language, model, hotkey, popup duration, and more
 
-## Screenshots
-
-| Recording | Processing | Result |
-|-----------|------------|--------|
-| Equalizer visualization | Rocket animation | Text preview |
-
 ## Requirements
 
 - **OS**: Linux (Ubuntu/Debian recommended)
@@ -89,7 +83,8 @@ Right-click the tray icon → **Settings** to configure:
 
 - **Language** - Transcription language (Hungarian, English, German, etc.)
 - **Hotkey** - Global shortcut key
-- **Model** - Whisper model size (tiny, base, small, medium, large-v3)
+- **UI Language** - Interface language (English, Hungarian)
+- **Model** - Whisper model size (tiny, base, small, medium, large-v3-turbo, large-v3)
 - **Device** - GPU (CUDA) or CPU
 - **Popup duration** - How long the result popup stays visible (1-30 seconds)
 - **Autostart** - Launch on system startup
@@ -107,15 +102,17 @@ Configuration is stored in `config.json`.
 ## Project Structure
 
 ```
-whisper-test/
+WhisperWarp/
 ├── whisper_gui.py        # Main application
 ├── popup_window.py       # Popup window (equalizer, rocket, text)
 ├── settings_window.py    # Settings dialog
 ├── model_manager.py      # Whisper model management
 ├── download_manager.py   # Model download handling
+├── translations.py       # Multi-language UI support (EN/HU)
 ├── config.json           # User configuration
 ├── start.sh              # Startup script
 ├── install.sh            # Installation script
+├── whisperwarp.desktop   # Linux desktop launcher
 └── assets/               # Icons and sounds
 ```
 
