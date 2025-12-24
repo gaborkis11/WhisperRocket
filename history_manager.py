@@ -14,7 +14,7 @@ MAX_HISTORY_SIZE_BYTES = 100 * 1024 * 1024
 
 def get_history_path() -> Path:
     """History JSON fájl elérési útja"""
-    config_dir = Path.home() / ".config" / "whisperwarp"
+    config_dir = Path.home() / ".config" / "whisperrocket"
     config_dir.mkdir(parents=True, exist_ok=True)
     return config_dir / "history.json"
 

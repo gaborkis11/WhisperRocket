@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-WhisperWarp - Download Manager
+WhisperRocket - Download Manager
 Whisper modellek letöltésének kezelése progress követéssel
 """
 import os

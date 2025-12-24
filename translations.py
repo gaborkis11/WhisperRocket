@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-WhisperWarp - Többnyelvű UI támogatás
+WhisperRocket - Többnyelvű UI támogatás
 Angol alapértelmezett, magyar választható
 """
 
@@ -9,12 +9,12 @@ TRANSLATIONS = {
         # System tray
         "tray_settings": "Settings",
         "tray_quit": "Quit",
-        "tray_loading": "WhisperWarp - Loading...",
-        "tray_ready": "WhisperWarp - Ready",
-        "tray_recording": "WhisperWarp - RECORDING",
-        "tray_processing": "WhisperWarp - Processing...",
-        "tray_done": "WhisperWarp - Done! Ctrl+V",
-        "tray_error": "WhisperWarp - ERROR!",
+        "tray_loading": "WhisperRocket - Loading...",
+        "tray_ready": "WhisperRocket - Ready",
+        "tray_recording": "WhisperRocket - RECORDING",
+        "tray_processing": "WhisperRocket - Processing...",
+        "tray_done": "WhisperRocket - Done! Ctrl+V",
+        "tray_error": "WhisperRocket - ERROR!",
 
         # Popup
         "popup_recording": "Recording",
@@ -25,7 +25,7 @@ TRANSLATIONS = {
         "popup_copy": "Copy",
 
         # Settings - general
-        "settings_title": "WhisperWarp Settings",
+        "settings_title": "WhisperRocket Settings",
         "tab_settings": "Settings",
         "tab_models": "Models",
         "label_ui_language": "UI Language:",
@@ -95,12 +95,12 @@ TRANSLATIONS = {
         # System tray
         "tray_settings": "Beállítások",
         "tray_quit": "Kilépés",
-        "tray_loading": "WhisperWarp - Betöltés...",
-        "tray_ready": "WhisperWarp - Készen áll",
-        "tray_recording": "WhisperWarp - FELVÉTEL",
-        "tray_processing": "WhisperWarp - Feldolgozás...",
-        "tray_done": "WhisperWarp - Kész! Ctrl+V",
-        "tray_error": "WhisperWarp - HIBA!",
+        "tray_loading": "WhisperRocket - Betöltés...",
+        "tray_ready": "WhisperRocket - Készen áll",
+        "tray_recording": "WhisperRocket - FELVÉTEL",
+        "tray_processing": "WhisperRocket - Feldolgozás...",
+        "tray_done": "WhisperRocket - Kész! Ctrl+V",
+        "tray_error": "WhisperRocket - HIBA!",
 
         # Popup
         "popup_recording": "Felvétel",
@@ -111,7 +111,7 @@ TRANSLATIONS = {
         "popup_copy": "Másolás",
 
         # Settings - general
-        "settings_title": "WhisperWarp Beállítások",
+        "settings_title": "WhisperRocket Beállítások",
         "tab_settings": "Beállítások",
         "tab_models": "Modellek",
         "label_ui_language": "UI Nyelv:",

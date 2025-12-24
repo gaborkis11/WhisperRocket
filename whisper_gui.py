@@ -587,7 +587,7 @@ def main():
 
     # System Tray ikon menüvel (Qt QSystemTrayIcon)
     tray_icon = QSystemTrayIcon(create_icon('gray'), qt_app)
-    tray_icon.setToolTip("WhisperWarp")
+    tray_icon.setToolTip("WhisperRocket")
 
     # Tray ikon frissítő (thread-safe)
     tray_icon_updater = TrayIconUpdater(qt_app)

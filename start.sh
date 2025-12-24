@@ -1,9 +1,9 @@
 #!/bin/bash
-cd ~/WhisperWarp
+cd ~/WhisperRocket
 
 # Ellenőrzés: fut-e már az alkalmazás
 if pgrep -f "python whisper_gui.py" > /dev/null; then
-    echo "WhisperWarp már fut!"
+    echo "WhisperRocket már fut!"
     exit 0
 fi
 

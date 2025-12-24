@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-WhisperWarp Beállítások ablak v2
+WhisperRocket Beállítások ablak v2
 PyQt6 alapú modern UI tab-okkal
 """
 import os
@@ -26,9 +26,9 @@ from translations import t
 
 # Konfiguráció útvonal
 CONFIG_FILE = os.path.join(os.path.dirname(__file__), 'config.json')
-DESKTOP_FILE = os.path.join(os.path.dirname(__file__), 'whisperwarp.desktop')
+DESKTOP_FILE = os.path.join(os.path.dirname(__file__), 'whisperrocket.desktop')
 AUTOSTART_DIR = os.path.expanduser('~/.config/autostart')
-AUTOSTART_FILE = os.path.join(AUTOSTART_DIR, 'whisperwarp.desktop')
+AUTOSTART_FILE = os.path.join(AUTOSTART_DIR, 'whisperrocket.desktop')
 
 # Támogatott nyelvek
 LANGUAGES = [

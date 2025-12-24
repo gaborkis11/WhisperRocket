@@ -1,11 +1,11 @@
 [Desktop Entry]
-Name=WhisperWarp
+Name=WhisperRocket
 Comment=Silent speech-to-text — Local, fast, private
 GenericName=Speech Recognition
-Exec=/home/gaborkis/WhisperWarp/start.sh
-Icon=whisperwarp
+Exec=/home/gaborkis/WhisperRocket/start.sh
+Icon=whisperrocket
 Terminal=false
 Type=Application
 Categories=Utility;Audio;AudioVideo;
-Keywords=speech;voice;whisper;dictation;transcribe;warp;
+Keywords=speech;voice;whisper;dictation;transcribe;rocket;
 StartupNotify=false

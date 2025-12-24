@@ -4,7 +4,7 @@ set -e  # Hiba esetén leállás
 
 echo ""
 echo "╔══════════════════════════════════════════╗"
-echo "║     WhisperWarp Telepítő                 ║"
+echo "║     WhisperRocket Telepítő                 ║"
 echo "║     Speech-to-Text for Linux             ║"
 echo "╚══════════════════════════════════════════╝"
 echo ""
@@ -221,7 +221,7 @@ if [ "$HAS_NVIDIA" = true ]; then
     if ! grep -q "WHISPER_LD_LIBRARY_PATH" ~/.bashrc 2>/dev/null; then
         cat >> ~/.bashrc << 'EOF'
 
-# WhisperWarp CUDA libraries
+# WhisperRocket CUDA libraries
 export LD_LIBRARY_PATH=$(python3 -c 'import nvidia.cudnn; print(nvidia.cudnn.__path__[0])' 2>/dev/null)/lib:$(python3 -c 'import nvidia.cublas; print(nvidia.cublas.__path__[0])' 2>/dev/null)/lib:$LD_LIBRARY_PATH # WHISPER_LD_LIBRARY_PATH
 EOF
         log_ok "CUDA path hozzáadva a .bashrc-hez"
@@ -237,12 +237,12 @@ log_info "Alkalmazás launcher telepítése..."
 
 # Frissítjük a desktop fájlban az útvonalat
 INSTALL_DIR=$(pwd)
-sed -i "s|Exec=.*|Exec=$INSTALL_DIR/start.sh|g" whisperwarp.desktop
-sed -i "s|Icon=.*|Icon=$INSTALL_DIR/assets/whisperwarp.png|g" whisperwarp.desktop
-sed -i "s|Path=.*|Path=$INSTALL_DIR|g" whisperwarp.desktop
+sed -i "s|Exec=.*|Exec=$INSTALL_DIR/start.sh|g" whisperrocket.desktop
+sed -i "s|Icon=.*|Icon=$INSTALL_DIR/assets/whisperrocket.png|g" whisperrocket.desktop
+sed -i "s|Path=.*|Path=$INSTALL_DIR|g" whisperrocket.desktop
 
 mkdir -p ~/.local/share/applications
-cp whisperwarp.desktop ~/.local/share/applications/
+cp whisperrocket.desktop ~/.local/share/applications/
 chmod +x start.sh
 
 log_ok "Alkalmazás hozzáadva a menühöz"
@@ -266,7 +266,7 @@ fi
 
 echo ""
 echo "  Indítás:"
-echo "    • Alkalmazások menüből: WhisperWarp"
+echo "    • Alkalmazások menüből: WhisperRocket"
 echo "    • Terminálból: ./start.sh"
 echo ""
 echo "  Hotkey: Alt+S (nyomva tartás = felvétel)"

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-WhisperWarp - Modell Manager
+WhisperRocket - Modell Manager
 Whisper modellek cache kezelése (lista, méret, törlés)
 """
 import os

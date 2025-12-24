@@ -1,8 +1,8 @@
-# WhisperWarp
+# WhisperRocket
 
 **Silent speech-to-text — Local, fast, private**
 
-WhisperWarp is a desktop application that converts speech to text in real-time using the Whisper AI model. It runs entirely locally on your machine - no cloud services, no API keys, complete privacy.
+WhisperRocket is a desktop application that converts speech to text in real-time using the Whisper AI model. It runs entirely locally on your machine - no cloud services, no API keys, complete privacy.
 
 ## Screenshots
 
@@ -40,8 +40,8 @@ WhisperWarp is a desktop application that converts speech to text in real-time u
 ### 1. Clone the repository
 
 ```bash
-git clone https://github.com/gaborkis11/WhisperWarp.git
-cd WhisperWarp
+git clone https://github.com/gaborkis11/WhisperRocket.git
+cd WhisperRocket
 ```
 
 ### 2. Run the installer
@@ -58,7 +58,7 @@ The installer automatically:
 - ✅ Creates Python virtual environment
 - ✅ Installs Python dependencies (CUDA packages only if NVIDIA detected)
 - ✅ Configures the application for your hardware
-- ✅ Adds WhisperWarp to your application menu
+- ✅ Adds WhisperRocket to your application menu
 
 ### 3. Start the application
 
@@ -66,7 +66,7 @@ The installer automatically:
 ./start.sh
 ```
 
-Or launch "WhisperWarp" from your application menu.
+Or launch "WhisperRocket" from your application menu.
 
 > **Note for NVIDIA users**: After installation, open a new terminal or run `source ~/.bashrc` before starting the application.
 
@@ -110,7 +110,7 @@ Right-click the tray icon → **History** to:
 - Copy text to clipboard
 - Clear history
 
-History is stored locally (~/.config/whisperwarp/history.json) with a 100MB limit.
+History is stored locally (~/.config/whisperrocket/history.json) with a 100MB limit.
 
 ## Configuration
 
@@ -137,7 +137,7 @@ Configuration is stored in `config.json`.
 ## Project Structure
 
 ```
-WhisperWarp/
+WhisperRocket/
 ├── whisper_gui.py        # Main application
 ├── popup_window.py       # Popup window (equalizer, rocket, text)
 ├── settings_window.py    # Settings dialog
@@ -151,7 +151,7 @@ WhisperWarp/
 ├── install.sh            # Installation script
 ├── requirements.txt      # Python dependencies
 ├── requirements-cuda.txt # NVIDIA CUDA dependencies
-├── whisperwarp.desktop   # Linux desktop launcher
+├── whisperrocket.desktop   # Linux desktop launcher
 └── assets/               # Icons and sounds
 ```
 

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-WhisperWarp - Recording Popup Window
+WhisperRocket - Recording Popup Window
 Valós idejű waveform vizualizáció felvétel közben
 Transzkripció utáni szöveg megjelenítés
 """
