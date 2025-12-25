@@ -644,6 +644,14 @@ def main():
     print("[INFO] Audio rendszer inicializálva")
     sys.stdout.flush()
 
+    # macOS: Accessibility engedély ellenőrzése
+    if hasattr(platform_handler, 'check_permissions'):
+        perms = platform_handler.check_permissions()
+        if not perms.get("accessibility", True):
+            print("[FIGYELEM] Accessibility engedély szükséges a hotkey működéséhez!")
+            print("[FIGYELEM] System Settings > Privacy & Security > Accessibility > Terminal engedélyezése")
+            sys.stdout.flush()
+
     # Hotkey listener
     listener = keyboard.Listener(on_press=on_press, on_release=on_release)
     listener.start()

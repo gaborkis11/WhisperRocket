@@ -665,8 +665,16 @@ class SettingsWindow(QMainWindow):
             modifiers = event.modifiers()
             parts = []
 
-            if modifiers & Qt.KeyboardModifier.ControlModifier:
-                parts.append("ctrl")
+            # macOS: MetaModifier = Control (^), ControlModifier = Command (⌘)
+            # pynput macOS-en: ctrl = Control billentyű
+            if modifiers & Qt.KeyboardModifier.MetaModifier:
+                parts.append("ctrl")  # macOS Control (^) billentyű
+            elif modifiers & Qt.KeyboardModifier.ControlModifier:
+                # macOS-en ez Command, de pynput-ban "ctrl" a Control
+                # Linux/Windows-on ez a Ctrl
+                if py_platform.system() != "Darwin":
+                    parts.append("ctrl")
+                # macOS-en Command-ot nem támogatjuk hotkey-ként
             if modifiers & Qt.KeyboardModifier.AltModifier:
                 parts.append("alt")
             if modifiers & Qt.KeyboardModifier.ShiftModifier:
