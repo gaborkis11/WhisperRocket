@@ -1,12 +1,13 @@
 {
-  "hotkey": "alt+s",
+  "hotkey": "ctrl+shift+s",
   "model": "large-v3",
-  "device": "cuda",
+  "device": "mlx",
   "compute_type": "float16",
   "language": "hu",
   "ui_language": "en",
   "sample_rate": 16000,
   "input_device": null,
   "output_device": null,
-  "popup_display_duration": 6
+  "popup_display_duration": 2,
+  "setup_complete": true
 }
