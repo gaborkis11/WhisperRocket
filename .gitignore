@@ -24,3 +24,8 @@ config.json
 
 # macOS
 .DS_Store
+
+# Build output (PyInstaller)
+build/
+dist/
+*.spec
