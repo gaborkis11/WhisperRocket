@@ -70,11 +70,34 @@ from translations import t, TRANSLATIONS
 import history_manager
 from functools import partial
 
-# Konfiguráció
-CONFIG_FILE = os.path.join(os.path.dirname(__file__), 'config.json')
+# Konfiguráció (bundled app-ban user könyvtárba mentjük)
+def get_config_path():
+    """Config fájl útvonala - bundled app-ban user könyvtárba menti"""
+    import platform as py_platform
+    if getattr(sys, 'frozen', False):
+        # Bundled app - user könyvtárba mentjük
+        if py_platform.system() == "Darwin":
+            config_dir = os.path.expanduser("~/Library/Application Support/WhisperRocket")
+        else:
+            config_dir = os.path.expanduser("~/.config/whisperrocket")
+        os.makedirs(config_dir, exist_ok=True)
+        return os.path.join(config_dir, 'config.json')
+    else:
+        # Fejlesztői mód - projekt könyvtárban
+        return os.path.join(os.path.dirname(__file__), 'config.json')
 
-# Hangfájlok
-ASSETS_DIR = os.path.join(os.path.dirname(__file__), 'assets')
+CONFIG_FILE = get_config_path()
+
+# Hangfájlok (ezek a bundled app-ban is sys._MEIPASS-ben vannak)
+def get_resource_path(relative_path):
+    """Erőforrás fájl útvonala - bundled és dev módban is működik"""
+    if getattr(sys, 'frozen', False):
+        base_path = sys._MEIPASS
+    else:
+        base_path = os.path.dirname(__file__)
+    return os.path.join(base_path, relative_path)
+
+ASSETS_DIR = get_resource_path('assets')
 SOUND_START = os.path.join(ASSETS_DIR, 'start_soft_click_smooth.wav')
 SOUND_STOP = os.path.join(ASSETS_DIR, 'stop_soft_click_smooth.wav')
 
@@ -124,6 +147,8 @@ tray_icon_updater = None  # Thread-safe tray ikon frissítő
 qt_app = None
 history_detail_window = None  # History részlet ablak
 history_menu = None  # History almenü referencia
+settings_window_instance = None  # Settings ablak (közvetlen megnyitáshoz)
+history_viewers = []  # Aktív history viewer ablakok
 
 # Hang lejátszás (platform-független)
 def play_sound(sound_file):
@@ -201,23 +226,30 @@ def quit_app():
 def open_settings():
     """Beállítások ablak megnyitása"""
     print("[INFO] Beállítások megnyitása...")
-    import subprocess
-    subprocess.Popen([sys.executable, os.path.join(os.path.dirname(__file__), 'settings_window.py')])
+    global settings_window_instance
+    from settings_window import SettingsWindow
+    if settings_window_instance is None or not settings_window_instance.isVisible():
+        settings_window_instance = SettingsWindow()
+        settings_window_instance.show()
+    else:
+        settings_window_instance.raise_()
+        settings_window_instance.activateWindow()
 
 def show_history_entry(entry_id: str, checked: bool = False):
-    """History bejegyzés megjelenítése külön processben (elkerüli a QSystemTrayIcon crash-t)"""
+    """History bejegyzés megjelenítése"""
+    global history_viewers
     try:
         entry = history_manager.get_entry_by_id(entry_id)
         if entry:
-            import subprocess
+            from history_viewer import HistoryViewer
             import json
             entry_json = json.dumps(entry)
-            # Külön processben indítjuk a viewer-t
-            subprocess.Popen([
-                sys.executable,
-                os.path.join(os.path.dirname(__file__), 'history_viewer.py'),
-                entry_json
-            ])
+            viewer = HistoryViewer(entry_json)
+            viewer.show()
+            # Megtartjuk a referenciát, hogy ne törlődjön
+            history_viewers.append(viewer)
+            # Bezárt ablakok eltávolítása a listából
+            history_viewers = [v for v in history_viewers if v.isVisible()]
     except Exception as e:
         print(f"[ERROR] show_history_entry failed: {e}")
         import traceback
@@ -585,6 +617,7 @@ def main():
 
     # PyQt6 inicializálás (először kell lennie)
     qt_app = QApplication(sys.argv)
+    qt_app.setQuitOnLastWindowClosed(False)  # Ne lépjen ki amikor a Settings bezárul
 
     # Modell ellenőrzés - van-e letöltött modell az aktuális device-hoz?
     from model_manager import has_any_model_downloaded, is_model_downloaded
@@ -608,7 +641,12 @@ def main():
             # Az app újraindítja magát, most már letöltött modellel
             print("[INFO] Modell letöltve, app újraindítása...")
             qt_app.quit()
-            os.execv(sys.executable, [sys.executable] + sys.argv)
+            if getattr(sys, 'frozen', False):
+                # Bundled app
+                os.execv(sys.executable, [sys.executable])
+            else:
+                # Dev mód
+                os.execv(sys.executable, [sys.executable] + sys.argv)
             sys.exit(0)  # Biztonsági exit (nem kellene ide jutni)
 
     # Popup ablak létrehozása (hotkey és nyelv átadása)
@@ -644,31 +682,12 @@ def main():
     print("[INFO] Audio rendszer inicializálva")
     sys.stdout.flush()
 
-    # macOS: Input Monitoring engedély ellenőrzése (pynput hotkey-hez)
-    if hasattr(platform_handler, 'check_permissions'):
-        perms = platform_handler.check_permissions()
-        if not perms.get("input_monitoring", True):
-            print("[FIGYELEM] Input Monitoring engedély szükséges a hotkey működéséhez!")
-            sys.stdout.flush()
-
-            # Natív macOS dialógus osascript-tel (Qt crash elkerülése)
-            import subprocess
-            dialog_text = (
-                "Az Input Monitoring engedély szükséges a hotkey működéséhez.\\n\\n"
-                "Lépések:\\n"
-                "1. Kattints a '+' gombra\\n"
-                "2. Válaszd ki a Terminal alkalmazást\\n"
-                "3. Kapcsold be a mellette lévő kapcsolót\\n\\n"
-                "Ezután indítsd újra az alkalmazást."
-            )
-            subprocess.run([
-                'osascript', '-e',
-                f'display dialog "{dialog_text}" with title "WhisperRocket - Engedély szükséges" buttons {{"OK"}} default button "OK" with icon caution'
-            ])
-
-            # System Settings megnyitása az Input Monitoring panelen
-            if hasattr(platform_handler, 'request_permissions'):
-                platform_handler.request_permissions()
+    # macOS: Input Monitoring - csak konzol figyelmeztetés (IOHIDCheckAccess nem megbízható)
+    import platform as py_platform
+    if py_platform.system() == "Darwin":
+        print("[INFO] macOS: Ha a hotkey nem működik, add hozzá az appot az Input Monitoring-hoz:")
+        print("[INFO]   System Settings → Privacy & Security → Input Monitoring")
+        sys.stdout.flush()
 
     # Hotkey listener
     listener = keyboard.Listener(on_press=on_press, on_release=on_release)
@@ -734,14 +753,19 @@ def main():
         if os.path.exists(RESTART_FLAG_FILE):
             print("[INFO] Restart kérés észlelve, újraindítás...")
             os.remove(RESTART_FLAG_FILE)
-            # Platform-specifikus restart script
-            script_dir = os.path.dirname(__file__)
+
             import platform
-            if platform.system() == "Darwin":
-                start_script = os.path.join(script_dir, 'start_macos.sh')
+            if getattr(sys, 'frozen', False):
+                # Bundled app - közvetlenül újraindítjuk a binárist
+                os.execv(sys.executable, [sys.executable])
             else:
-                start_script = os.path.join(script_dir, 'start.sh')
-            os.execv('/bin/bash', ['bash', start_script])
+                # Fejlesztői mód - script használata
+                script_dir = os.path.dirname(__file__)
+                if platform.system() == "Darwin":
+                    start_script = os.path.join(script_dir, 'start_macos.sh')
+                else:
+                    start_script = os.path.join(script_dir, 'start.sh')
+                os.execv('/bin/bash', ['bash', start_script])
 
     restart_timer = QTimer()
     restart_timer.timeout.connect(check_restart_flag)

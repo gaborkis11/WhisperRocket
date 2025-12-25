@@ -107,7 +107,7 @@ TRANSLATIONS = {
 
         # Permission Section (Settings)
         "perm_title": "Permissions Required",
-        "perm_description": "Hotkey capture requires Accessibility permission for your terminal app.",
+        "perm_description": "Hotkey capture requires Input Monitoring permission.",
         "perm_status_granted": "Status: Granted",
         "perm_status_not_granted": "Status: Not granted",
         "perm_open_settings": "Open System Settings",
@@ -220,7 +220,7 @@ TRANSLATIONS = {
 
         # Permission Section (Settings)
         "perm_title": "Engedélyek szükségesek",
-        "perm_description": "A gyorsbillentyű működéséhez Accessibility engedély szükséges a terminál alkalmazáshoz.",
+        "perm_description": "A gyorsbillentyű működéséhez Input Monitoring engedély szükséges.",
         "perm_status_granted": "Állapot: Engedélyezve",
         "perm_status_not_granted": "Állapot: Nincs megadva",
         "perm_open_settings": "Rendszerbeállítások megnyitása",

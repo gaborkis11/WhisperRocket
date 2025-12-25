@@ -189,10 +189,18 @@ class MacOSHandler(PlatformHandler):
 
         if not permissions["input_monitoring"]:
             # Input Monitoring beállítások megnyitása (pynput keyboard listener-hez)
-            subprocess.run([
-                'open',
-                'x-apple.systempreferences:com.apple.preference.security?Privacy_ListenEvent'
-            ])
+            # PyObjC-vel nyitjuk meg, ami megbízhatóbb bundled app-ból
+            try:
+                from AppKit import NSWorkspace
+                from Foundation import NSURL
+                url = NSURL.URLWithString_('x-apple.systempreferences:com.apple.preference.security?Privacy_ListenEvent')
+                NSWorkspace.sharedWorkspace().openURL_(url)
+            except ImportError:
+                # Fallback: subprocess
+                subprocess.run([
+                    'open',
+                    'x-apple.systempreferences:com.apple.preference.security?Privacy_ListenEvent'
+                ])
 
         if not permissions["microphone"]:
             # Microphone engedély kérése (macOS automatikusan kérdez)

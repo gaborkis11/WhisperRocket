@@ -29,8 +29,22 @@ from platform_support import get_platform_handler
 # Platform handler
 platform_handler = get_platform_handler()
 
-# Konfiguráció útvonal
-CONFIG_FILE = os.path.join(os.path.dirname(__file__), 'config.json')
+# Konfiguráció útvonal (bundled app-ban user könyvtárba mentjük)
+def get_config_path():
+    """Config fájl útvonala - bundled app-ban user könyvtárba menti"""
+    if getattr(sys, 'frozen', False):
+        # Bundled app - user könyvtárba mentjük
+        if py_platform.system() == "Darwin":
+            config_dir = os.path.expanduser("~/Library/Application Support/WhisperRocket")
+        else:
+            config_dir = os.path.expanduser("~/.config/whisperrocket")
+        os.makedirs(config_dir, exist_ok=True)
+        return os.path.join(config_dir, 'config.json')
+    else:
+        # Fejlesztői mód - projekt könyvtárban
+        return os.path.join(os.path.dirname(__file__), 'config.json')
+
+CONFIG_FILE = get_config_path()
 DESKTOP_FILE = os.path.join(os.path.dirname(__file__), 'whisperrocket.desktop')
 
 # Támogatott nyelvek
@@ -884,7 +898,7 @@ class SettingsWindow(QMainWindow):
             return
 
         permissions = platform_handler.check_permissions()
-        is_granted = permissions.get("accessibility", False)
+        is_granted = permissions.get("input_monitoring", False)
 
         # Ha megvan az engedély, elrejtjük az egész panelt
         if is_granted:
