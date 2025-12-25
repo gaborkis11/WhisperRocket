@@ -15,9 +15,6 @@ __pycache__/
 .idea/
 .vscode/
 
-# Developer-specific files (not for distribution)
-CLAUDE.md
-tasks/
 
 # User config (generated during install)
 config.json
