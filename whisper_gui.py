@@ -649,8 +649,29 @@ def main():
         perms = platform_handler.check_permissions()
         if not perms.get("accessibility", True):
             print("[FIGYELEM] Accessibility engedély szükséges a hotkey működéséhez!")
-            print("[FIGYELEM] System Settings > Privacy & Security > Accessibility > Terminal engedélyezése")
             sys.stdout.flush()
+
+            # Dialógus megjelenítése és Settings megnyitása
+            from PySide6.QtWidgets import QMessageBox
+            msg = QMessageBox()
+            msg.setIcon(QMessageBox.Icon.Warning)
+            msg.setWindowTitle("WhisperRocket - Engedély szükséges")
+            msg.setText("Az Input Monitoring engedély szükséges a hotkey működéséhez.")
+            msg.setInformativeText(
+                "Az OK gomb megnyomása után a System Settings megnyílik.\n\n"
+                "Lépések:\n"
+                "1. Kattints a '+' gombra\n"
+                "2. Válaszd ki a Terminal alkalmazást\n"
+                "   (vagy az iTerm-et, ha azt használod)\n"
+                "3. Kapcsold be a mellette lévő kapcsolót\n\n"
+                "Ezután indítsd újra az alkalmazást."
+            )
+            msg.setStandardButtons(QMessageBox.StandardButton.Ok)
+            msg.exec()
+
+            # System Settings megnyitása az Input Monitoring panelen
+            if hasattr(platform_handler, 'request_permissions'):
+                platform_handler.request_permissions()
 
     # Hotkey listener
     listener = keyboard.Listener(on_press=on_press, on_release=on_release)

@@ -173,10 +173,11 @@ class MacOSHandler(PlatformHandler):
         permissions = self.check_permissions()
 
         if not permissions["accessibility"]:
-            # Accessibility beállítások megnyitása
+            # Input Monitoring beállítások megnyitása (pynput keyboard listener-hez)
+            # Ez a fontosabb a hotkey működéséhez
             subprocess.run([
                 'open',
-                'x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility'
+                'x-apple.systempreferences:com.apple.preference.security?Privacy_ListenEvent'
             ])
 
         if not permissions["microphone"]:
