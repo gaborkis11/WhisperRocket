@@ -133,11 +133,26 @@ class MacOSHandler(PlatformHandler):
         return plist_path.exists()
 
     def check_permissions(self) -> dict:
-        """macOS engedélyek ellenőrzése (Accessibility és Microphone)"""
+        """macOS engedélyek ellenőrzése (Input Monitoring, Accessibility, Microphone)"""
         permissions = {
             "microphone": True,  # Feltételezzük, hogy megvan
-            "accessibility": False
+            "accessibility": False,
+            "input_monitoring": False  # pynput keyboard listener-hez
         }
+
+        # Input Monitoring ellenőrzés (IOHIDCheckAccess)
+        # Ez a fontos a hotkey működéséhez!
+        try:
+            import ctypes
+            iokit = ctypes.CDLL('/System/Library/Frameworks/IOKit.framework/IOKit')
+            iokit.IOHIDCheckAccess.argtypes = [ctypes.c_uint32]
+            iokit.IOHIDCheckAccess.restype = ctypes.c_int
+            # 1 = kIOHIDRequestTypeListenEvent (Input Monitoring)
+            result = iokit.IOHIDCheckAccess(1)
+            permissions["input_monitoring"] = (result == 1)  # 1 = engedélyezve
+        except Exception:
+            # Ha nem sikerül, feltételezzük, hogy nincs
+            permissions["input_monitoring"] = False
 
         # Accessibility ellenőrzés
         try:
@@ -172,9 +187,8 @@ class MacOSHandler(PlatformHandler):
         """Engedély kérés - System Preferences megnyitása"""
         permissions = self.check_permissions()
 
-        if not permissions["accessibility"]:
+        if not permissions["input_monitoring"]:
             # Input Monitoring beállítások megnyitása (pynput keyboard listener-hez)
-            # Ez a fontosabb a hotkey működéséhez
             subprocess.run([
                 'open',
                 'x-apple.systempreferences:com.apple.preference.security?Privacy_ListenEvent'

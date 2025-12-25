@@ -644,30 +644,27 @@ def main():
     print("[INFO] Audio rendszer inicializálva")
     sys.stdout.flush()
 
-    # macOS: Accessibility engedély ellenőrzése
+    # macOS: Input Monitoring engedély ellenőrzése (pynput hotkey-hez)
     if hasattr(platform_handler, 'check_permissions'):
         perms = platform_handler.check_permissions()
-        if not perms.get("accessibility", True):
-            print("[FIGYELEM] Accessibility engedély szükséges a hotkey működéséhez!")
+        if not perms.get("input_monitoring", True):
+            print("[FIGYELEM] Input Monitoring engedély szükséges a hotkey működéséhez!")
             sys.stdout.flush()
 
-            # Dialógus megjelenítése és Settings megnyitása
-            from PySide6.QtWidgets import QMessageBox
-            msg = QMessageBox()
-            msg.setIcon(QMessageBox.Icon.Warning)
-            msg.setWindowTitle("WhisperRocket - Engedély szükséges")
-            msg.setText("Az Input Monitoring engedély szükséges a hotkey működéséhez.")
-            msg.setInformativeText(
-                "Az OK gomb megnyomása után a System Settings megnyílik.\n\n"
-                "Lépések:\n"
-                "1. Kattints a '+' gombra\n"
-                "2. Válaszd ki a Terminal alkalmazást\n"
-                "   (vagy az iTerm-et, ha azt használod)\n"
-                "3. Kapcsold be a mellette lévő kapcsolót\n\n"
+            # Natív macOS dialógus osascript-tel (Qt crash elkerülése)
+            import subprocess
+            dialog_text = (
+                "Az Input Monitoring engedély szükséges a hotkey működéséhez.\\n\\n"
+                "Lépések:\\n"
+                "1. Kattints a '+' gombra\\n"
+                "2. Válaszd ki a Terminal alkalmazást\\n"
+                "3. Kapcsold be a mellette lévő kapcsolót\\n\\n"
                 "Ezután indítsd újra az alkalmazást."
             )
-            msg.setStandardButtons(QMessageBox.StandardButton.Ok)
-            msg.exec()
+            subprocess.run([
+                'osascript', '-e',
+                f'display dialog "{dialog_text}" with title "WhisperRocket - Engedély szükséges" buttons {{"OK"}} default button "OK" with icon caution'
+            ])
 
             # System Settings megnyitása az Input Monitoring panelen
             if hasattr(platform_handler, 'request_permissions'):
