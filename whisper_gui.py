@@ -46,6 +46,8 @@ def init_whisper_backend():
 
 # Backend inicializálás
 init_whisper_backend()
+print("[INFO] Starting application, please wait...")
+sys.stdout.flush()
 
 
 class TrayIconUpdater(QObject):
@@ -94,7 +96,7 @@ def load_config():
     except:
         device, compute_type = detect_device()
         return {
-            "hotkey": "alt+s",
+            "hotkey": "ctrl+shift+s",
             "model": "large-v3",
             "device": device,
             "compute_type": compute_type,
@@ -683,7 +685,8 @@ def main():
     print("="*60)
     print(f"  Hotkey: {config['hotkey']}")
     print(f"  Modell: {config['model']}")
-    print(f"  Device: {config['device']}")
+    actual_device = "mlx" if whisper_backend == "mlx" else config['device']
+    print(f"  Device: {actual_device}")
     print("")
     print("  SYSTEM TRAY SZINEK:")
     print("    KEK     = Keszen all")

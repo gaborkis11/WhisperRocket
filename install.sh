@@ -195,7 +195,7 @@ fi
 if [ ! -f "$CONFIG_FILE" ]; then
     cat > "$CONFIG_FILE" << EOF
 {
-    "hotkey": "alt+s",
+    "hotkey": "ctrl+shift+s",
     "model": "large-v3",
     "device": "$DEVICE",
     "compute_type": "$COMPUTE_TYPE",
@@ -269,7 +269,7 @@ echo "  Indítás:"
 echo "    • Alkalmazások menüből: WhisperRocket"
 echo "    • Terminálból: ./start.sh"
 echo ""
-echo "  Hotkey: Alt+S (nyomva tartás = felvétel)"
+echo "  Hotkey: Ctrl+Shift+S (nyomva tartás = felvétel)"
 echo ""
 
 if [ "$HAS_NVIDIA" = true ]; then

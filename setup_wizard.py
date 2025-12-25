@@ -17,6 +17,7 @@ from PySide6.QtGui import QFont, QCursor
 
 from translations import t
 from download_manager import get_download_manager
+from platform_support import get_platform_handler
 
 
 # Available models for selection
@@ -45,7 +46,17 @@ def get_ui_language():
 
 
 def get_device():
-    """Get device from config"""
+    """Get device - platform detection first, then config"""
+    platform_handler = get_platform_handler()
+
+    # Platform detekció - macOS Apple Silicon = MLX, NVIDIA = CUDA
+    gpu_type = platform_handler.get_gpu_type()
+    if gpu_type == "mlx":
+        return "mlx"
+    elif gpu_type == "cuda":
+        return "cuda"
+
+    # Fallback: config-ból vagy CPU
     config_path = os.path.join(os.path.dirname(__file__), 'config.json')
     try:
         with open(config_path, 'r') as f:
@@ -306,7 +317,7 @@ class SetupWizard(QDialog):
         QTimer.singleShot(1500, self.accept)  # Longer delay so user can see the message
 
     def save_config(self):
-        """Save selected model to config and mark setup complete"""
+        """Save selected model and device to config"""
         config_path = os.path.join(os.path.dirname(__file__), 'config.json')
 
         try:
@@ -316,7 +327,14 @@ class SetupWizard(QDialog):
             config = {}
 
         config["model"] = self.selected_model
+        config["device"] = self.device
         config["setup_complete"] = True
+
+        # compute_type beállítása device alapján
+        if self.device in ("cuda", "mlx"):
+            config["compute_type"] = "float16"
+        else:
+            config["compute_type"] = "int8"
 
         with open(config_path, 'w') as f:
             json.dump(config, f, indent=2)

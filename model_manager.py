@@ -204,7 +204,15 @@ def has_any_model_downloaded(device=None):
 
 
 def get_current_device():
-    """Visszaadja a config-ban beállított device-t"""
+    """Visszaadja a ténylegesen használt device-t (platform-alapú)"""
+    # Platform detekció - macOS Apple Silicon mindig MLX
+    gpu_type = platform_handler.get_gpu_type()
+    if gpu_type == "mlx":
+        return "mlx"
+    elif gpu_type == "cuda":
+        return "cuda"
+
+    # Egyéb esetben config-ból
     config_path = os.path.join(os.path.dirname(__file__), 'config.json')
     try:
         with open(config_path, 'r') as f:

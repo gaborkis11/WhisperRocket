@@ -101,7 +101,7 @@ def load_config():
     except:
         device, compute_type = detect_device()
         return {
-            "hotkey": "alt+s",
+            "hotkey": "ctrl+shift+s",
             "model": "large-v3",
             "device": device,
             "compute_type": compute_type,
@@ -211,7 +211,7 @@ class SettingsWindow(QMainWindow):
 
         # Hotkey
         hotkey_layout = QHBoxLayout()
-        self.hotkey_edit = QLineEdit(self.config.get("hotkey", "alt+s"))
+        self.hotkey_edit = QLineEdit(self.config.get("hotkey", "ctrl+shift+s"))
         self.hotkey_edit.setReadOnly(True)
         hotkey_layout.addWidget(self.hotkey_edit)
 
@@ -286,7 +286,8 @@ class SettingsWindow(QMainWindow):
         self.device_combo = QComboBox()
         for code, name in DEVICES:
             self.device_combo.addItem(name, code)
-        self.set_combo_value(self.device_combo, self.config.get("device", "cuda"))
+        default_device = "mlx" if platform_handler.get_gpu_type() == "mlx" else "cuda"
+        self.set_combo_value(self.device_combo, self.config.get("device", default_device))
         form_layout2.addRow(t("label_device", self.ui_lang), self.device_combo)
 
         # Popup megjelenítési idő

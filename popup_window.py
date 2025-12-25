@@ -35,7 +35,7 @@ class RecordingPopup(QWidget):
     request_show_text = Signal(str)
     request_hide_popup = Signal()
 
-    def __init__(self, amplitude_queue: Queue, hotkey: str = "Alt+S", popup_duration: int = 5, ui_language: str = "en"):
+    def __init__(self, amplitude_queue: Queue, hotkey: str = "Ctrl+Shift+S", popup_duration: int = 5, ui_language: str = "en"):
         super().__init__()
         self.amplitude_queue = amplitude_queue
         self.hotkey = hotkey  # Beállított hotkey megjelenítéshez
