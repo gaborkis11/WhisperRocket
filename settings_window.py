@@ -541,7 +541,8 @@ class SettingsWindow(QMainWindow):
         self.progress_bar.setValue(0)
         self.progress_info.setText(f"⬇ {model_name} - {t('download_starting', self.ui_lang)}")
 
-        current_device = self.config.get("device", "cpu")
+        # Platform-aware device a letöltéshez
+        current_device = "mlx" if platform_handler.get_gpu_type() == "mlx" else self.config.get("device", "cpu")
         self.download_manager.start_download(model_name, current_device)
 
     def update_download_progress(self):
@@ -857,7 +858,8 @@ class SettingsWindow(QMainWindow):
     def update_model_warning(self):
         """Model warning frissítése"""
         current_model = self.config.get("model", "large-v3")
-        current_device = self.config.get("device", "cpu")
+        # Platform-aware device detekció (nem config-ból!)
+        current_device = "mlx" if platform_handler.get_gpu_type() == "mlx" else self.config.get("device", "cpu")
 
         # Ellenőrizzük a megfelelő device-hoz tartozó modellt
         if not is_model_downloaded(current_model, current_device):
