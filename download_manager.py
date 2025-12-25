@@ -10,6 +10,11 @@ import threading
 from dataclasses import dataclass
 from typing import Optional, Callable
 
+from platform_support import get_platform_handler
+
+# Platform handler
+platform_handler = get_platform_handler()
+
 # Állapot fájl útvonal
 STATE_FILE = os.path.join(os.path.dirname(__file__), '.download_state.json')
 
@@ -28,6 +33,7 @@ MODEL_SIZES = {
 class DownloadState:
     """Letöltés állapot"""
     model_name: str = ""
+    device: str = ""  # "mlx", "cuda", "cpu"
     is_downloading: bool = False
     progress: float = 0.0  # 0.0 - 1.0
     downloaded_bytes: int = 0
@@ -36,6 +42,22 @@ class DownloadState:
     error: str = ""
     cancelled: bool = False
     completed: bool = False
+
+
+def get_repo_id(model_name: str, device: str) -> str:
+    """Visszaadja a HuggingFace repo ID-t a device alapján"""
+    if device == "mlx":
+        return f"mlx-community/whisper-{model_name}-mlx"
+    else:
+        return f"Systran/faster-whisper-{model_name}"
+
+
+def get_cache_subdir(model_name: str, device: str) -> str:
+    """Visszaadja a cache alkönyvtár nevét"""
+    if device == "mlx":
+        return f"models--mlx-community--whisper-{model_name}-mlx"
+    else:
+        return f"models--Systran--faster-whisper-{model_name}"
 
 
 class DownloadManager:
@@ -148,10 +170,12 @@ class DownloadManager:
             except:
                 pass
 
-    def _get_cache_size(self, model_name: str) -> int:
+    def _get_cache_size(self, model_name: str, device: str = None) -> int:
         """Cache mappa méretének lekérdezése (beleértve .incomplete fájlokat)"""
         import os
-        cache_path = os.path.expanduser(f"~/.cache/huggingface/hub/models--Systran--faster-whisper-{model_name}")
+        cache_dir = str(platform_handler.get_cache_dir())
+        subdir = get_cache_subdir(model_name, device or self.state.device)
+        cache_path = os.path.join(cache_dir, subdir)
         if not os.path.exists(cache_path):
             return 0
         total = 0
@@ -164,12 +188,13 @@ class DownloadManager:
                     pass
         return total
 
-    def _download_worker(self, model_name: str):
+    def _download_worker(self, model_name: str, device: str = "cpu"):
         """Letöltés worker thread"""
         try:
             from huggingface_hub import snapshot_download
 
             self.state.model_name = model_name
+            self.state.device = device
             self.state.is_downloading = True
             self.state.progress = 0.0
             self.state.error = ""
@@ -179,7 +204,7 @@ class DownloadManager:
 
             self._save_state()
 
-            repo_id = f"Systran/faster-whisper-{model_name}"
+            repo_id = get_repo_id(model_name, device)
 
             # Letöltés külön thread-ben
             download_error = None
@@ -253,9 +278,12 @@ class DownloadManager:
             self.state.is_downloading = False
             self._save_state()
 
-    def start_download(self, model_name: str) -> bool:
+    def start_download(self, model_name: str, device: str = "cpu") -> bool:
         """
         Letöltés indítása
+        Args:
+            model_name: Modell neve (pl. "large-v3")
+            device: "mlx", "cuda", "cpu"
         Returns: True ha sikerült elindítani
         """
         if self.state.is_downloading:
@@ -267,7 +295,7 @@ class DownloadManager:
 
         self._download_thread = threading.Thread(
             target=self._download_worker,
-            args=(model_name,),
+            args=(model_name, device),
             daemon=True
         )
         self._download_thread.start()

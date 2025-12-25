@@ -90,6 +90,33 @@ TRANSLATIONS = {
         "history_copied": "Copied!",
         "history_confirm_clear": "Delete all history entries?",
         "history_cleared": "History cleared!",
+
+        # Setup Wizard
+        "wizard_title": "WhisperRocket Setup",
+        "wizard_welcome": "Welcome to WhisperRocket!",
+        "wizard_select_model": "Please select a model to get started:",
+        "wizard_model_tiny": "Tiny (~75 MB) - Fastest, lower accuracy",
+        "wizard_model_base": "Base (~150 MB) - Fast, basic accuracy",
+        "wizard_model_small": "Small (~500 MB) - Balanced (Recommended)",
+        "wizard_model_medium": "Medium (~1.5 GB) - Good accuracy",
+        "wizard_model_large": "Large-v3 (~3 GB) - Best accuracy",
+        "wizard_model_turbo": "Large-v3-turbo (~1.6 GB) - Fast & accurate",
+        "wizard_download_start": "Download & Start",
+        "wizard_downloading": "Downloading...",
+        "wizard_progress": "{downloaded} / {total}",
+
+        # Permission Section (Settings)
+        "perm_title": "Permissions Required",
+        "perm_description": "Hotkey capture requires Accessibility permission for your terminal app.",
+        "perm_status_granted": "Status: Granted",
+        "perm_status_not_granted": "Status: Not granted",
+        "perm_open_settings": "Open System Settings",
+        "perm_restart_note": "After enabling, restart the app.",
+
+        # Model Warning (Settings)
+        "model_warning_title": "Model Not Downloaded",
+        "model_warning_text": "The selected model \"{model}\" is not downloaded. The app won't work until you download a model.",
+        "model_warning_download": "Download Now",
     },
     "hu": {
         # System tray
@@ -176,6 +203,33 @@ TRANSLATIONS = {
         "history_copied": "Másolva!",
         "history_confirm_clear": "Törlöd az összes előzményt?",
         "history_cleared": "Előzmények törölve!",
+
+        # Setup Wizard
+        "wizard_title": "WhisperRocket Beállítás",
+        "wizard_welcome": "Üdvözöl a WhisperRocket!",
+        "wizard_select_model": "Válassz egy modellt a kezdéshez:",
+        "wizard_model_tiny": "Tiny (~75 MB) - Leggyorsabb, alacsony pontosság",
+        "wizard_model_base": "Base (~150 MB) - Gyors, alap pontosság",
+        "wizard_model_small": "Small (~500 MB) - Kiegyensúlyozott (Ajánlott)",
+        "wizard_model_medium": "Medium (~1.5 GB) - Jó pontosság",
+        "wizard_model_large": "Large-v3 (~3 GB) - Legjobb pontosság",
+        "wizard_model_turbo": "Large-v3-turbo (~1.6 GB) - Gyors és pontos",
+        "wizard_download_start": "Letöltés és indítás",
+        "wizard_downloading": "Letöltés...",
+        "wizard_progress": "{downloaded} / {total}",
+
+        # Permission Section (Settings)
+        "perm_title": "Engedélyek szükségesek",
+        "perm_description": "A gyorsbillentyű működéséhez Accessibility engedély szükséges a terminál alkalmazáshoz.",
+        "perm_status_granted": "Állapot: Engedélyezve",
+        "perm_status_not_granted": "Állapot: Nincs megadva",
+        "perm_open_settings": "Rendszerbeállítások megnyitása",
+        "perm_restart_note": "Engedélyezés után indítsd újra az alkalmazást.",
+
+        # Model Warning (Settings)
+        "model_warning_title": "Modell nincs letöltve",
+        "model_warning_text": "A kiválasztott \"{model}\" modell nincs letöltve. Az alkalmazás nem működik modell nélkül.",
+        "model_warning_download": "Letöltés most",
     }
 }
 

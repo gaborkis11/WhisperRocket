@@ -21,3 +21,6 @@ tasks/
 
 # User config (generated during install)
 config.json
+
+# macOS
+.DS_Store

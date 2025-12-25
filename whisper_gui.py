@@ -10,11 +10,42 @@ import sounddevice as sd
 import soundfile as sf
 import pyperclip
 from pynput import keyboard
-from faster_whisper import WhisperModel
 import numpy as np
 from PySide6.QtWidgets import QApplication, QSystemTrayIcon, QMenu
 from PySide6.QtCore import QTimer, Slot, Signal, QObject, Qt
 from PySide6.QtGui import QIcon, QPixmap, QPainter, QColor, QBrush, QPen, QAction
+
+# Platform absztrakció
+from platform_support import get_platform_handler
+platform_handler = get_platform_handler()
+
+# Whisper backend (MLX vagy faster-whisper)
+whisper_backend = None  # "mlx" vagy "faster-whisper"
+WhisperModel = None
+
+def init_whisper_backend():
+    """Whisper backend inicializálása a platform alapján"""
+    global whisper_backend, WhisperModel
+
+    gpu_type = platform_handler.get_gpu_type()
+
+    if gpu_type == "mlx":
+        try:
+            import mlx_whisper
+            whisper_backend = "mlx"
+            print("[INFO] MLX Whisper backend (Apple Silicon)")
+            return
+        except ImportError:
+            print("[INFO] MLX nem elérhető, faster-whisper használata")
+
+    # Fallback: faster-whisper
+    from faster_whisper import WhisperModel as FasterWhisperModel
+    WhisperModel = FasterWhisperModel
+    whisper_backend = "faster-whisper"
+    print(f"[INFO] Faster-Whisper backend ({gpu_type})")
+
+# Backend inicializálás
+init_whisper_backend()
 
 
 class TrayIconUpdater(QObject):
@@ -47,14 +78,12 @@ SOUND_STOP = os.path.join(ASSETS_DIR, 'stop_soft_click_smooth.wav')
 
 
 def detect_device():
-    """CUDA elérhetőség automatikus detektálása"""
-    try:
-        import subprocess
-        result = subprocess.run(['nvidia-smi'], capture_output=True, timeout=5)
-        if result.returncode == 0:
-            return "cuda", "float16"
-    except:
-        pass
+    """GPU elérhetőség automatikus detektálása (platform-független)"""
+    gpu_type = platform_handler.get_gpu_type()
+    if gpu_type == "cuda":
+        return "cuda", "float16"
+    elif gpu_type == "mlx":
+        return "mlx", "float16"
     return "cpu", "int8"
 
 
@@ -94,21 +123,10 @@ qt_app = None
 history_detail_window = None  # History részlet ablak
 history_menu = None  # History almenü referencia
 
-# Hang lejátszás háttérszálban (paplay használata - megbízhatóbb)
+# Hang lejátszás (platform-független)
 def play_sound(sound_file):
-    """Hangfájl lejátszása háttérszálban"""
-    def _play():
-        try:
-            if os.path.exists(sound_file):
-                import subprocess
-                # HDMI audio "felébresztése" - csendes ping + várakozás
-                subprocess.run(['paplay', '--volume=1', sound_file], capture_output=True, timeout=2)
-                time.sleep(0.15)  # Várunk, hogy az HDMI felébredjen
-                # Tényleges lejátszás
-                subprocess.run(['paplay', '--volume=65536', sound_file], capture_output=True, timeout=2)
-        except Exception as e:
-            print(f"[FIGYELEM] Hang lejátszás sikertelen: {e}")
-    threading.Thread(target=_play, daemon=True).start()
+    """Hangfájl lejátszása háttérszálban (platform-specifikus implementáció)"""
+    platform_handler.play_sound(sound_file)
 
 # System tray ikon létrehozása (Qt verzió)
 def create_icon(color='blue'):
@@ -186,10 +204,8 @@ def open_settings():
 
 def show_history_entry(entry_id: str, checked: bool = False):
     """History bejegyzés megjelenítése külön processben (elkerüli a QSystemTrayIcon crash-t)"""
-    print(f"[DEBUG] show_history_entry() called with id={entry_id}")
     try:
         entry = history_manager.get_entry_by_id(entry_id)
-        print(f"[DEBUG] Entry found: {entry is not None}")
         if entry:
             import subprocess
             import json
@@ -200,7 +216,6 @@ def show_history_entry(entry_id: str, checked: bool = False):
                 os.path.join(os.path.dirname(__file__), 'history_viewer.py'),
                 entry_json
             ])
-            print("[DEBUG] history_viewer.py launched")
     except Exception as e:
         print(f"[ERROR] show_history_entry failed: {e}")
         import traceback
@@ -222,9 +237,7 @@ def clear_history_action():
 def refresh_history_menu():
     """History menü frissítése a legújabb adatokkal"""
     global history_menu
-    print(f"[DEBUG] refresh_history_menu() called, history_menu={history_menu}")
     if not history_menu:
-        print("[DEBUG] history_menu is None, returning")
         return
 
     try:
@@ -232,7 +245,6 @@ def refresh_history_menu():
 
         # Legutóbbi bejegyzések lekérése (max 15)
         entries = history_manager.get_recent(15)
-        print(f"[DEBUG] Loaded {len(entries)} history entries")
 
         if entries:
             for entry in entries:
@@ -265,8 +277,6 @@ def refresh_history_menu():
             empty_action = QAction(t("history_empty", ui_lang), qt_app)
             empty_action.setEnabled(False)
             history_menu.addAction(empty_action)
-
-        print("[DEBUG] refresh_history_menu() completed")
     except Exception as e:
         print(f"[ERROR] refresh_history_menu() failed: {e}")
         import traceback
@@ -276,18 +286,28 @@ def refresh_history_menu():
 def load_model():
     global model
     print("[INFO] Whisper modell betoltese...")
+    sys.stdout.flush()
     update_icon('orange', t("tray_loading", ui_lang))
 
     try:
-        model = WhisperModel(
-            config["model"],
-            device=config["device"],
-            compute_type=config["compute_type"]
-        )
+        if whisper_backend == "mlx":
+            # MLX backend - a modell lazy-load-olódik transcribe-nál
+            model = {"type": "mlx", "model_name": config["model"]}
+            print(f"[INFO] MLX modell: {config['model']}")
+            sys.stdout.flush()
+        else:
+            # Faster-whisper backend
+            model = WhisperModel(
+                config["model"],
+                device=config["device"],
+                compute_type=config["compute_type"]
+            )
         print("[INFO] Modell betoltve!")
+        sys.stdout.flush()
         update_icon('blue', t("tray_ready", ui_lang))
     except Exception as e:
         print(f"[HIBA] Modell betoltes: {e}")
+        sys.stdout.flush()
         update_icon('red', t("tray_error", ui_lang))
 
 # Audio callback
@@ -318,60 +338,42 @@ def process_audio(audio_copy):
         # Whisper transcribe
         print("[INFO] Whisper feldolgozas...")
         start_time = time.time()
-        
-        segments, info = model.transcribe(
-            temp_file.name,
-            language=config["language"],
-            beam_size=5
-        )
-        
-        # Szöveg összegyűjtés
-        text = " ".join([segment.text.strip() for segment in segments])
+
+        if whisper_backend == "mlx":
+            # MLX backend
+            import mlx_whisper
+            result = mlx_whisper.transcribe(
+                temp_file.name,
+                path_or_hf_repo=f"mlx-community/whisper-{model['model_name']}-mlx",
+                language=config["language"]
+            )
+            text = result.get("text", "").strip()
+        else:
+            # Faster-whisper backend
+            segments, info = model.transcribe(
+                temp_file.name,
+                language=config["language"],
+                beam_size=5
+            )
+            # Szöveg összegyűjtés
+            text = " ".join([segment.text.strip() for segment in segments])
         
         elapsed = time.time() - start_time
         
         # Vágólapra másolás
         pyperclip.copy(text)
-        # Automatikus beillesztes xdotool-lal
+        # Automatikus beillesztés (platform-független)
         try:
             print("[INFO] Automatikus beillesztes...")
             time.sleep(0.3)
-            import subprocess
 
             # Aktív ablak detektálás
-            paste_key = "ctrl+v"  # Alapértelmezett
-            try:
-                # Ablak neve és osztálya lekérése
-                window_name = subprocess.run(
-                    ['xdotool', 'getactivewindow', 'getwindowname'],
-                    capture_output=True, text=True
-                ).stdout.strip().lower()
+            window_class = platform_handler.get_active_window_class()
+            is_terminal = platform_handler.is_terminal_window(window_class)
 
-                window_class = subprocess.run(
-                    ['xdotool', 'getactivewindow', 'getwindowclassname'],
-                    capture_output=True, text=True
-                ).stdout.strip().lower()
-
-                print(f"[DEBUG] Ablak: {window_name} ({window_class})")
-
-                # Terminálok és Cursor detektálása - ezek Ctrl+Shift+V-t használnak
-                ctrl_shift_v_apps = [
-                    'terminal', 'terminator', 'konsole', 'xterm', 'urxvt', 'alacritty',
-                    'kitty', 'tilix', 'guake', 'yakuake', 'gnome-terminal', 'xfce4-terminal',
-                    'cursor', 'code', 'vscode', 'vscodium'  # Cursor és VS Code
-                ]
-
-                for app in ctrl_shift_v_apps:
-                    if app in window_name or app in window_class:
-                        paste_key = "ctrl+shift+v"
-                        print(f"[INFO] Detektalva: {app} -> Ctrl+Shift+V")
-                        break
-
-            except Exception as detect_err:
-                print(f"[DEBUG] Ablak detektalas sikertelen: {detect_err}")
-
-            subprocess.run(['xdotool', 'key', paste_key], check=True)
-            print(f"[INFO] Beillesztve ({paste_key})!")
+            # Beillesztés (terminálban más billentyűkombináció)
+            platform_handler.paste_text(is_terminal=is_terminal)
+            print(f"[INFO] Beillesztve!")
         except Exception as e:
             print(f"[FIGYELEM] Beillesztes sikertelen: {e}")
         print("="*60)
@@ -421,7 +423,6 @@ def show_popup():
 def show_text_popup(text: str):
     """Szöveg megjelenítése a popup-ban (thread-safe)"""
     global popup_window
-    print(f"[DEBUG] show_text_popup() hívva, text='{text[:30]}...'")
     if popup_window:
         popup_window.request_show_text.emit(text)
 
@@ -483,12 +484,29 @@ def cancel_recording():
         update_icon('blue', t("tray_ready", ui_lang))
 
 # Hotkey
+# macOS virtual key codes (fizikai billentyűk - nem függ a modifier-ektől!)
+MACOS_VK_CODES = {
+    'a': 0, 's': 1, 'd': 2, 'f': 3, 'h': 4, 'g': 5, 'z': 6, 'x': 7, 'c': 8, 'v': 9,
+    'b': 11, 'q': 12, 'w': 13, 'e': 14, 'r': 15, 'y': 16, 't': 17,
+    '1': 18, '2': 19, '3': 20, '4': 21, '6': 22, '5': 23, '9': 25, '7': 26,
+    '8': 28, '0': 29, 'o': 31, 'u': 32, 'i': 34, 'p': 35, 'l': 37, 'j': 38,
+    'k': 40, 'n': 45, 'm': 46,
+}
+# Fordított map: vk -> betű
+VK_TO_KEY = {v: k for k, v in MACOS_VK_CODES.items()}
+
 def parse_hotkey(hotkey_str):
     parts = hotkey_str.lower().split('+')
     return {
-        'modifiers': [p for p in parts if p in ['ctrl', 'alt', 'shift']],
+        'modifiers': [p for p in parts if p in ['ctrl', 'alt', 'shift', 'cmd']],
         'key': parts[-1]
     }
+
+def get_key_from_vk(key):
+    """Virtual key code alapján visszaadja a billentyű nevét (macOS Alt workaround)"""
+    if hasattr(key, 'vk') and key.vk is not None:
+        return VK_TO_KEY.get(key.vk, None)
+    return None
 
 def check_hotkey_match():
     hotkey_config = parse_hotkey(config["hotkey"])
@@ -498,6 +516,8 @@ def check_hotkey_match():
         if mod == 'alt' and not hotkey_pressed.get('alt', False):
             return False
         if mod == 'shift' and not hotkey_pressed.get('shift', False):
+            return False
+        if mod == 'cmd' and not hotkey_pressed.get('cmd', False):
             return False
     if not hotkey_pressed.get(hotkey_config['key'], False):
         return False
@@ -512,16 +532,24 @@ def on_press(key):
             cancel_recording()
         return
 
+    # Modifier billentyűk
     if key in [keyboard.Key.ctrl_l, keyboard.Key.ctrl_r]:
         hotkey_pressed['ctrl'] = True
     elif key in [keyboard.Key.alt_l, keyboard.Key.alt_r, keyboard.Key.alt_gr]:
         hotkey_pressed['alt'] = True
     elif key in [keyboard.Key.shift, keyboard.Key.shift_r]:
         hotkey_pressed['shift'] = True
-    elif hasattr(key, 'char') and key.char:
-        hotkey_pressed[key.char.lower()] = True
-    elif hasattr(key, 'name'):
-        hotkey_pressed[key.name.lower()] = True
+    elif key in [keyboard.Key.cmd, keyboard.Key.cmd_r]:
+        hotkey_pressed['cmd'] = True
+    else:
+        # Normál billentyűk - használjuk a vk kódot (macOS Alt workaround)
+        vk_key = get_key_from_vk(key)
+        if vk_key:
+            hotkey_pressed[vk_key] = True
+        elif hasattr(key, 'char') and key.char:
+            hotkey_pressed[key.char.lower()] = True
+        elif hasattr(key, 'name'):
+            hotkey_pressed[key.name.lower()] = True
 
     if check_hotkey_match():
         if not recording:
@@ -537,17 +565,49 @@ def on_release(key):
         hotkey_pressed['alt'] = False
     elif key in [keyboard.Key.shift, keyboard.Key.shift_r]:
         hotkey_pressed['shift'] = False
-    elif hasattr(key, 'char') and key.char:
-        hotkey_pressed[key.char.lower()] = False
-    elif hasattr(key, 'name'):
-        hotkey_pressed[key.name.lower()] = False
+    elif key in [keyboard.Key.cmd, keyboard.Key.cmd_r]:
+        hotkey_pressed['cmd'] = False
+    else:
+        # Normál billentyűk - használjuk a vk kódot (macOS Alt workaround)
+        vk_key = get_key_from_vk(key)
+        if vk_key:
+            hotkey_pressed[vk_key] = False
+        elif hasattr(key, 'char') and key.char:
+            hotkey_pressed[key.char.lower()] = False
+        elif hasattr(key, 'name'):
+            hotkey_pressed[key.name.lower()] = False
 
 # Fő program
 def main():
-    global stream, tray_icon, qt_app, popup_window, tray_icon_updater, history_menu
+    global stream, tray_icon, qt_app, popup_window, tray_icon_updater, history_menu, config, ui_lang
 
     # PyQt6 inicializálás (először kell lennie)
     qt_app = QApplication(sys.argv)
+
+    # Modell ellenőrzés - van-e letöltött modell az aktuális device-hoz?
+    from model_manager import has_any_model_downloaded, is_model_downloaded
+    current_device = config.get("device", "cpu")
+    current_model = config.get("model", "large-v3")
+
+    # Először nézzük, hogy a beállított modell le van-e töltve
+    if not is_model_downloaded(current_model, current_device):
+        # Ha nincs, nézzük, van-e BÁRMILYEN modell
+        has_model, available_model = has_any_model_downloaded(current_device)
+
+        if not has_model:
+            # Nincs egyetlen modell sem - wizard megjelenítése
+            from setup_wizard import SetupWizard
+            from PySide6.QtWidgets import QDialog
+            wizard = SetupWizard()
+            if wizard.exec() != QDialog.Accepted:
+                # Felhasználó bezárta a wizard-ot letöltés nélkül
+                sys.exit(0)
+            # Wizard után ÚJRAINDÍTÁS szükséges (Qt/Metal konfliktus elkerülése)
+            # Az app újraindítja magát, most már letöltött modellel
+            print("[INFO] Modell letöltve, app újraindítása...")
+            qt_app.quit()
+            os.execv(sys.executable, [sys.executable] + sys.argv)
+            sys.exit(0)  # Biztonsági exit (nem kellene ide jutni)
 
     # Popup ablak létrehozása (hotkey és nyelv átadása)
     from popup_window import RecordingPopup
@@ -576,10 +636,11 @@ def main():
     )
     stream.start()
 
-    # Audio rendszer "felébresztése" - csendes warmup
-    import subprocess
-    subprocess.run(['paplay', '--volume=1', SOUND_START], capture_output=True, timeout=2)
+    # Audio rendszer "felébresztése" - csendes warmup (platform-specifikus)
+    if hasattr(platform_handler, 'warmup_audio'):
+        platform_handler.warmup_audio(SOUND_START)
     print("[INFO] Audio rendszer inicializálva")
+    sys.stdout.flush()
 
     # Hotkey listener
     listener = keyboard.Listener(on_press=on_press, on_release=on_release)
@@ -634,6 +695,28 @@ def main():
     print("  Config:  nano config.json")
     print("="*60)
     print("")
+    sys.stdout.flush()
+
+    # Restart flag figyelő (Settings-ből jövő restart kéréshez)
+    RESTART_FLAG_FILE = '/tmp/whisperrocket_restart'
+
+    def check_restart_flag():
+        """Restart flag ellenőrzése - Settings-ből jövő kérés"""
+        if os.path.exists(RESTART_FLAG_FILE):
+            print("[INFO] Restart kérés észlelve, újraindítás...")
+            os.remove(RESTART_FLAG_FILE)
+            # Platform-specifikus restart script
+            script_dir = os.path.dirname(__file__)
+            import platform
+            if platform.system() == "Darwin":
+                start_script = os.path.join(script_dir, 'start_macos.sh')
+            else:
+                start_script = os.path.join(script_dir, 'start.sh')
+            os.execv('/bin/bash', ['bash', start_script])
+
+    restart_timer = QTimer()
+    restart_timer.timeout.connect(check_restart_flag)
+    restart_timer.start(1000)  # 1 másodpercenként ellenőriz
 
     # Qt event loop futtatása (főszál)
     sys.exit(qt_app.exec())

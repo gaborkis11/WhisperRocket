@@ -7,6 +7,7 @@ import os
 import json
 import sys
 import shutil
+import platform as py_platform
 from PySide6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QLabel, QComboBox, QLineEdit, QPushButton, QCheckBox,
@@ -23,12 +24,14 @@ from model_manager import (
 )
 from download_manager import get_download_manager
 from translations import t
+from platform_support import get_platform_handler
+
+# Platform handler
+platform_handler = get_platform_handler()
 
 # Konfiguráció útvonal
 CONFIG_FILE = os.path.join(os.path.dirname(__file__), 'config.json')
 DESKTOP_FILE = os.path.join(os.path.dirname(__file__), 'whisperrocket.desktop')
-AUTOSTART_DIR = os.path.expanduser('~/.config/autostart')
-AUTOSTART_FILE = os.path.join(AUTOSTART_DIR, 'whisperrocket.desktop')
 
 # Támogatott nyelvek
 LANGUAGES = [
@@ -57,11 +60,21 @@ MODELS = [
     ("large-v3", "Large-v3 (~6 GB) - Legjobb"),
 ]
 
-# Device opciók
-DEVICES = [
-    ("cuda", "GPU (CUDA)"),
-    ("cpu", "CPU"),
-]
+# Device opciók (platform-függő)
+def get_available_devices():
+    """Elérhető device-ok lekérdezése a platform alapján"""
+    devices = []
+    gpu_type = platform_handler.get_gpu_type()
+
+    if gpu_type == "cuda":
+        devices.append(("cuda", "GPU (CUDA)"))
+    elif gpu_type == "mlx":
+        devices.append(("mlx", "GPU (Apple Silicon)"))
+
+    devices.append(("cpu", "CPU"))
+    return devices
+
+DEVICES = get_available_devices()
 
 # UI nyelvek
 UI_LANGUAGES = [
@@ -71,14 +84,12 @@ UI_LANGUAGES = [
 
 
 def detect_device():
-    """CUDA elérhetőség automatikus detektálása"""
-    try:
-        import subprocess
-        result = subprocess.run(['nvidia-smi'], capture_output=True, timeout=5)
-        if result.returncode == 0:
-            return "cuda", "float16"
-    except:
-        pass
+    """GPU elérhetőség automatikus detektálása (platform-független)"""
+    gpu_type = platform_handler.get_gpu_type()
+    if gpu_type == "cuda":
+        return "cuda", "float16"
+    elif gpu_type == "mlx":
+        return "mlx", "float16"
     return "cpu", "int8"
 
 
@@ -108,19 +119,13 @@ def save_config(config):
 
 
 def is_autostart_enabled():
-    """Ellenőrzi, hogy be van-e állítva autostart"""
-    return os.path.exists(AUTOSTART_FILE)
+    """Ellenőrzi, hogy be van-e állítva autostart (platform-specifikus)"""
+    return platform_handler.is_autostart_enabled()
 
 
 def set_autostart(enabled):
-    """Autostart be/kikapcsolása"""
-    if enabled:
-        os.makedirs(AUTOSTART_DIR, exist_ok=True)
-        if os.path.exists(DESKTOP_FILE):
-            shutil.copy(DESKTOP_FILE, AUTOSTART_FILE)
-    else:
-        if os.path.exists(AUTOSTART_FILE):
-            os.remove(AUTOSTART_FILE)
+    """Autostart be/kikapcsolása (platform-specifikus)"""
+    platform_handler.setup_autostart(enabled, app_path=DESKTOP_FILE)
 
 
 class SettingsWindow(QMainWindow):
@@ -138,10 +143,17 @@ class SettingsWindow(QMainWindow):
         self.progress_timer.timeout.connect(self.update_download_progress)
         self.progress_timer.start(500)  # 500ms
 
+        # Permission ellenőrzés timer (csak macOS-en)
+        if py_platform.system() == "Darwin":
+            self.permission_timer = QTimer()
+            self.permission_timer.timeout.connect(self.update_permission_status)
+            self.permission_timer.start(2000)  # 2s
+            self.update_permission_status()  # Azonnal ellenőrzés
+
     def init_ui(self):
         """UI inicializálása"""
         self.setWindowTitle(t("settings_title", self.ui_lang))
-        self.setFixedSize(500, 520)
+        self.setFixedSize(500, 620)
 
         # Központi widget
         central = QWidget()
@@ -152,7 +164,10 @@ class SettingsWindow(QMainWindow):
 
         # Cím
         title = QLabel(t("settings_title", self.ui_lang))
-        title.setFont(QFont("Sans", 14, QFont.Weight.Bold))
+        font = title.font()
+        font.setPointSize(14)
+        font.setBold(True)
+        title.setFont(font)
         title.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(title)
 
@@ -170,6 +185,11 @@ class SettingsWindow(QMainWindow):
         tab = QWidget()
         layout = QVBoxLayout(tab)
         layout.setSpacing(12)
+
+        # Model warning banner (ha nincs letöltve)
+        self.model_warning_frame = self.create_model_warning_section()
+        layout.addWidget(self.model_warning_frame)
+        self.update_model_warning()
 
         # Beállítások form
         form_layout = QFormLayout()
@@ -204,6 +224,17 @@ class SettingsWindow(QMainWindow):
         hotkey_widget.setLayout(hotkey_layout)
         form_layout.addRow(t("label_hotkey", self.ui_lang), hotkey_widget)
 
+        layout.addLayout(form_layout)
+
+        # Permission section (csak macOS-en)
+        if py_platform.system() == "Darwin":
+            self.permission_frame = self.create_permission_section()
+            layout.addWidget(self.permission_frame)
+
+        # Modell form (külön form a permission után)
+        form_layout_model = QFormLayout()
+        form_layout_model.setSpacing(10)
+
         # Modell
         self.model_combo = QComboBox()
         for code, name in MODELS:
@@ -211,37 +242,38 @@ class SettingsWindow(QMainWindow):
             self.model_combo.addItem(f"{name}{downloaded}", code)
         self.set_combo_value(self.model_combo, self.config.get("model", "large-v3"))
         self.model_combo.currentIndexChanged.connect(self.on_model_changed)
-        form_layout.addRow(t("label_model", self.ui_lang), self.model_combo)
+        form_layout_model.addRow(t("label_model", self.ui_lang), self.model_combo)
 
-        layout.addLayout(form_layout)
+        layout.addLayout(form_layout_model)
 
-        # Letöltés progress panel
-        self.progress_panel = QFrame()
-        self.progress_panel.setFrameStyle(QFrame.Shape.Box | QFrame.Shadow.Sunken)
-        self.progress_panel.setStyleSheet("QFrame { background-color: #f0f0f0; border-radius: 5px; padding: 5px; }")
+        # Letöltés progress panel - minimális dizájn
+        self.progress_panel = QWidget()
         progress_layout = QVBoxLayout(self.progress_panel)
-        progress_layout.setSpacing(5)
+        progress_layout.setSpacing(4)
+        progress_layout.setContentsMargins(0, 8, 0, 8)
 
-        self.progress_title = QLabel("⬇ Letöltés: -")
-        self.progress_title.setFont(QFont("Sans", 10, QFont.Weight.Bold))
-        progress_layout.addWidget(self.progress_title)
+        # Progress bar egy sorban a cancel gombbal
+        progress_row = QHBoxLayout()
+        progress_row.setSpacing(8)
 
         self.progress_bar = QProgressBar()
         self.progress_bar.setMinimum(0)
         self.progress_bar.setMaximum(100)
-        progress_layout.addWidget(self.progress_bar)
+        self.progress_bar.setFixedHeight(18)
+        progress_row.addWidget(self.progress_bar)
 
-        self.progress_info = QLabel("0 MB / 0 MB  •  0 MB/s  •  -")
-        self.progress_info.setStyleSheet("color: #666;")
-        progress_layout.addWidget(self.progress_info)
-
-        progress_btn_layout = QHBoxLayout()
-        progress_btn_layout.addStretch()
-        self.cancel_btn = QPushButton(t("btn_cancel", self.ui_lang))
-        self.cancel_btn.setFixedWidth(80)
+        self.cancel_btn = QPushButton("✕")
+        self.cancel_btn.setFixedSize(24, 24)
+        self.cancel_btn.setStyleSheet("QPushButton { border-radius: 12px; }")
         self.cancel_btn.clicked.connect(self.cancel_download)
-        progress_btn_layout.addWidget(self.cancel_btn)
-        progress_layout.addLayout(progress_btn_layout)
+        progress_row.addWidget(self.cancel_btn)
+
+        progress_layout.addLayout(progress_row)
+
+        # Info sor (modell neve, méret, sebesség)
+        self.progress_info = QLabel("")
+        self.progress_info.setStyleSheet("color: #888; font-size: 11px;")
+        progress_layout.addWidget(self.progress_info)
 
         self.progress_panel.setVisible(False)
         layout.addWidget(self.progress_panel)
@@ -311,7 +343,10 @@ class SettingsWindow(QMainWindow):
 
         # Cím
         title_label = QLabel(t("models_downloaded", self.ui_lang))
-        title_label.setFont(QFont("Sans", 11, QFont.Weight.Bold))
+        font = title_label.font()
+        font.setPointSize(11)
+        font.setBold(True)
+        title_label.setFont(font)
         layout.addWidget(title_label)
 
         # Modellek lista
@@ -502,11 +537,11 @@ class SettingsWindow(QMainWindow):
     def start_model_download(self, model_name):
         """Modell letöltés indítása"""
         self.progress_panel.setVisible(True)
-        self.progress_title.setText("⬇ " + t("download_title", self.ui_lang, model=model_name))
         self.progress_bar.setValue(0)
-        self.progress_info.setText(t("download_starting", self.ui_lang))
+        self.progress_info.setText(f"⬇ {model_name} - {t('download_starting', self.ui_lang)}")
 
-        self.download_manager.start_download(model_name)
+        current_device = self.config.get("device", "cpu")
+        self.download_manager.start_download(model_name, current_device)
 
     def update_download_progress(self):
         """Letöltés progress frissítése (timer által hívva)"""
@@ -514,7 +549,6 @@ class SettingsWindow(QMainWindow):
 
         if state.is_downloading:
             self.progress_panel.setVisible(True)
-            self.progress_title.setText("⬇ " + t("download_title", self.ui_lang, model=state.model_name))
 
             # Ha a progress nem változott, pulzáló módba váltunk
             current_progress = state.downloaded_bytes
@@ -530,74 +564,60 @@ class SettingsWindow(QMainWindow):
 
             # Ha 4+ tick (2+ sec) óta nem változott, pulzáló mód
             if self._stall_count >= 4:
-                # Indeterminate (pulzáló) progress bar
                 if self.progress_bar.maximum() != 0:
-                    self.progress_bar.setRange(0, 0)  # Pulzáló mód
-                self.progress_info.setText(t("download_stall", self.ui_lang))
+                    self.progress_bar.setRange(0, 0)
+                self.progress_info.setText(f"⬇ {state.model_name} - {t('download_stall', self.ui_lang)}")
             else:
-                # Normál progress bar
                 if self.progress_bar.maximum() == 0:
-                    self.progress_bar.setRange(0, 100)  # Vissza normál módba
+                    self.progress_bar.setRange(0, 100)
                 self.progress_bar.setValue(int(state.progress * 100))
 
                 downloaded = self.download_manager.format_size(state.downloaded_bytes)
                 total = self.download_manager.format_size(state.total_bytes)
                 speed = self.download_manager.format_speed()
-                eta = self.download_manager.format_eta()
 
-                self.progress_info.setText(f"{downloaded} / {total}  •  {speed}  •  {eta}")
+                self.progress_info.setText(f"⬇ {state.model_name}: {downloaded}/{total} • {speed}")
 
         elif state.completed:
             self.progress_panel.setVisible(True)
-            self.progress_title.setText("✓ " + t("download_done", self.ui_lang, model=state.model_name))
-            # Reset progress bar normál módba
             if self.progress_bar.maximum() == 0:
                 self.progress_bar.setRange(0, 100)
             self.progress_bar.setValue(100)
-            self.progress_info.setText(t("download_complete", self.ui_lang))
+            self.progress_info.setText(f"✓ {state.model_name} - {t('download_complete', self.ui_lang)}")
             self.cancel_btn.setVisible(False)
-            # Reset stall counter
             self._last_progress_bytes = 0
             self._stall_count = 0
 
-            # 3 másodperc után elrejtjük
-            QTimer.singleShot(3000, self.hide_progress_panel)
+            QTimer.singleShot(2000, self.hide_progress_panel)
             self.download_manager.clear_completed()
             self.refresh_model_combo()
 
         elif state.error:
             self.progress_panel.setVisible(True)
-            self.progress_title.setText("✗ " + t("download_error", self.ui_lang, model=state.model_name))
-            self.progress_info.setText(state.error)
-            if self.cancel_btn.text() != t("btn_close", self.ui_lang):
-                self.cancel_btn.setText(t("btn_close", self.ui_lang))
-                try:
-                    self.cancel_btn.clicked.disconnect()
-                except:
-                    pass
-                self.cancel_btn.clicked.connect(self.close_error_panel)
+            self.progress_info.setText(f"✗ {state.model_name}: {state.error}")
+            self.cancel_btn.setText("✕")
+            try:
+                self.cancel_btn.clicked.disconnect()
+            except:
+                pass
+            self.cancel_btn.clicked.connect(self.close_error_panel)
 
         elif state.cancelled:
             self.progress_panel.setVisible(True)
-            self.progress_title.setText(t("download_cancelled", self.ui_lang))
-            self.progress_info.setText("")
-            QTimer.singleShot(2000, self.hide_progress_panel)
+            self.progress_info.setText(t("download_cancelled", self.ui_lang))
+            QTimer.singleShot(1500, self.hide_progress_panel)
             self.download_manager.clear_completed()
 
         else:
-            # Ha nincs aktív letöltés és nincs model_name, elrejtjük
             if not state.model_name:
                 self.progress_panel.setVisible(False)
             else:
-                # "Beragadt" állapot: volt letöltés, de nem completed/error
-                # Ellenőrizzük, hogy a modell tényleg letöltve van-e
                 if is_model_downloaded(state.model_name):
                     self.progress_panel.setVisible(True)
-                    self.progress_title.setText("✓ " + t("download_done", self.ui_lang, model=state.model_name))
                     self.progress_bar.setValue(100)
-                    self.progress_info.setText(t("download_complete", self.ui_lang))
+                    self.progress_info.setText(f"✓ {state.model_name}")
                     self.cancel_btn.setVisible(False)
-                    QTimer.singleShot(3000, self.hide_progress_panel)
+                    QTimer.singleShot(2000, self.hide_progress_panel)
                     self.download_manager.clear_completed()
                     self.refresh_model_combo()
 
@@ -605,8 +625,7 @@ class SettingsWindow(QMainWindow):
         """Progress panel elrejtése"""
         self.progress_panel.setVisible(False)
         self.cancel_btn.setVisible(True)
-        self.cancel_btn.setText(t("btn_cancel", self.ui_lang))
-        # Reconnect to cancel_download
+        self.cancel_btn.setText("✕")
         try:
             self.cancel_btn.clicked.disconnect()
         except:
@@ -675,7 +694,7 @@ class SettingsWindow(QMainWindow):
         self.config["device"] = self.device_combo.currentData()
         self.config["popup_display_duration"] = self.popup_duration_spin.value()
 
-        if self.config["device"] == "cuda":
+        if self.config["device"] in ("cuda", "mlx"):
             self.config["compute_type"] = "float16"
         else:
             self.config["compute_type"] = "int8"
@@ -699,7 +718,7 @@ class SettingsWindow(QMainWindow):
         self.config["device"] = self.device_combo.currentData()
         self.config["popup_display_duration"] = self.popup_duration_spin.value()
 
-        if self.config["device"] == "cuda":
+        if self.config["device"] in ("cuda", "mlx"):
             self.config["compute_type"] = "float16"
         else:
             self.config["compute_type"] = "int8"
@@ -707,20 +726,178 @@ class SettingsWindow(QMainWindow):
         save_config(self.config)
         set_autostart(self.autostart_check.isChecked())
 
-        import subprocess
-        import time
+        # Restart flag írása - a fő app ezt fogja észlelni és újraindul
+        RESTART_FLAG_FILE = '/tmp/whisperrocket_restart'
+        with open(RESTART_FLAG_FILE, 'w') as f:
+            f.write('restart')
 
-        subprocess.run(['pkill', '-f', 'whisper_gui.py'], capture_output=True)
-        time.sleep(1)
-
-        start_script = os.path.join(os.path.dirname(__file__), 'start.sh')
-        subprocess.Popen(['bash', start_script], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-
+        # Settings ablak bezárása
         self.close()
+
+    def create_model_warning_section(self):
+        """Model warning banner létrehozása"""
+        frame = QFrame()
+        frame.setStyleSheet("""
+            QFrame#model_warning {
+                background-color: #FFF3E0;
+                border: 1px solid #FFB74D;
+                border-radius: 6px;
+            }
+            QFrame#model_warning QLabel {
+                background: transparent;
+            }
+        """)
+        frame.setObjectName("model_warning")
+        layout = QVBoxLayout(frame)
+        layout.setSpacing(8)
+        layout.setContentsMargins(12, 10, 12, 10)
+
+        # Cím
+        self.model_warning_title = QLabel("⚠️ " + t("model_warning_title", self.ui_lang))
+        font = self.model_warning_title.font()
+        font.setBold(True)
+        self.model_warning_title.setFont(font)
+        self.model_warning_title.setStyleSheet("color: #E65100;")
+        layout.addWidget(self.model_warning_title)
+
+        # Leírás
+        self.model_warning_text = QLabel("")
+        self.model_warning_text.setWordWrap(True)
+        self.model_warning_text.setStyleSheet("color: #BF360C;")
+        layout.addWidget(self.model_warning_text)
+
+        # Download gomb
+        btn_layout = QHBoxLayout()
+        btn_layout.addStretch()
+        self.model_warning_btn = QPushButton(t("model_warning_download", self.ui_lang))
+        self.model_warning_btn.setFixedWidth(120)
+        self.model_warning_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #FF9800;
+                color: white;
+                border: none;
+                border-radius: 4px;
+                padding: 6px 12px;
+            }
+            QPushButton:hover {
+                background-color: #F57C00;
+            }
+        """)
+        self.model_warning_btn.clicked.connect(self.download_missing_model)
+        btn_layout.addWidget(self.model_warning_btn)
+        layout.addLayout(btn_layout)
+
+        frame.setVisible(False)  # Alapból rejtett
+        return frame
+
+    def create_permission_section(self):
+        """Permission section létrehozása (macOS)"""
+        frame = QFrame()
+        frame.setStyleSheet("""
+            QFrame#perm_section {
+                background-color: #E3F2FD;
+                border: 1px solid #90CAF9;
+                border-radius: 6px;
+            }
+            QFrame#perm_section QLabel {
+                background: transparent;
+            }
+        """)
+        frame.setObjectName("perm_section")
+        layout = QVBoxLayout(frame)
+        layout.setSpacing(6)
+        layout.setContentsMargins(12, 10, 12, 10)
+
+        # Cím
+        title = QLabel("🔒 " + t("perm_title", self.ui_lang))
+        font = title.font()
+        font.setBold(True)
+        title.setFont(font)
+        title.setStyleSheet("color: #1565C0;")
+        layout.addWidget(title)
+
+        # Leírás
+        desc = QLabel(t("perm_description", self.ui_lang))
+        desc.setWordWrap(True)
+        desc.setStyleSheet("color: #0D47A1;")
+        layout.addWidget(desc)
+
+        # Státusz
+        self.perm_status_label = QLabel("")
+        layout.addWidget(self.perm_status_label)
+
+        # Gomb és megjegyzés
+        btn_layout = QHBoxLayout()
+        self.perm_btn = QPushButton(t("perm_open_settings", self.ui_lang))
+        self.perm_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #2196F3;
+                color: white;
+                border: none;
+                border-radius: 4px;
+                padding: 6px 12px;
+            }
+            QPushButton:hover {
+                background-color: #1976D2;
+            }
+        """)
+        self.perm_btn.clicked.connect(self.open_permission_settings)
+        btn_layout.addWidget(self.perm_btn)
+        btn_layout.addStretch()
+        layout.addLayout(btn_layout)
+
+        # Megjegyzés
+        note = QLabel(t("perm_restart_note", self.ui_lang))
+        note.setStyleSheet("color: #666;")
+        layout.addWidget(note)
+
+        return frame
+
+    def update_model_warning(self):
+        """Model warning frissítése"""
+        current_model = self.config.get("model", "large-v3")
+        current_device = self.config.get("device", "cpu")
+
+        # Ellenőrizzük a megfelelő device-hoz tartozó modellt
+        if not is_model_downloaded(current_model, current_device):
+            self.model_warning_text.setText(
+                t("model_warning_text", self.ui_lang, model=current_model)
+            )
+            self.model_warning_frame.setVisible(True)
+        else:
+            self.model_warning_frame.setVisible(False)
+
+    def update_permission_status(self):
+        """Permission status frissítése (macOS)"""
+        if not hasattr(self, 'permission_frame'):
+            return
+
+        permissions = platform_handler.check_permissions()
+        is_granted = permissions.get("accessibility", False)
+
+        # Ha megvan az engedély, elrejtjük az egész panelt
+        if is_granted:
+            self.permission_frame.setVisible(False)
+        else:
+            self.permission_frame.setVisible(True)
+            self.perm_status_label.setText("❌ " + t("perm_status_not_granted", self.ui_lang))
+            self.perm_status_label.setStyleSheet("color: #C62828; border: none;")
+
+    def open_permission_settings(self):
+        """System Settings megnyitása (macOS)"""
+        platform_handler.request_permissions()
+
+    def download_missing_model(self):
+        """Hiányzó modell letöltése"""
+        current_model = self.config.get("model", "large-v3")
+        if not is_model_downloaded(current_model):
+            self.start_model_download(current_model)
 
     def closeEvent(self, event):
         """Ablak bezárásakor timer leállítása"""
         self.progress_timer.stop()
+        if hasattr(self, 'permission_timer'):
+            self.permission_timer.stop()
         super().closeEvent(event)
 
 
@@ -740,6 +917,15 @@ def show_settings():
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
+
+    # macOS: Ne jelenjen meg a Dock-ban
+    if py_platform.system() == "Darwin":
+        try:
+            from AppKit import NSApplication, NSApplicationActivationPolicyAccessory
+            NSApplication.sharedApplication().setActivationPolicy_(NSApplicationActivationPolicyAccessory)
+        except ImportError:
+            pass  # PyObjC nem elérhető
+
     window = SettingsWindow()
     window.show()
     sys.exit(app.exec())

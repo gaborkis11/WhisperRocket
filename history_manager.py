@@ -9,12 +9,15 @@ from datetime import datetime
 from pathlib import Path
 from typing import List, Dict, Optional
 
+from platform_support import get_platform_handler
+
 # Maximális history méret (100 MB)
 MAX_HISTORY_SIZE_BYTES = 100 * 1024 * 1024
 
 def get_history_path() -> Path:
-    """History JSON fájl elérési útja"""
-    config_dir = Path.home() / ".config" / "whisperrocket"
+    """History JSON fájl elérési útja (platform-specifikus)"""
+    platform_handler = get_platform_handler()
+    config_dir = platform_handler.get_config_dir()
     config_dir.mkdir(parents=True, exist_ok=True)
     return config_dir / "history.json"
 

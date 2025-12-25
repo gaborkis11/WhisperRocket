@@ -13,6 +13,7 @@ from translations import t
 import sys
 import math
 import random
+import platform as py_platform
 import pyperclip
 
 
@@ -125,12 +126,21 @@ class RecordingPopup(QWidget):
             self.bar_weights.append(weight)
 
         # Ablak beállítások - NE vegyen fókuszt!
-        self.setWindowFlags(
-            Qt.WindowType.FramelessWindowHint |
-            Qt.WindowType.WindowStaysOnTopHint |
-            Qt.WindowType.Tool |  # Nem jelenik meg a taskbar-on
-            Qt.WindowType.WindowDoesNotAcceptFocus  # Nem vesz fókuszt!
-        )
+        if py_platform.system() == "Darwin":
+            # macOS: Tool flag NÉLKÜL, mert az elrejti az ablakot fókuszvesztéskor
+            self.setWindowFlags(
+                Qt.WindowType.FramelessWindowHint |
+                Qt.WindowType.WindowStaysOnTopHint |
+                Qt.WindowType.WindowDoesNotAcceptFocus
+            )
+        else:
+            # Linux/Windows: Tool flag megtartása (nem jelenik meg taskbar-on)
+            self.setWindowFlags(
+                Qt.WindowType.FramelessWindowHint |
+                Qt.WindowType.WindowStaysOnTopHint |
+                Qt.WindowType.Tool |
+                Qt.WindowType.WindowDoesNotAcceptFocus
+            )
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
         self.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating)  # Megjelenéskor se aktiválódjon
 
@@ -192,12 +202,6 @@ class RecordingPopup(QWidget):
         path = QPainterPath()
         path.addRoundedRect(QRectF(0, 0, self.width(), self.height()), 12, 12)
         painter.fillPath(path, QBrush(bg_color))
-
-        # DEBUG: állapot kiírás (csak néha, hogy ne spammeljen)
-        import time
-        if not hasattr(self, '_last_state_log') or time.time() - self._last_state_log > 1:
-            print(f"[DEBUG paintEvent] state={self.state}")
-            self._last_state_log = time.time()
 
         # Állapot alapú rajzolás
         if self.state == PopupState.RECORDING:
@@ -268,7 +272,7 @@ class RecordingPopup(QWidget):
         painter.drawEllipse(QPoint(circle_x, circle_y), circle_radius, circle_radius)
 
         painter.setPen(QPen(QColor(160, 160, 160)))
-        painter.setFont(QFont("Sans", 9))
+        painter.setFont(QFont("", 9))
         painter.drawText(circle_x + 12, circle_y + 4, t("popup_recording", self.ui_lang))
 
         # Hotkey gombok jobb oldalon: "Finish [Alt+S]" | "Cancel [Esc]"
@@ -280,7 +284,7 @@ class RecordingPopup(QWidget):
 
         # Cancel gomb (jobb szélső)
         cancel_text = "Esc"
-        painter.setFont(QFont("Sans", 8))
+        painter.setFont(QFont("", 8))
         fm = painter.fontMetrics()
 
         cancel_btn_w = fm.horizontalAdvance(cancel_text) + 12
@@ -432,7 +436,7 @@ class RecordingPopup(QWidget):
 
         # Vicces szöveg alul - középre igazítva, szebb font
         painter.setPen(QPen(QColor(200, 200, 200)))
-        font = QFont("Sans", 10)
+        font = QFont("", 10)
         font.setItalic(True)
         painter.setFont(font)
         fm = painter.fontMetrics()
@@ -465,12 +469,12 @@ class RecordingPopup(QWidget):
             display_text = display_text[:max_chars] + "..."
 
         painter.setPen(QPen(QColor(255, 255, 255)))
-        painter.setFont(QFont("Sans", 10))
+        painter.setFont(QFont("", 10))
         painter.drawText(padding, 78, f'"{display_text}"')
 
         # 4. "Click to expand" gomb - zöldes háttérrel
         btn_text = t("popup_expand", self.ui_lang)
-        btn_font = QFont("Sans", 9)
+        btn_font = QFont("", 9)
         painter.setFont(btn_font)
         fm = painter.fontMetrics()
         text_width = fm.horizontalAdvance(btn_text)
@@ -509,7 +513,7 @@ class RecordingPopup(QWidget):
 
         # 5. Visszaszámláló jobb oldalon - sárga háttérrel
         countdown_text = f"{self.countdown_remaining}s"
-        painter.setFont(QFont("Sans", 9))
+        painter.setFont(QFont("", 9))
         fm = painter.fontMetrics()
         countdown_w = fm.horizontalAdvance(countdown_text) + 14
         countdown_h = 20
@@ -538,7 +542,7 @@ class RecordingPopup(QWidget):
         painter.drawEllipse(QPoint(circle_x, circle_y), circle_radius, circle_radius)
 
         painter.setPen(QPen(QColor(160, 160, 160)))
-        painter.setFont(QFont("Sans", 9))
+        painter.setFont(QFont("", 9))
         painter.drawText(circle_x + 12, circle_y + 4, t("popup_done", self.ui_lang))
 
         # Kisimult equalizer (jobb oldalon, alacsony vonalak) - rövidebb, hogy a close gomb elférjen
@@ -588,7 +592,7 @@ class RecordingPopup(QWidget):
 
         # 3. Teljes szöveg (több soros)
         painter.setPen(QPen(QColor(255, 255, 255)))
-        painter.setFont(QFont("Sans", 10))
+        painter.setFont(QFont("", 10))
 
         # Szöveg tördelése
         text_width = self.width() - 2 * padding
@@ -631,7 +635,7 @@ class RecordingPopup(QWidget):
 
         # Gomb szöveg
         painter.setPen(QPen(QColor(200, 200, 200)))
-        painter.setFont(QFont("Sans", 9))
+        painter.setFont(QFont("", 9))
         painter.drawText(int(btn_x + 22), int(btn_y + 18), t("popup_copy", self.ui_lang))
 
     def mousePressEvent(self, event):
@@ -679,7 +683,6 @@ class RecordingPopup(QWidget):
     @Slot()
     def show_popup(self):
         """Popup megjelenítése felvételhez"""
-        print("[DEBUG] show_popup() SLOT meghívva!")
         self.state = PopupState.RECORDING
         self.auto_hide_timer.stop()  # Timer leállítása ha fut
         self.setFixedSize(self.base_width, self.base_height)
@@ -687,11 +690,9 @@ class RecordingPopup(QWidget):
             self.move(self.saved_position)
         else:
             self._center_on_screen()
-        print(f"[DEBUG] Popup méret: {self.width()}x{self.height()}, pozíció: {self.x()},{self.y()}")
         self.show()
         self.raise_()
         self.activateWindow()
-        print(f"[DEBUG] Popup visible: {self.isVisible()}")
 
     @Slot()
     def show_processing(self):
@@ -711,13 +712,11 @@ class RecordingPopup(QWidget):
 
     def show_text(self, text: str):
         """Szöveg megjelenítése transzkripció után"""
-        print(f"[DEBUG] show_text() hívva, text='{text[:50]}...' state={self.state}")
         self.message_timer.stop()  # Processing timer leállítása
         self.transcribed_text = text
         self.state = PopupState.TEXT_PREVIEW
         self.setFixedSize(self.base_width, self.preview_height)
         self.update()
-        print(f"[DEBUG] Állapot váltás után: state={self.state}")
 
         # Visszaszámláló indítása
         self.countdown_remaining = self.auto_hide_seconds

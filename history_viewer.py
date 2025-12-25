@@ -6,6 +6,7 @@ Külön processben fut, hogy elkerüljük a QSystemTrayIcon crash-t
 
 import sys
 import json
+import platform
 from PySide6.QtWidgets import (
     QApplication, QDialog, QVBoxLayout, QHBoxLayout,
     QLabel, QTextEdit, QPushButton
@@ -120,6 +121,15 @@ def main():
         sys.exit(1)
 
     app = QApplication(sys.argv)
+
+    # macOS: Ne jelenjen meg a Dock-ban
+    if platform.system() == "Darwin":
+        try:
+            from AppKit import NSApplication, NSApplicationActivationPolicyAccessory
+            NSApplication.sharedApplication().setActivationPolicy_(NSApplicationActivationPolicyAccessory)
+        except ImportError:
+            pass
+
     entry_json = sys.argv[1]
 
     dialog = HistoryViewer(entry_json)
