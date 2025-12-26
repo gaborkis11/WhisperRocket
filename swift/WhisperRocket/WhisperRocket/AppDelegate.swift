@@ -39,6 +39,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
         // Hotkey listener indítása
         HotkeyManager.shared.startListening()
+
+        // Popup ablak inicializálása
+        _ = PopupWindowController.shared
+        print("PopupWindowController initialized")
     }
 
     func applicationWillTerminate(_ notification: Notification) {
