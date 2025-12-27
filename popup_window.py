@@ -6,8 +6,28 @@ Transzkripció utáni szöveg megjelenítés
 """
 from PySide6.QtWidgets import QWidget, QApplication
 from PySide6.QtCore import Qt, QTimer, QPoint, QRectF, Slot, Signal
-from PySide6.QtGui import QPainter, QColor, QPen, QBrush, QPainterPath, QFont
+from PySide6.QtGui import QPainter, QColor, QPen, QBrush, QPainterPath, QFont, QFontDatabase
 from queue import Queue, Empty
+
+# Font fallback lista - az első elérhető fontot használjuk
+FONT_FALLBACK = ["Noto Sans", "Ubuntu", "DejaVu Sans", "Liberation Sans", "Arial", "Sans Serif"]
+
+def get_font(size: int, italic: bool = False) -> QFont:
+    """Platform-független font választás fallback listával"""
+    db = QFontDatabase()
+    available = db.families()
+
+    for font_name in FONT_FALLBACK:
+        if font_name in available:
+            font = QFont(font_name, size)
+            font.setItalic(italic)
+            return font
+
+    # Ha semmi nincs, rendszer default
+    font = QFont()
+    font.setPointSize(size)
+    font.setItalic(italic)
+    return font
 from enum import Enum, auto
 from translations import t
 import sys
@@ -272,7 +292,7 @@ class RecordingPopup(QWidget):
         painter.drawEllipse(QPoint(circle_x, circle_y), circle_radius, circle_radius)
 
         painter.setPen(QPen(QColor(160, 160, 160)))
-        painter.setFont(QFont("", 9))
+        painter.setFont(get_font(9))
         painter.drawText(circle_x + 12, circle_y + 4, t("popup_recording", self.ui_lang))
 
         # Hotkey gombok jobb oldalon: "Finish [Alt+S]" | "Cancel [Esc]"
@@ -284,7 +304,7 @@ class RecordingPopup(QWidget):
 
         # Cancel gomb (jobb szélső)
         cancel_text = "Esc"
-        painter.setFont(QFont("", 8))
+        painter.setFont(get_font(8))
         fm = painter.fontMetrics()
 
         cancel_btn_w = fm.horizontalAdvance(cancel_text) + 12
@@ -436,9 +456,7 @@ class RecordingPopup(QWidget):
 
         # Vicces szöveg alul - középre igazítva, szebb font
         painter.setPen(QPen(QColor(200, 200, 200)))
-        font = QFont("", 10)
-        font.setItalic(True)
-        painter.setFont(font)
+        painter.setFont(get_font(10, italic=True))
         fm = painter.fontMetrics()
         text_x = (self.width() - fm.horizontalAdvance(self.current_message)) // 2
         painter.drawText(text_x, 78, self.current_message)
@@ -469,13 +487,12 @@ class RecordingPopup(QWidget):
             display_text = display_text[:max_chars] + "..."
 
         painter.setPen(QPen(QColor(255, 255, 255)))
-        painter.setFont(QFont("", 10))
+        painter.setFont(get_font(10))
         painter.drawText(padding, 78, f'"{display_text}"')
 
         # 4. "Click to expand" gomb - zöldes háttérrel
         btn_text = t("popup_expand", self.ui_lang)
-        btn_font = QFont("", 9)
-        painter.setFont(btn_font)
+        painter.setFont(get_font(9))
         fm = painter.fontMetrics()
         text_width = fm.horizontalAdvance(btn_text)
 
@@ -513,7 +530,7 @@ class RecordingPopup(QWidget):
 
         # 5. Visszaszámláló jobb oldalon - sárga háttérrel
         countdown_text = f"{self.countdown_remaining}s"
-        painter.setFont(QFont("", 9))
+        painter.setFont(get_font(9))
         fm = painter.fontMetrics()
         countdown_w = fm.horizontalAdvance(countdown_text) + 14
         countdown_h = 20
@@ -542,7 +559,7 @@ class RecordingPopup(QWidget):
         painter.drawEllipse(QPoint(circle_x, circle_y), circle_radius, circle_radius)
 
         painter.setPen(QPen(QColor(160, 160, 160)))
-        painter.setFont(QFont("", 9))
+        painter.setFont(get_font(9))
         painter.drawText(circle_x + 12, circle_y + 4, t("popup_done", self.ui_lang))
 
         # Kisimult equalizer (jobb oldalon, alacsony vonalak) - rövidebb, hogy a close gomb elférjen
@@ -592,7 +609,7 @@ class RecordingPopup(QWidget):
 
         # 3. Teljes szöveg (több soros)
         painter.setPen(QPen(QColor(255, 255, 255)))
-        painter.setFont(QFont("", 10))
+        painter.setFont(get_font(10))
 
         # Szöveg tördelése
         text_width = self.width() - 2 * padding
@@ -635,7 +652,7 @@ class RecordingPopup(QWidget):
 
         # Gomb szöveg
         painter.setPen(QPen(QColor(200, 200, 200)))
-        painter.setFont(QFont("", 9))
+        painter.setFont(get_font(9))
         painter.drawText(int(btn_x + 22), int(btn_y + 18), t("popup_copy", self.ui_lang))
 
     def mousePressEvent(self, event):

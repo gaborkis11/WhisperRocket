@@ -14,6 +14,7 @@
 10. A felhasználóval való minden kommunikáció magyar nyelven történjen. Ez szigorú követelmény és soha nem szeghető meg.
 11. Git commitoknál NE add hozzá a "Generated with Claude Code" vagy "Co-Authored-By: Claude" láblécet. Tiszta, egyszerű commit üzeneteket írj.
 12. CSAK akkor commitolj vagy pusholj GitHubra, ha a felhasználó kifejezetten kéri. Soha ne commitolj automatikusan.
+13. KÉRDÉSRE VÁLASZOLJ, NE CSELEKEDJ. Ha a felhasználó kérdést tesz fel, akkor válaszolj és tegyél javaslatot, de NE kezdj el automatikusan implementálni. Mindig kérj engedélyt a változtatások előtt. A kérdés nem egyenlő a feladattal.
 
 ---
 

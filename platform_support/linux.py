@@ -105,7 +105,7 @@ class LinuxHandler(PlatformHandler):
 
         Args:
             enable: True = bekapcsolás, False = kikapcsolás
-            app_path: .desktop fájl forrás útvonala (opcionális)
+            app_path: Nem használt (kompatibilitás miatt marad)
 
         Returns:
             True ha sikeres
@@ -116,8 +116,25 @@ class LinuxHandler(PlatformHandler):
         try:
             if enable:
                 autostart_dir.mkdir(parents=True, exist_ok=True)
-                if app_path and os.path.exists(app_path):
-                    shutil.copy(app_path, autostart_file)
+
+                # Dinamikusan generáljuk a .desktop fájlt a megfelelő útvonalakkal
+                # A projekt mappa meghatározása (ez a fájl a platform_support/ mappában van)
+                project_dir = Path(__file__).parent.parent.resolve()
+                start_script = project_dir / "start.sh"
+                icon_path = project_dir / "assets" / "whisperrocket.png"
+
+                desktop_content = f"""[Desktop Entry]
+Type=Application
+Name=WhisperRocket
+Comment=Local Speech-to-Text with Whisper AI
+Exec={start_script}
+Icon={icon_path}
+Terminal=false
+Categories=AudioVideo;Audio;Utility;
+StartupNotify=false
+X-GNOME-Autostart-enabled=true
+"""
+                autostart_file.write_text(desktop_content)
                 return True
             else:
                 if autostart_file.exists():
