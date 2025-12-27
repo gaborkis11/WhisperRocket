@@ -43,6 +43,7 @@ class PopupWindowController: ObservableObject {
     // Állapot
     @Published var state: PopupState = .hidden
     @Published var currentAmplitude: Float = 0
+    @Published var partialText: String = ""
 
     private init() {
         setupBindings()
@@ -87,6 +88,17 @@ class PopupWindowController: ObservableObject {
             .receive(on: DispatchQueue.main)
             .sink { [weak self] amplitude in
                 self?.currentAmplitude = amplitude
+            }
+            .store(in: &cancellables)
+
+        // Partial transcription frissítése (élő szöveg feldolgozás közben)
+        AppState.shared.$partialTranscription
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] text in
+                if !text.isEmpty {
+                    print("PopupWindowController: partialText = '\(text.prefix(50))...'")
+                }
+                self?.partialText = text
             }
             .store(in: &cancellables)
     }

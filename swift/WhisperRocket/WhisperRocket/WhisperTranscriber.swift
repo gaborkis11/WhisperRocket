@@ -17,6 +17,7 @@ class WhisperTranscriber: ObservableObject {
     @Published var isLoaded = false
     @Published var isTranscribing = false
     @Published var loadingProgress: Float = 0
+    @Published var partialText: String = ""
 
     // WhisperKit instance
     private var whisperKit: WhisperKit?
@@ -91,11 +92,13 @@ class WhisperTranscriber: ObservableObject {
 
         await MainActor.run {
             self.isTranscribing = true
+            self.partialText = ""
         }
 
         defer {
             Task { @MainActor in
                 self.isTranscribing = false
+                self.partialText = ""
             }
         }
 
@@ -114,10 +117,16 @@ class WhisperTranscriber: ObservableObject {
             withoutTimestamps: true
         )
 
-        // Transzkripció futtatása
+        // Transzkripció futtatása callback-kel a progress frissítéséhez
         let results = try await whisperKit.transcribe(
             audioPath: audioURL.path,
-            decodeOptions: options
+            decodeOptions: options,
+            callback: { [weak self] progress in
+                Task { @MainActor in
+                    self?.partialText = progress.text
+                }
+                return true
+            }
         )
 
         // Eredmény összeállítása

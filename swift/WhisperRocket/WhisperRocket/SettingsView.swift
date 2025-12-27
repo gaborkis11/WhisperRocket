@@ -242,6 +242,10 @@ struct GeneralTabView: View {
                     }
                 }
                 .pickerStyle(.menu)
+
+                Text("Transcription will be generated in the selected language")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
             }
 
             Section("Hotkey") {
@@ -255,6 +259,10 @@ struct GeneralTabView: View {
                         .background(Color.gray.opacity(0.2))
                         .cornerRadius(4)
                 }
+
+                Text("Press once to start recording, press again to stop and transcribe")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
 
                 HotkeyRecorderView(currentHotkey: $currentHotkey)
             }

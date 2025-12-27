@@ -17,8 +17,122 @@ struct Star: Identifiable {
     var speed: CGFloat
 }
 
-/// Processing nézet - rakéta animáció + csillagok + vicces üzenetek
+/// Felúszó szavak komponens - ambient vizuális feedback a transzkripció folyamatáról
+struct FloatingWordsView: View {
+    let text: String
+
+    @State private var displayedPhrase: String = ""
+    @State private var opacity: Double = 0
+    @State private var isAnimating: Bool = false
+    @State private var offsetX: CGFloat = 0
+    @State private var offsetY: CGFloat = 0
+    @State private var lastShownText: String = ""
+
+    // Timer - 2.5 másodpercenként új kifejezés
+    private let wordTimer = Timer.publish(every: 2.5, on: .main, in: .common).autoconnect()
+
+    var body: some View {
+        Text(displayedPhrase.isEmpty ? "" : "\u{201E}\(displayedPhrase)\u{201D}")
+            .font(.system(size: 12, design: .monospaced))
+            .foregroundColor(Color(white: 0.6))
+            .lineLimit(1)
+            .frame(maxWidth: 110)
+            .opacity(opacity)
+            .offset(x: offsetX, y: offsetY)
+            .animation(.easeInOut(duration: 0.5), value: opacity)
+            .animation(.easeOut(duration: 0.3), value: offsetX)
+            .animation(.easeOut(duration: 0.3), value: offsetY)
+            .onChange(of: text) { newText in
+                // Csak akkor jelenítünk meg, ha teljes szó van (szóköz, pont, vagy vessző az utolsó karakter)
+                if !newText.isEmpty && !isAnimating && isCompleteWord(newText) {
+                    showRandomPhrase()
+                }
+            }
+            .onReceive(wordTimer) { _ in
+                // Timer-nél is csak teljes szónál
+                if !text.isEmpty && isCompleteWord(text) {
+                    showRandomPhrase()
+                }
+            }
+    }
+
+    /// Ellenőrzi, hogy a szöveg teljes szóra végződik-e (nem félbevágott token)
+    private func isCompleteWord(_ text: String) -> Bool {
+        guard let lastChar = text.last else { return false }
+        // Teljes szó, ha szóköz, pont, vessző, kérdőjel, felkiáltójel, vagy kettőspont az utolsó karakter
+        return lastChar == " " || lastChar == "." || lastChar == "," ||
+               lastChar == "?" || lastChar == "!" || lastChar == ":"
+    }
+
+    /// Random pozíció generálása - bal vagy jobb oldalon, NE középen (ahol a rakéta van)
+    private func randomPosition() {
+        // Popup szélesség: 350, magasság: 100
+        // Rakéta + láng: kb. -60...+80 közötti x tartomány (középhez képest)
+        // Szöveg max 110px széles, tehát +-55px a középpontjától
+        //
+        // Biztonságos zónák (padding-gel a szélektől):
+        // - Bal oldal: -105 ... -75 (a szöveg bal széle: 175-105-55=15, jobb széle: 175-75+55=155 - OK)
+        // - Jobb oldal: +85 ... +105 (a szöveg bal széle: 175+85-55=205, jobb széle: 175+105+55=335 - OK)
+        let leftSide = Bool.random()
+        if leftSide {
+            offsetX = CGFloat.random(in: -105 ... -75)
+        } else {
+            offsetX = CGFloat.random(in: 85 ... 105)
+        }
+        // Függőlegesen: -15 ... +5 (ne menjen túl fel vagy le)
+        offsetY = CGFloat.random(in: -15 ... 5)
+    }
+
+    /// 3-4 szavas kifejezés megjelenítése
+    private func showRandomPhrase() {
+        // Ha már animálunk vagy nincs szöveg, skip
+        guard !isAnimating, !text.isEmpty else { return }
+
+        // Ne mutassuk ugyanazt újra
+        guard text != lastShownText else { return }
+
+        // Szavak kinyerése - TELJES szavak (szóközzel elválasztva)
+        let words = text.split(separator: " ")
+            .map { String($0).trimmingCharacters(in: .punctuationCharacters) }
+            .filter { $0.count >= 2 }
+
+        guard words.count >= 2 else { return }
+
+        // Utolsó 2-3 szó egyben (mondatrész) - rövidebb, hogy elférjen
+        let phraseLength = min(Int.random(in: 2...3), words.count)
+        let phraseWords = words.suffix(phraseLength)
+        let phrase = phraseWords.joined(separator: " ")
+
+        isAnimating = true
+        displayedPhrase = phrase
+        lastShownText = text
+
+        // Random pozíció (bal vagy jobb oldalon)
+        randomPosition()
+
+        // Fade in
+        withAnimation(.easeIn(duration: 0.5)) {
+            opacity = 0.7
+        }
+
+        // Fade out 1.5s után
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+            withAnimation(.easeOut(duration: 0.5)) {
+                opacity = 0
+            }
+
+            // Animáció vége
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                isAnimating = false
+            }
+        }
+    }
+}
+
+/// Processing nézet - rakéta animáció + csillagok + felúszó szavak + vicces üzenetek
 struct ProcessingView: View {
+    @EnvironmentObject var controller: PopupWindowController
+
     // Csillagok
     @State private var stars: [Star] = []
 
@@ -63,6 +177,12 @@ struct ProcessingView: View {
 
     var body: some View {
         ZStack {
+            // Felúszó szavak - HÁTTÉRBEN, a rakéta mögött
+            FloatingWordsView(text: controller.partialText)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .offset(y: -5) // Kicsit feljebb, a rakéta környékén
+
+            // Csillagok és rakéta
             Canvas { context, size in
                 // Csillagok rajzolása
                 drawStars(context: context, size: size)

@@ -31,17 +31,43 @@ A Python/PySide6 verzió működőképes macOS-en:
 - ✅ Amplitúdó callback (equalizer-hez előkészítve)
 - ✅ Mikrofon engedély kezelés
 
-### Folyamatban
+### Elkészült (2025-12-26) - WhisperKit integráció
+- ✅ WhisperKit Swift Package integráció
+- ✅ WhisperTranscriber osztály
+- ✅ ModelManager (modell letöltés/kezelés)
+- ✅ Transzkripció (magyar és más nyelvek támogatása)
+- ✅ Partial transcription callback (élő szöveg)
 
-### Várakozik
-- [ ] whisper.cpp integráció (Swift Package)
-- [ ] Popup ablak (SwiftUI)
-- [ ] Equalizer vizualizáció
-- [ ] Rakéta animáció
-- [ ] Auto-paste (CGEvent)
-- [ ] Settings ablak
-- [ ] History kezelés
-- [ ] Modell letöltés UI
+### Elkészült (2025-12-26/27) - Popup ablak
+- ✅ PopupWindow (borderless, floating)
+- ✅ PopupView (SwiftUI)
+- ✅ RecordingView + EqualizerView
+- ✅ ProcessingView + rakéta animáció + csillagok
+- ✅ TextPreviewView (szöveg előnézet)
+- ✅ Escape billentyű (felvétel/feldolgozás megszakítás)
+
+### Elkészült (2025-12-27) - Settings és további funkciók
+- ✅ SettingsView (modell, nyelv, hotkey, popup időtartam)
+- ✅ SettingsWindowController
+- ✅ PasteManager (auto-paste AppleScript-tel)
+- ✅ HistoryManager + HistoryWindowController
+- ✅ AboutWindowController (új ikon)
+- ✅ LaunchAtLoginManager
+- ✅ Új app ikon (rakéta + hangfülek)
+
+### Elkészült (2025-12-27) - Élő transzkripció progress
+- ✅ WhisperKit callback partial transcription-höz
+- ✅ "Felúszó szavak" animáció ProcessingView-ban
+- ✅ Fade in/out + felfelé mozgás animáció
+- ✅ Data flow: WhisperTranscriber → AppState → PopupWindowController → ProcessingView
+
+### Folyamatban
+- (nincs)
+
+### Várakozik / Jövőbeli fejlesztések
+- [ ] Hotkey testreszabás UI (jelenleg fix Ctrl+Shift+S)
+- [ ] App Store előkészítés / notarization
+- [ ] Több modell támogatás (base, small, medium, large)
 
 ---
 

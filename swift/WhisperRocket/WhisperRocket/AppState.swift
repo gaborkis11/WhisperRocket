@@ -18,12 +18,14 @@ class AppState: ObservableObject {
     @Published var lastTranscription: String?
     @Published var lastRecordingURL: URL?
     @Published var currentAmplitude: Float = 0
+    @Published var partialTranscription: String = ""
 
     private var cancellables = Set<AnyCancellable>()
     private var processingTask: Task<Void, Never>?
 
     private init() {
         setupAudioRecorder()
+        setupTranscriberBindings()
     }
 
     /// AudioRecorder callback-ek beállítása
@@ -40,6 +42,16 @@ class AppState: ObservableObject {
         }
     }
 
+    /// WhisperTranscriber binding-ek beállítása (partial transcription)
+    private func setupTranscriberBindings() {
+        WhisperTranscriber.shared.$partialText
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] text in
+                self?.partialTranscription = text
+            }
+            .store(in: &cancellables)
+    }
+
     /// Felvétel toggle
     func toggleRecording() {
         if isRecording {
@@ -51,6 +63,7 @@ class AppState: ObservableObject {
 
     /// Felvétel indítása
     func startRecording() {
+        SoundManager.shared.playStart()
         isRecording = true
         isReady = false
         print("🎤 Recording started!")
@@ -62,6 +75,7 @@ class AppState: ObservableObject {
 
     /// Felvétel leállítása
     func stopRecording() {
+        SoundManager.shared.playStop()
         // Escape hotkey MARAD aktív (feldolgozás közben is működjön)
 
         isRecording = false
