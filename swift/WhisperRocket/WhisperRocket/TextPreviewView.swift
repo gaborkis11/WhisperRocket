@@ -18,6 +18,7 @@ struct TextPreviewView: View {
 
     // Auto-hide timer
     @State private var countdown: Int = 5
+    @State private var isHoveringClose: Bool = false
     private let autoHideTimer = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
 
     // Popup megjelenítési idő (UserDefaults-ból)
@@ -70,18 +71,31 @@ struct TextPreviewView: View {
 
             Spacer()
 
-            // Flat equalizer
-            FlatEqualizerView()
-                .frame(width: 120, height: 30)
+            // Rakéta ikon (equalizer helyett)
+            Image("AboutIcon")
+                .resizable()
+                .aspectRatio(contentMode: .fit)
+                .frame(width: 30, height: 30)
 
-            // Close gomb (csak expanded-nél)
+            // Close gomb (csak expanded-nél) - macOS stílusú hover X-szel
             if isExpanded {
                 Button(action: { controller.hidePopup() }) {
-                    Circle()
-                        .fill(Color(red: 1, green: 0.37, blue: 0.34))
-                        .frame(width: 12, height: 12)
+                    ZStack {
+                        Circle()
+                            .fill(Color(red: 1, green: 0.37, blue: 0.34))
+                            .frame(width: 12, height: 12)
+
+                        if isHoveringClose {
+                            Image(systemName: "xmark")
+                                .font(.system(size: 7, weight: .bold))
+                                .foregroundColor(.black.opacity(0.5))
+                        }
+                    }
                 }
                 .buttonStyle(.plain)
+                .onHover { hovering in
+                    isHoveringClose = hovering
+                }
                 .padding(.leading, 8)
             }
         }
@@ -92,12 +106,14 @@ struct TextPreviewView: View {
     /// Előnézet tartalom
     private var previewContent: some View {
         VStack(alignment: .leading, spacing: 8) {
-            // Szöveg előnézet (max 40 karakter)
-            let displayText = text.count > 40 ? String(text.prefix(40)) + "..." : text
+            // Szöveg előnézet (max 200 karakter, 2-3 sorban)
+            let displayText = text.count > 200 ? String(text.prefix(200)) + "..." : text
             Text("\"\(displayText)\"")
                 .font(.system(size: 11))
                 .foregroundColor(.white)
-                .lineLimit(1)
+                .lineLimit(4)
+                .multilineTextAlignment(.leading)
+                .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.horizontal, 15)
                 .padding(.top, 8)
 

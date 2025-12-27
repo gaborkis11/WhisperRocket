@@ -34,8 +34,8 @@ class PopupWindowController: ObservableObject {
     // Méretek
     private let baseWidth: CGFloat = 350
     private let baseHeight: CGFloat = 100
-    private let previewHeight: CGFloat = 140
-    private let expandedHeight: CGFloat = 220
+    private let previewHeight: CGFloat = 200
+    private let expandedHeight: CGFloat = 250
 
     // Mentett pozíció (session alatt megmarad)
     private var savedPosition: NSPoint?

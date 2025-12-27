@@ -14,8 +14,8 @@ struct PopupView: View {
     // Fix méretek
     private let baseWidth: CGFloat = 350
     private let baseHeight: CGFloat = 100
-    private let previewHeight: CGFloat = 140
-    private let expandedHeight: CGFloat = 220
+    private let previewHeight: CGFloat = 200
+    private let expandedHeight: CGFloat = 250
 
     private var currentHeight: CGFloat {
         switch controller.state {
