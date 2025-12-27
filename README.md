@@ -141,17 +141,21 @@ WhisperRocket/
 ├── whisper_gui.py        # Main application
 ├── popup_window.py       # Popup window (equalizer, rocket, text)
 ├── settings_window.py    # Settings dialog
+├── about_window.py       # About dialog
 ├── history_manager.py    # History storage and management
 ├── history_viewer.py     # History entry viewer window
 ├── model_manager.py      # Whisper model management
 ├── download_manager.py   # Model download handling
 ├── translations.py       # Multi-language UI support (EN/HU)
+├── platform_support/     # Platform abstraction layer
+│   ├── base.py           # Abstract interface
+│   ├── linux.py          # Linux-specific implementation
+│   └── utils.py          # Platform detection
 ├── config.json           # User configuration
 ├── start.sh              # Startup script
-├── install.sh            # Installation script
+├── install.sh            # Installation script (generates desktop launcher)
 ├── requirements.txt      # Python dependencies
 ├── requirements-cuda.txt # NVIDIA CUDA dependencies
-├── whisperrocket.desktop   # Linux desktop launcher
 └── assets/               # Icons and sounds
 ```
 
