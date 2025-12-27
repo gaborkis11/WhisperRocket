@@ -177,6 +177,9 @@ class AppState: ObservableObject {
         // Auto-paste ha van transzkripció
         if let text = transcription, !text.isEmpty {
             PasteManager.shared.pasteText(text)
+
+            // History-ba mentés
+            HistoryManager.shared.add(transcription: text)
         }
 
         // Régi felvételek törlése (csak az utolsó 50 marad)

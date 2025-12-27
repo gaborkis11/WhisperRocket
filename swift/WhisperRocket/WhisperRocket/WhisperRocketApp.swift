@@ -17,20 +17,13 @@ struct WhisperRocketApp: App {
 
     var body: some Scene {
         // Menu bar app - dinamikus ikon az állapot alapján
-        MenuBarExtra("WhisperRocket", systemImage: menuBarIcon) {
+        MenuBarExtra {
             MenuBarView()
+        } label: {
+            Image(systemName: "mic.fill")
+                .symbolRenderingMode(.palette)
+                .foregroundStyle(appState.isRecording ? .red : .primary)
         }
         .menuBarExtraStyle(.menu)
-    }
-
-    /// Dinamikus ikon az állapot alapján
-    private var menuBarIcon: String {
-        if appState.isRecording {
-            return "record.circle.fill"  // Felvétel közben
-        } else if appState.isProcessing {
-            return "ellipsis.circle.fill"  // Feldolgozás közben
-        } else {
-            return "mic.fill"  // Készenléti állapot
-        }
     }
 }

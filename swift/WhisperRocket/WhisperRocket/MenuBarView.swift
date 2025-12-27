@@ -10,6 +10,31 @@ import SwiftUI
 struct MenuBarView: View {
     // Központi app állapot
     @ObservedObject var appState = AppState.shared
+    @ObservedObject var historyManager = HistoryManager.shared
+
+    // Aktuális hotkey megjelenítése
+    private var hotkeyDisplay: String {
+        let hotkey = UserDefaults.standard.string(forKey: "hotkey") ?? "ctrl+shift+s"
+        var parts: [String] = []
+        let lowercased = hotkey.lowercased()
+
+        if lowercased.contains("ctrl") || lowercased.contains("control") {
+            parts.append("⌃")
+        }
+        if lowercased.contains("shift") {
+            parts.append("⇧")
+        }
+        if lowercased.contains("alt") || lowercased.contains("option") {
+            parts.append("⌥")
+        }
+        if lowercased.contains("cmd") || lowercased.contains("command") {
+            parts.append("⌘")
+        }
+        if let lastPart = hotkey.split(separator: "+").last {
+            parts.append(lastPart.uppercased())
+        }
+        return parts.joined()
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
@@ -27,7 +52,7 @@ struct MenuBarView: View {
             Divider()
 
             // Hotkey info
-            Text("⌃⇧S to record")
+            Text("\(hotkeyDisplay) to record")
                 .font(.caption)
                 .foregroundColor(.secondary)
                 .padding(.horizontal, 8)
@@ -42,8 +67,44 @@ struct MenuBarView: View {
 
             // History submenu
             Menu("History") {
-                Text("No recordings yet")
-                    .foregroundColor(.secondary)
+                if historyManager.items.isEmpty {
+                    Text("No transcriptions yet")
+                        .foregroundColor(.secondary)
+                } else {
+                    // Utolsó 10 elem megjelenítése a menüben
+                    ForEach(historyManager.items.prefix(10)) { item in
+                        Button {
+                            // Késleltetés, hogy a menü bezáródjon előbb
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                                HistoryWindowController.shared.showDetail(item: item)
+                            }
+                        } label: {
+                            Text(item.preview)
+                        }
+                    }
+
+                    if historyManager.items.count > 10 {
+                        Divider()
+                        Button("Show All (\(historyManager.items.count))...") {
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                                HistoryWindowController.shared.showHistory()
+                            }
+                        }
+                    }
+
+                    Divider()
+
+                    Button("Clear All") {
+                        historyManager.clearAll()
+                    }
+                }
+            }
+
+            // About
+            Button("About") {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                    AboutWindowController.shared.showAbout()
+                }
             }
 
             Divider()
@@ -64,7 +125,7 @@ struct MenuBarView: View {
         } else if appState.isProcessing {
             return .yellow
         } else if appState.isReady {
-            return .blue
+            return .green
         } else {
             return .gray
         }
@@ -82,6 +143,7 @@ struct MenuBarView: View {
             return "Loading..."
         }
     }
+
 }
 
 #Preview {

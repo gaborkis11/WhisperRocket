@@ -14,14 +14,69 @@ A Python/PySide6 verzió működőképes macOS-en:
 - ✅ Modell letöltés
 - ✅ PyInstaller DMG build
 
-**Ismert probléma:**
-- DMG-ből telepített bundled app tesztelése még hátra van
+---
+
+## Swift verzió - Fejlesztés folyamatban
+
+### Elkészült (2025-12-26)
+- ✅ Xcode projekt létrehozása (`swift/WhisperRocket/`)
+- ✅ Menu Bar App (MenuBarExtra + SwiftUI)
+- ✅ Globális Hotkey (Carbon RegisterEventHotKey) - **Ctrl+Shift+S**
+- ✅ AppState központi állapotkezelés
+- ✅ Recording toggle (start/stop)
+
+### Elkészült (2025-12-26) - Hangfelvétel
+- ✅ AudioRecorder osztály (AVAudioEngine)
+- ✅ WAV fájl mentés (16kHz, mono, 16-bit PCM)
+- ✅ Amplitúdó callback (equalizer-hez előkészítve)
+- ✅ Mikrofon engedély kezelés
+
+### Folyamatban
+
+### Várakozik
+- [ ] whisper.cpp integráció (Swift Package)
+- [ ] Popup ablak (SwiftUI)
+- [ ] Equalizer vizualizáció
+- [ ] Rakéta animáció
+- [ ] Auto-paste (CGEvent)
+- [ ] Settings ablak
+- [ ] History kezelés
+- [ ] Modell letöltés UI
 
 ---
 
-## Következő fázis: Natív Swift verzió
+## Swift fájlstruktúra
 
-### Miért Swift?
+```
+swift/WhisperRocket/WhisperRocket/
+├── WhisperRocketApp.swift      # App entry point (MenuBarExtra)
+├── AppDelegate.swift           # NSApplicationDelegate
+├── AppState.swift              # Központi állapotkezelés
+├── MenuBarView.swift           # Menu bar menü
+├── HotkeyManager.swift         # Carbon hotkey (Ctrl+Shift+S)
+├── AudioRecorder.swift         # Hangfelvétel (AVAudioEngine, 16kHz WAV)
+├── ContentView.swift           # (nem használt)
+├── Info.plist                  # LSUIElement, mikrofon engedély
+└── Assets.xcassets/            # Ikonok
+```
+
+---
+
+## Technikai megjegyzések
+
+### Hotkey implementáció
+- **Carbon RegisterEventHotKey** - legmegbízhatóbb módszer
+- NSEvent.addGlobalMonitorForEvents NEM működött megfelelően
+- CGEvent.tapCreate Input Monitoring problémák miatt elvetettük
+
+### Engedélyek
+- **Accessibility**: Szükséges lesz az auto-paste-hez
+- **Microphone**: Szükséges a hangfelvételhez
+- **Input Monitoring**: NEM szükséges a Carbon hotkey-hez
+
+---
+
+## Miért Swift?
 
 | Python (jelenlegi) | Swift (cél) |
 |-------------------|-------------|
@@ -29,73 +84,3 @@ A Python/PySide6 verzió működőképes macOS-en:
 | PyInstaller bundle | Natív macOS app |
 | Lassú indulás | Azonnali indulás |
 | Nehéz App Store | Egyszerű notarization |
-
-### Fő komponensek
-
-1. **Menu Bar App** (`NSStatusItem`)
-2. **Globális Hotkey** (`CGEvent` tap)
-3. **Hangfelvétel** (`AVAudioEngine`)
-4. **Whisper** (whisper.cpp + Metal GPU)
-5. **Popup UI** (SwiftUI)
-6. **Settings** (SwiftUI)
-
----
-
-## Todo
-
-### Python verzió - Lezárás
-- [ ] DMG bundled app tesztelése
-- [ ] Dokumentáció frissítése
-
-### Swift verzió - Fejlesztés
-- [ ] Xcode projekt létrehozása (`swift/`)
-- [ ] Menu bar app alap
-- [ ] whisper.cpp integráció
-- [ ] Hangfelvétel
-- [ ] Popup UI
-- [ ] Settings UI
-- [ ] Hotkey kezelés
-- [ ] Auto-paste
-- [ ] History
-- [ ] Modell letöltés
-- [ ] DMG készítés
-
----
-
-## Fájlstruktúra
-
-```
-WhisperWarp/
-├── swift/                    # ÚJ: Swift verzió
-│   └── WhisperRocket/
-│       └── WhisperRocket.xcodeproj
-│
-├── whisper_gui.py            # Python fő app
-├── popup_window.py           # Python popup
-├── settings_window.py        # Python settings
-├── history_viewer.py         # Python history
-├── model_manager.py          # Python modell kezelés
-├── download_manager.py       # Python letöltés
-├── setup_wizard.py           # Python wizard
-├── translations.py           # Python i18n
-├── history_manager.py        # Python history
-│
-├── platform_support/         # Python platform absztrakció
-│   ├── __init__.py
-│   ├── base.py
-│   ├── linux.py
-│   ├── macos.py
-│   └── utils.py
-│
-├── assets/                   # Közös erőforrások
-├── scripts/                  # Build scriptek
-├── tasks/                    # Tervek, todo
-│
-├── requirements*.txt         # Python függőségek
-├── start*.sh                 # Indító scriptek
-├── install*.sh               # Telepítő scriptek
-│
-├── CLAUDE.md                 # Claude instrukciók
-├── README.md                 # Dokumentáció
-└── LICENSE
-```

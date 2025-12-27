@@ -214,6 +214,9 @@ struct GeneralTabView: View {
     @State private var isRecordingHotkey = false
     @State private var currentHotkey: String
 
+    // Launch at Login
+    @State private var launchAtLogin: Bool
+
     init(selectedLanguage: Binding<String>, availableLanguages: [(String, String)]) {
         self._selectedLanguage = selectedLanguage
         self.availableLanguages = availableLanguages
@@ -225,6 +228,9 @@ struct GeneralTabView: View {
         // Hotkey betöltése
         let savedHotkey = UserDefaults.standard.string(forKey: "hotkey") ?? "ctrl+shift+s"
         _currentHotkey = State(initialValue: savedHotkey)
+
+        // Launch at Login betöltése
+        _launchAtLogin = State(initialValue: LaunchAtLoginManager.isEnabled)
     }
 
     var body: some View {
@@ -277,19 +283,15 @@ struct GeneralTabView: View {
                     .foregroundColor(.secondary)
             }
 
-            Section("About") {
-                HStack {
-                    Text("WhisperRocket")
-                    Spacer()
-                    Text("v1.0.0")
-                        .foregroundColor(.secondary)
-                }
-                HStack {
-                    Text("Powered by")
-                    Spacer()
-                    Text("WhisperKit + CoreML")
-                        .foregroundColor(.secondary)
-                }
+            Section("Startup") {
+                Toggle("Launch at Login", isOn: $launchAtLogin)
+                    .onChange(of: launchAtLogin) { _, newValue in
+                        LaunchAtLoginManager.isEnabled = newValue
+                    }
+
+                Text("Automatically start WhisperRocket when you log in")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
             }
         }
         .formStyle(.grouped)

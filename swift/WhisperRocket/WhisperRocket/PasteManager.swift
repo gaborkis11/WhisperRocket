@@ -12,16 +12,6 @@ import Carbon
 class PasteManager {
     static let shared = PasteManager()
 
-    /// Terminál alkalmazások bundle ID-k (Cmd+Shift+V kell nekik)
-    private let terminalBundles = [
-        "com.apple.Terminal",
-        "com.googlecode.iterm2",
-        "io.alacritty",
-        "dev.warp.Warp-Stable",
-        "com.microsoft.VSCode",
-        "com.todesktop.230313mzl4w4u92"  // Cursor
-    ]
-
     private init() {}
 
     /// Szöveg beillesztése az aktív alkalmazásba
@@ -39,12 +29,12 @@ class PasteManager {
 
         // 3. Kis késleltetés, hogy a clipboard frissüljön
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-            // 4. Cmd+V (vagy Cmd+Shift+V terminálnál) szimuláció
+            // 4. Cmd+V szimuláció
             self.simulatePaste()
         }
     }
 
-    /// Cmd+V billentyű szimuláció
+    /// Cmd+V billentyű szimuláció (macOS-en mindenhol Cmd+V működik)
     private func simulatePaste() {
         let source = CGEventSource(stateID: .hidSystemState)
 
@@ -52,32 +42,14 @@ class PasteManager {
         let keyDown = CGEvent(keyboardEventSource: source, virtualKey: 0x09, keyDown: true)
         let keyUp = CGEvent(keyboardEventSource: source, virtualKey: 0x09, keyDown: false)
 
-        // Cmd flag hozzáadása (terminálnál Cmd+Shift)
-        if isTerminalApp() {
-            keyDown?.flags = [.maskCommand, .maskShift]
-            keyUp?.flags = [.maskCommand, .maskShift]
-            print("PasteManager: Using Cmd+Shift+V for terminal app")
-        } else {
-            keyDown?.flags = .maskCommand
-            keyUp?.flags = .maskCommand
-            print("PasteManager: Using Cmd+V")
-        }
+        // Cmd+V flag
+        keyDown?.flags = .maskCommand
+        keyUp?.flags = .maskCommand
 
         // Post events
         keyDown?.post(tap: .cghidEventTap)
         keyUp?.post(tap: .cghidEventTap)
 
-        print("PasteManager: Paste simulated")
-    }
-
-    /// Ellenőrzi, hogy terminál app-e az aktív alkalmazás
-    func isTerminalApp() -> Bool {
-        guard let app = NSWorkspace.shared.frontmostApplication else { return false }
-        let bundleId = app.bundleIdentifier ?? ""
-        let isTerminal = terminalBundles.contains(bundleId)
-        if isTerminal {
-            print("PasteManager: Detected terminal app: \(bundleId)")
-        }
-        return isTerminal
+        print("PasteManager: Cmd+V simulated")
     }
 }
