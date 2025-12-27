@@ -8,6 +8,7 @@ TRANSLATIONS = {
     "en": {
         # System tray
         "tray_settings": "Settings",
+        "tray_about": "About",
         "tray_quit": "Quit",
         "tray_loading": "WhisperRocket - Loading...",
         "tray_ready": "WhisperRocket - Ready",
@@ -121,6 +122,7 @@ TRANSLATIONS = {
     "hu": {
         # System tray
         "tray_settings": "Beállítások",
+        "tray_about": "Névjegy",
         "tray_quit": "Kilépés",
         "tray_loading": "WhisperRocket - Betöltés...",
         "tray_ready": "WhisperRocket - Készen áll",

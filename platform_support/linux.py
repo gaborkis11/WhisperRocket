@@ -121,7 +121,7 @@ class LinuxHandler(PlatformHandler):
                 # A projekt mappa meghatározása (ez a fájl a platform_support/ mappában van)
                 project_dir = Path(__file__).parent.parent.resolve()
                 start_script = project_dir / "start.sh"
-                icon_path = project_dir / "assets" / "whisperrocket.png"
+                icon_path = project_dir / "assets" / "icons" / "whisperrocket_ico.png"
 
                 desktop_content = f"""[Desktop Entry]
 Type=Application

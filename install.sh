@@ -235,14 +235,23 @@ fi
 # =============================================================================
 log_info "Alkalmazás launcher telepítése..."
 
-# Frissítjük a desktop fájlban az útvonalat
+# Dinamikusan generáljuk a .desktop fájlt a telepítési útvonallal
 INSTALL_DIR=$(pwd)
-sed -i "s|Exec=.*|Exec=$INSTALL_DIR/start.sh|g" whisperrocket.desktop
-sed -i "s|Icon=.*|Icon=$INSTALL_DIR/assets/whisperrocket.png|g" whisperrocket.desktop
-sed -i "s|Path=.*|Path=$INSTALL_DIR|g" whisperrocket.desktop
 
 mkdir -p ~/.local/share/applications
-cp whisperrocket.desktop ~/.local/share/applications/
+
+cat > ~/.local/share/applications/whisperrocket.desktop << EOF
+[Desktop Entry]
+Type=Application
+Name=WhisperRocket
+Comment=Local Speech-to-Text with Whisper AI
+Exec=$INSTALL_DIR/start.sh
+Icon=$INSTALL_DIR/assets/icons/whisperrocket_ico.png
+Terminal=false
+Categories=AudioVideo;Audio;Utility;
+StartupNotify=false
+EOF
+
 chmod +x start.sh
 
 log_ok "Alkalmazás hozzáadva a menühöz"

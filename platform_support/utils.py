@@ -1,6 +1,6 @@
 """
 WhisperRocket - Platform Detection Utilities
-Platform detektálás és handler factory
+Platform detektálás és handler factory (Linux verzió)
 """
 
 import sys
@@ -14,14 +14,10 @@ def get_platform() -> str:
     """Aktuális platform detektálása
 
     Returns:
-        "macos", "linux", "windows", vagy "unknown"
+        "linux" vagy "unknown"
     """
-    if sys.platform == 'darwin':
-        return 'macos'
-    elif sys.platform == 'linux':
+    if sys.platform == 'linux':
         return 'linux'
-    elif sys.platform == 'win32':
-        return 'windows'
     return 'unknown'
 
 
@@ -29,18 +25,15 @@ def get_platform_handler() -> "PlatformHandler":
     """Platform handler factory
 
     Returns:
-        Platform-specifikus PlatformHandler instance
+        LinuxHandler instance
 
     Raises:
-        NotImplementedError: Ha a platform nem támogatott
+        NotImplementedError: Ha a platform nem Linux
     """
     platform = get_platform()
 
-    if platform == 'macos':
-        from .macos import MacOSHandler
-        return MacOSHandler()
-    elif platform == 'linux':
+    if platform == 'linux':
         from .linux import LinuxHandler
         return LinuxHandler()
     else:
-        raise NotImplementedError(f"Platform not supported: {platform}")
+        raise NotImplementedError(f"This version only supports Linux. Detected: {sys.platform}")

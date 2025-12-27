@@ -714,6 +714,12 @@ def main():
     # Fő menü aboutToShow frissíti a history-t (submenu aboutToShow nem megbízható)
     tray_menu.aboutToShow.connect(refresh_history_menu)
 
+    # About menüpont
+    from about_window import show_about
+    about_action = QAction(t("tray_about", ui_lang), qt_app)
+    about_action.triggered.connect(show_about)
+    tray_menu.addAction(about_action)
+
     tray_menu.addSeparator()
     quit_action = QAction(t("tray_quit", ui_lang), qt_app)
     quit_action.triggered.connect(quit_app)
