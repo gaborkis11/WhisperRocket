@@ -119,6 +119,23 @@ class AudioRecorder: NSObject, ObservableObject {
         }
     }
 
+    /// Felvétel megszakítása (törlés, nincs callback)
+    func cancelRecording() {
+        guard isRecording else { return }
+
+        stopLevelTimer()
+        audioRecorder?.stop()
+        isRecording = false
+
+        // Felvétel törlése
+        if let url = recordingURL {
+            try? FileManager.default.removeItem(at: url)
+            print("AudioRecorder: Recording cancelled and deleted: \(url.lastPathComponent)")
+        }
+
+        recordingURL = nil
+    }
+
     /// Amplitúdó mérés timer
     private func startLevelTimer() {
         levelTimer = Timer.scheduledTimer(withTimeInterval: 0.05, repeats: true) { [weak self] _ in

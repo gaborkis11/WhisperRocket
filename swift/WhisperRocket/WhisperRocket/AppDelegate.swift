@@ -32,9 +32,12 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             // A permission kérés automatikusan megtörténik az AudioRecorder init-ben
         }
 
-        // Hotkey callback beállítása - AppState-et használjuk
+        // Hotkey callback-ek beállítása
         HotkeyManager.shared.onHotkeyPressed = {
             AppState.shared.toggleRecording()
+        }
+        HotkeyManager.shared.onEscapePressed = {
+            AppState.shared.cancelAll()
         }
 
         // Hotkey listener indítása
@@ -48,7 +51,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationWillTerminate(_ notification: Notification) {
         print("WhisperRocket terminating")
 
-        // Hotkey listener leállítása
+        // Hotkey listener leállítása (Escape is leáll vele)
         HotkeyManager.shared.stopListening()
     }
 

@@ -20,6 +20,7 @@ class AppState: ObservableObject {
     @Published var currentAmplitude: Float = 0
 
     private var cancellables = Set<AnyCancellable>()
+    private var processingTask: Task<Void, Never>?
 
     private init() {
         setupAudioRecorder()
@@ -54,14 +55,43 @@ class AppState: ObservableObject {
         isReady = false
         print("🎤 Recording started!")
         AudioRecorder.shared.startRecording()
+
+        // Escape hotkey regisztrálása (felvétel megszakítás)
+        HotkeyManager.shared.startEscapeListening()
     }
 
     /// Felvétel leállítása
     func stopRecording() {
+        // Escape hotkey MARAD aktív (feldolgozás közben is működjön)
+
         isRecording = false
         isProcessing = true
         print("⏹️ Recording stopped!")
         AudioRecorder.shared.stopRecording()
+    }
+
+    /// Escape megnyomva - felvétel VAGY feldolgozás megszakítása
+    func cancelAll() {
+        if isRecording {
+            // Felvétel megszakítása
+            isRecording = false
+            isReady = true
+            print("❌ Recording cancelled!")
+            AudioRecorder.shared.cancelRecording()
+        } else if isProcessing {
+            // Feldolgozás megszakítása
+            processingTask?.cancel()
+            processingTask = nil
+            isProcessing = false
+            isReady = true
+            print("❌ Processing cancelled!")
+        }
+
+        // Escape hotkey leállítása
+        HotkeyManager.shared.stopEscapeListening()
+
+        // Popup elrejtése
+        PopupWindowController.shared.hidePopup()
     }
 
     /// Felvétel feldolgozása (Whisper transzkripció)
@@ -74,11 +104,14 @@ class AppState: ObservableObject {
 
         print("🚀 Processing: \(url.lastPathComponent)")
 
-        Task {
+        processingTask = Task {
             // Ha a modell betöltés alatt van, várjunk rá (max 30 sec)
             if ModelManager.shared.isLoading {
                 print("⏳ Waiting for model to load...")
                 for _ in 0..<60 {
+                    // Ellenőrizzük, hogy megszakították-e
+                    if Task.isCancelled { return }
+
                     try? await Task.sleep(nanoseconds: 500_000_000) // 0.5 sec
                     if !ModelManager.shared.isLoading {
                         print("✅ Model loaded, continuing...")
@@ -86,6 +119,9 @@ class AppState: ObservableObject {
                     }
                 }
             }
+
+            // Ellenőrizzük, hogy megszakították-e
+            if Task.isCancelled { return }
 
             // Ellenőrizzük, hogy van-e betöltött modell
             if !WhisperTranscriber.shared.isLoaded {
@@ -109,10 +145,16 @@ class AppState: ObservableObject {
                     language: language
                 )
 
+                // Ellenőrizzük, hogy megszakították-e
+                if Task.isCancelled { return }
+
                 await MainActor.run {
                     self.finishProcessing(transcription: transcription)
                 }
             } catch {
+                // Ellenőrizzük, hogy megszakították-e
+                if Task.isCancelled { return }
+
                 print("❌ Transcription error: \(error)")
                 await MainActor.run {
                     self.finishProcessing(transcription: nil)
@@ -123,6 +165,10 @@ class AppState: ObservableObject {
 
     /// Feldolgozás befejezése
     private func finishProcessing(transcription: String?) {
+        // Escape hotkey leállítása
+        HotkeyManager.shared.stopEscapeListening()
+
+        processingTask = nil
         isProcessing = false
         isReady = true
         lastTranscription = transcription

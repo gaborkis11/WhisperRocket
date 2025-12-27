@@ -13,15 +13,21 @@ import Combine
 class HotkeyManager: ObservableObject {
     static let shared = HotkeyManager()
 
-    // Hotkey callback
+    // Hotkey callback-ek
     var onHotkeyPressed: (() -> Void)?
+    var onEscapePressed: (() -> Void)?
 
     // Állapot
     @Published var isListening = false
 
-    // Carbon hotkey
+    // Carbon hotkey-k
     private var hotKeyRef: EventHotKeyRef?
+    private var escapeHotKeyRef: EventHotKeyRef?
     private var eventHandler: EventHandlerRef?
+
+    // Hotkey ID-k
+    private let mainHotkeyID: UInt32 = 1
+    private let escapeHotkeyID: UInt32 = 2
 
     // KeyCode mapping (karakter -> Carbon keyCode)
     private let keyCodeMap: [String: UInt32] = [
@@ -95,14 +101,36 @@ class HotkeyManager: ObservableObject {
         let status = InstallEventHandler(
             GetApplicationEventTarget(),
             { (nextHandler, event, userData) -> OSStatus in
-                // Callback hívása
-                if let userData = userData {
-                    let hotkeyManager = Unmanaged<HotkeyManager>.fromOpaque(userData).takeUnretainedValue()
-                    print("HotkeyManager: ✅ Hotkey detected! (\(hotkeyManager.currentHotkey))")
-                    DispatchQueue.main.async {
+                // Hotkey ID kiolvasása
+                var hotKeyID = EventHotKeyID()
+                let getParamStatus = GetEventParameter(
+                    event,
+                    EventParamName(kEventParamDirectObject),
+                    EventParamType(typeEventHotKeyID),
+                    nil,
+                    MemoryLayout<EventHotKeyID>.size,
+                    nil,
+                    &hotKeyID
+                )
+
+                guard getParamStatus == noErr, let userData = userData else {
+                    return noErr
+                }
+
+                let hotkeyManager = Unmanaged<HotkeyManager>.fromOpaque(userData).takeUnretainedValue()
+
+                DispatchQueue.main.async {
+                    if hotKeyID.id == hotkeyManager.mainHotkeyID {
+                        // Fő hotkey (felvétel toggle)
+                        print("HotkeyManager: ✅ Main hotkey detected!")
                         hotkeyManager.onHotkeyPressed?()
+                    } else if hotKeyID.id == hotkeyManager.escapeHotkeyID {
+                        // Escape (felvétel megszakítás)
+                        print("HotkeyManager: ✅ Escape detected!")
+                        hotkeyManager.onEscapePressed?()
                     }
                 }
+
                 return noErr
             },
             1,
@@ -117,7 +145,7 @@ class HotkeyManager: ObservableObject {
         }
 
         // Hotkey regisztrálása
-        let hotKeyID = EventHotKeyID(signature: OSType(0x57525B54), id: 1) // "WR[T" signature
+        let hotKeyID = EventHotKeyID(signature: OSType(0x57525B54), id: mainHotkeyID)
         let registerStatus = RegisterEventHotKey(
             keyCode,
             modifiers,
@@ -136,8 +164,44 @@ class HotkeyManager: ObservableObject {
         print("HotkeyManager: Started listening for \(hotkey) (Carbon)")
     }
 
+    /// Escape hotkey regisztrálása (felvétel közben aktív)
+    func startEscapeListening() {
+        guard escapeHotKeyRef == nil else {
+            print("HotkeyManager: Escape already registered")
+            return
+        }
+
+        let hotKeyID = EventHotKeyID(signature: OSType(0x57525B54), id: escapeHotkeyID)
+        let status = RegisterEventHotKey(
+            53,  // Escape keyCode
+            0,   // Nincs modifier
+            hotKeyID,
+            GetApplicationEventTarget(),
+            0,
+            &escapeHotKeyRef
+        )
+
+        if status == noErr {
+            print("HotkeyManager: Escape hotkey registered")
+        } else {
+            print("HotkeyManager: Failed to register Escape, status: \(status)")
+        }
+    }
+
+    /// Escape hotkey leállítása
+    func stopEscapeListening() {
+        if let ref = escapeHotKeyRef {
+            UnregisterEventHotKey(ref)
+            escapeHotKeyRef = nil
+            print("HotkeyManager: Escape hotkey unregistered")
+        }
+    }
+
     /// Hotkey listener leállítása
     func stopListening() {
+        // Escape is leállítása
+        stopEscapeListening()
+
         if let hotKeyRef = hotKeyRef {
             UnregisterEventHotKey(hotKeyRef)
             self.hotKeyRef = nil
