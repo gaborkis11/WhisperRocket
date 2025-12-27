@@ -10,17 +10,10 @@ __pycache__/
 # Test audio files
 *.wav
 !assets/*.wav
-!swift/WhisperRocket/WhisperRocket/*.wav
 
 # IDE
 .idea/
 .vscode/
-
-# Xcode user-specific
-*.xcuserstate
-xcuserdata/
-*.xcbkptlist
-
 
 # User config (generated during install)
 config.json
@@ -32,3 +25,7 @@ config.json
 build/
 dist/
 *.spec
+
+# Development files (not for public repo)
+CLAUDE.md
+tasks/
