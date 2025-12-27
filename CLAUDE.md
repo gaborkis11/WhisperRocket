@@ -21,85 +21,108 @@
 
 **WhisperRocket** egy lokális speech-to-text (beszédfelismerő) alkalmazás, amely az OpenAI Whisper modellt használja valós idejű beszédfelismerésre.
 
+### Verziók
+
+| Verzió | Állapot | Megjegyzés |
+|--------|---------|------------|
+| **Swift (natív)** | ✅ Aktív fejlesztés | Fő verzió, macOS-re |
+| Python | 🔄 Karbantartás | Linux támogatás |
+
 ### Támogatott Platformok
 
 | Platform | Backend | GPU | Állapot |
 |----------|---------|-----|---------|
-| macOS (Apple Silicon) | MLX Whisper | Metal GPU | ✅ Kész |
-| Linux | faster-whisper | NVIDIA CUDA | ✅ Kész |
+| macOS (Apple Silicon) | WhisperKit | Metal GPU | ✅ Swift verzió |
+| macOS (Apple Silicon) | MLX Whisper | Metal GPU | ✅ Python verzió |
+| Linux | faster-whisper | NVIDIA CUDA | ✅ Python verzió |
 
-### Fő Funkciók
+### Fő Funkciók (Swift verzió)
 
-- **Valós idejű beszédfelismerés** - Whisper large-v3 modell, többnyelvű támogatás
-- **GPU gyorsítás** - Apple Metal (macOS) vagy NVIDIA CUDA (Linux)
-- **Hotkey vezérlés** - Konfigurálható hotkey (alapért. Cmd+Shift+9 macOS-en)
+- **Valós idejű beszédfelismerés** - WhisperKit large-v3 modell
+- **GPU gyorsítás** - Apple Metal (Apple Silicon natív)
+- **Élő transzkripció** - Feldolgozás közben látható a részleges szöveg ("felúszó szavak")
+- **Hotkey vezérlés** - Konfigurálható hotkey (Carbon API)
 - **Automatikus beillesztés** - Felismert szöveg automatikusan beillesztésre kerül
-- **Smart paste** - Terminál detektálás (Cmd+Shift+V vs Cmd+V)
-- **System Tray ikon** - Menu bar app macOS-en
+- **Escape megszakítás** - Felvétel és feldolgozás megszakítható
+- **Menu Bar app** - System tray ikon, dock ikon nélkül
 - **Modern Popup ablak** - Equalizer vizualizáció felvétel közben
 - **Rakéta animáció** - Feldolgozás közben animált rakéta + vicces üzenetek
+- **Hangjelzések** - Start/stop hangok felvétel kezdetén és végén
 - **Szöveg előnézet** - Transzkripció után kattintható szöveg megjelenítés
-- **Konfigurálható popup időtartam** - Beállítható, meddig maradjon látható
-- **Setup Wizard** - Első indításkor vezeti végig a beállításokon
+- **History** - Korábbi transzkripciók megtekintése
+- **Többnyelvű** - Magyar és angol UI, 99 nyelv transzkripció
 
 ### Technikai Részletek
 
-| Tulajdonság | macOS | Linux |
-|-------------|-------|-------|
-| Nyelv | Python 3.10+ | Python 3.10+ |
-| UI Framework | PySide6 | PyQt6 |
-| Whisper | MLX Whisper | faster-whisper |
+| Tulajdonság | Swift (macOS) | Python (Linux) |
+|-------------|---------------|----------------|
+| Nyelv | Swift 5.9+ | Python 3.10+ |
+| UI Framework | SwiftUI | PyQt6 |
+| Whisper | WhisperKit | faster-whisper |
 | GPU | Apple Metal | NVIDIA CUDA |
-| Audio | 16kHz, mono | 16kHz, mono |
-| Hotkey | pynput | pynput |
-| Paste | AppleScript | xdotool |
+| Audio | AVAudioEngine | sounddevice |
+| Hotkey | Carbon API | pynput |
+| Paste | CGEvent | xdotool |
 
 ### Fájlstruktúra
 
 ```
 WhisperRocket/
-├── whisper_gui.py          # Fő alkalmazás
-├── popup_window.py         # Popup ablak (equalizer, rakéta, szöveg)
+│
+├── swift/                          # 🎯 SWIFT VERZIÓ (fő)
+│   └── WhisperRocket/
+│       └── WhisperRocket/
+│           ├── WhisperRocketApp.swift    # App entry point
+│           ├── AppState.swift            # Fő állapot kezelés
+│           ├── ContentView.swift         # Menu bar app
+│           ├── PopupWindowController.swift
+│           ├── RecordingView.swift       # Equalizer UI
+│           ├── ProcessingView.swift      # Rakéta + felúszó szavak
+│           ├── ResultView.swift          # Eredmény megjelenítés
+│           ├── SettingsView.swift        # Beállítások
+│           ├── HistoryView.swift         # History
+│           ├── HotkeyManager.swift       # Carbon hotkey kezelés
+│           ├── AudioRecorder.swift       # AVAudioEngine
+│           ├── SoundManager.swift        # Start/stop hangok
+│           ├── PasteService.swift        # CGEvent paste
+│           ├── Localizable.xcstrings     # Fordítások
+│           └── Assets.xcassets/          # Ikonok, képek
+│
+├── whisper_gui.py          # Python fő alkalmazás (Linux)
+├── popup_window.py         # Popup ablak
 ├── settings_window.py      # Beállítások ablak
 ├── history_viewer.py       # History ablak
 ├── history_manager.py      # History kezelés
 ├── model_manager.py        # Whisper modellek kezelése
-├── download_manager.py     # Modell letöltések
-├── setup_wizard.py         # Első indítás wizard
 ├── translations.py         # Többnyelvű fordítások
 │
-├── platform_support/       # Platform absztrakció
+├── platform_support/       # Python platform absztrakció
 │   ├── __init__.py
-│   ├── base.py            # Alap interfész
-│   ├── macos.py           # macOS implementáció
-│   ├── linux.py           # Linux implementáció
-│   └── utils.py           # Segédfüggvények
+│   ├── base.py
+│   ├── macos.py
+│   ├── linux.py
+│   └── utils.py
 │
 ├── assets/
-│   ├── whisperrocket.png  # Alkalmazás ikon
-│   ├── whisperrocket.icns # macOS ikon
+│   ├── whisperrocket.png
+│   ├── whisperrocket.icns
 │   └── *.wav              # Hangeffektek
 │
 ├── scripts/               # Build scriptek
-│   ├── build_macos.sh     # PyInstaller build
-│   └── create_dmg.sh      # DMG készítés
+│   ├── build_macos.sh
+│   └── create_dmg.sh
 │
-├── requirements.txt       # Alap függőségek
-├── requirements-macos.txt # macOS függőségek
-├── requirements-cuda.txt  # Linux CUDA függőségek
+├── requirements.txt
+├── requirements-macos.txt
+├── requirements-cuda.txt
 │
 ├── start.sh              # Linux indító
-├── start_macos.sh        # macOS indító
 ├── install.sh            # Linux telepítő
-├── install_macos.sh      # macOS telepítő
-│
-├── entitlements.plist    # macOS code signing
-├── WhisperRocket.spec    # PyInstaller spec (gitignore)
 │
 ├── tasks/
-│   └── todo.md           # Todo és tervek
-├── CLAUDE.md             # Ez a fájl
-├── README.md             # Dokumentáció
+│   └── todo.md
+├── CLAUDE.md
+├── README.md
 └── LICENSE
 ```
 
@@ -141,26 +164,43 @@ A konfiguráció helye platformtól és futtatási módtól függ:
 
 ## Tervezett Fejlesztések
 
-### Natív Swift verzió
+### Monetizáció - Fizetős Verzió
 
-A Python verzió működik, de egy fizetős termékhez natív Swift alkalmazás lenne ideális:
+A Swift verzió fizetős termékként lesz értékesítve.
 
-| Python (jelenlegi) | Swift (cél) |
-|-------------------|-------------|
-| ~200 MB app méret | ~20-30 MB |
-| PyInstaller bundle | Natív macOS app |
-| Lassú indulás | Azonnali indulás |
-| Nehéz App Store | Egyszerű notarization |
+**Árképzés terv:**
+| Csomag | Ár | Megjegyzés |
+|--------|-----|------------|
+| 1 eszköz | ~1990 Ft (~$5) | Egyszeri fizetés |
 
-**Swift fejlesztés fő komponensei:**
-1. Menu Bar App (`NSStatusItem`)
-2. Globális Hotkey (`CGEvent` tap)
-3. Hangfelvétel (`AVAudioEngine`)
-4. Whisper (`whisper.cpp` + Metal GPU)
-5. Popup UI (SwiftUI)
-6. Settings (SwiftUI)
+**Értékesítési modell:**
+- Egyszeri fizetés (nem előfizetés)
+- Weboldal + Stripe integráció
+- Licenc kulcs aktiválás
+- Offline működés aktiválás után
 
-A Swift verzió a `swift/` könyvtárban lesz.
+**Licenc rendszer terv:**
+```
+1. Vásárlás (Stripe) → Licenc kulcs generálás (kriptográfiai aláírás)
+2. Email küldés a licenc kulccsal
+3. Első indítás → Licenc beírása → Online aktiválás (egyszer)
+4. Aktivációs token mentése lokálisan (hardware ID-val)
+5. Utána: teljesen offline működés
+```
+
+**Technológiák:**
+- Weboldal: Next.js + Vercel
+- Fizetés: Stripe Checkout
+- Licenc: Aszimmetrikus titkosítás (privát/publikus kulcs)
+- Email: Resend
+- Adatbázis: Supabase
+
+**Konkurensek:**
+| App | Ár | Modell |
+|-----|-----|--------|
+| MacWhisper Pro | €59 | Egyszeri |
+| VoiceInk | $25-49 | Egyszeri |
+| Spokenly | $7.99/hó | Előfizetés |
 
 ---
 
@@ -168,17 +208,26 @@ A Swift verzió a `swift/` könyvtárban lesz.
 
 ### Engedélyek
 - **Mikrofon**: Automatikusan kéri a rendszer
-- **Input Monitoring**: Szükséges a globális hotkey-hez
-- **Accessibility**: Szükséges az automatikus paste-hez
+- **Accessibility**: Szükséges a globális hotkey-hez és automatikus paste-hez
 
-### Bundled App Problémák és Megoldások
+### Swift Verzió - Fontos Tudnivalók
 
-1. **Settings bezárása kiléptet**: `qt_app.setQuitOnLastWindowClosed(False)`
-2. **Config elérési út**: Bundled app-nál read-only a bundle, ezért `~/Library/Application Support/` kell
-3. **Dock ikon**: `LSUIElement=true` az Info.plist-ben elrejti
-4. **Popup always-on-top**: `setWindowFlags(Qt.WindowStaysOnTopHint | Qt.Tool)`
+1. **Popup always-on-top**: `NSPanel` + `.nonactivatingPanel` + `level = .floating`
+2. **Dock ikon elrejtés**: `LSUIElement = YES` az Info.plist-ben
+3. **Hotkey kezelés**: Carbon `RegisterEventHotKey` API (nem CGEvent tap)
+4. **Escape kezelés**: Külön hotkey regisztráció, felvétel és feldolgozás alatt aktív
+5. **WhisperKit modellek**: `~/Library/Application Support/WhisperRocket/models/`
+6. **Hangfájlok**: Bundle-ben (`start_soft_click_smooth.wav`, `stop_soft_click_smooth.wav`)
 
-### PyInstaller Build
+### Swift Xcode Build
+
+```bash
+# Xcode-ban: Product → Archive → Distribute App
+# Vagy command line:
+xcodebuild -project swift/WhisperRocket/WhisperRocket.xcodeproj -scheme WhisperRocket -configuration Release archive
+```
+
+### Python PyInstaller Build (legacy)
 
 ```bash
 cd scripts
@@ -190,7 +239,30 @@ cd scripts
 
 ## Elkészült Funkciók
 
+### Swift verzió (macOS)
+
+- [x] Natív SwiftUI alkalmazás
+- [x] WhisperKit integráció (Metal GPU)
+- [x] Menu bar app (NSStatusItem)
+- [x] Globális hotkey (Carbon API)
+- [x] Popup ablak (NSPanel + SwiftUI)
+- [x] Equalizer vizualizáció felvétel közben
+- [x] Rakéta animáció feldolgozás közben
+- [x] Élő transzkripció - "felúszó szavak" animáció
+- [x] Start/stop hangjelzések (AVAudioPlayer)
+- [x] Szöveg előnézet kattintható másolással
+- [x] Escape billentyű megszakítás (felvétel + feldolgozás)
+- [x] Automatikus paste (CGEvent)
+- [x] History kezelés
+- [x] Beállítások (modell, nyelv, hotkey)
+- [x] Tooltipek a beállításoknál
+- [x] Többnyelvű UI (magyar, angol)
+- [x] About ablak
+
+### Python verzió (Linux + legacy macOS)
+
 - [x] macOS Apple Silicon támogatás (MLX Whisper)
+- [x] Linux CUDA támogatás (faster-whisper)
 - [x] Platform absztrakciós réteg
 - [x] System Tray / Menu bar app
 - [x] Modern beállítások UI
@@ -199,7 +271,6 @@ cd scripts
 - [x] Popup ablak equalizer vizualizációval
 - [x] Rakéta animáció feldolgozás közben
 - [x] Szöveg előnézet
-- [x] Konfigurálható popup időtartam
 - [x] Escape gomb a felvétel megszakításához
 - [x] Setup Wizard első indításhoz
 - [x] PyInstaller DMG build macOS-re
