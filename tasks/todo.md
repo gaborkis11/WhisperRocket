@@ -1,112 +1,190 @@
 # WhisperRocket - Fejlesztési Terv
 
-## Jelenlegi állapot
+## Jelenlegi állapot (2025-12-27)
 
-### Python verzió (KÉSZ - 95%)
-A Python/PySide6 verzió működőképes macOS-en:
-- ✅ MLX Whisper backend (Apple Silicon GPU)
-- ✅ System Tray ikon
+### Swift verzió (macOS) - FŐ VERZIÓ ✅
+A natív Swift verzió elkészült a következő funkciókkal:
+- ✅ WhisperKit integráció (Apple Silicon GPU)
+- ✅ Menu bar app (SwiftUI)
+- ✅ Globális hotkey (Carbon API)
 - ✅ Popup ablak (equalizer, rakéta animáció)
-- ✅ Settings ablak
+- ✅ Élő transzkripció ("felúszó szavak" animáció)
+- ✅ Start/stop hangjelzések
+- ✅ Settings (modell, nyelv, hotkey, popup időtartam)
+- ✅ Settings tooltipek
 - ✅ History kezelés
-- ✅ Hotkey (pynput)
+- ✅ About ablak
+- ✅ Launch at Login
+- ✅ Escape megszakítás (felvétel + feldolgozás)
 - ✅ Automatikus paste
-- ✅ Modell letöltés
-- ✅ PyInstaller DMG build
+- ✅ Új app ikon (rakéta design)
+- ✅ DMG build
+
+### Python verzió (Linux) - KARBANTARTÁS 🔄
+A Python verzió működik, de hiányoznak az új funkciók.
 
 ---
 
-## Swift verzió - Fejlesztés folyamatban
+## AKTUÁLIS FELADAT: Python/Linux verzió frissítése
 
-### Elkészült (2025-12-26)
-- ✅ Xcode projekt létrehozása (`swift/WhisperRocket/`)
-- ✅ Menu Bar App (MenuBarExtra + SwiftUI)
-- ✅ Globális Hotkey (Carbon RegisterEventHotKey) - **Ctrl+Shift+S**
-- ✅ AppState központi állapotkezelés
-- ✅ Recording toggle (start/stop)
+A Swift verzióban megvalósított új funkciók implementálása a Python/Linux verzióba.
 
-### Elkészült (2025-12-26) - Hangfelvétel
-- ✅ AudioRecorder osztály (AVAudioEngine)
-- ✅ WAV fájl mentés (16kHz, mono, 16-bit PCM)
-- ✅ Amplitúdó callback (equalizer-hez előkészítve)
-- ✅ Mikrofon engedély kezelés
+### 1. Élő Transzkripció ("Felúszó Szavak") 🔴 MAGAS PRIORITÁS
 
-### Elkészült (2025-12-26) - WhisperKit integráció
-- ✅ WhisperKit Swift Package integráció
-- ✅ WhisperTranscriber osztály
-- ✅ ModelManager (modell letöltés/kezelés)
-- ✅ Transzkripció (magyar és más nyelvek támogatása)
-- ✅ Partial transcription callback (élő szöveg)
+**Leírás:** Feldolgozás közben 2.5 másodpercenként megjelenik egy 2-3 szavas részlet a popup-on.
 
-### Elkészült (2025-12-26/27) - Popup ablak
-- ✅ PopupWindow (borderless, floating)
-- ✅ PopupView (SwiftUI)
-- ✅ RecordingView + EqualizerView
-- ✅ ProcessingView + rakéta animáció + csillagok
-- ✅ TextPreviewView (szöveg előnézet)
-- ✅ Escape billentyű (felvétel/feldolgozás megszakítás)
+**Teendők:**
+- [ ] `popup_window.py` - `FloatingWordsView` komponens hozzáadása
+- [ ] Timer alapú megjelenítés (2.5 másodpercenként)
+- [ ] 2-3 szavas kifejezések kinyerése
+- [ ] Magyar idézőjelek használata („szöveg")
+- [ ] Random pozíció (bal vagy jobb oldalon, NE középen ahol a rakéta van)
+- [ ] Fade in/out animáció
+- [ ] SF Mono / monospace font
+- [ ] Csak teljes szavak megjelenítése (szóköz/írásjel ellenőrzés)
+- [ ] `whisper_gui.py` - partial transcription callback bekötése
+- [ ] Partial text átadása a popup_window-nak
 
-### Elkészült (2025-12-27) - Settings és további funkciók
-- ✅ SettingsView (modell, nyelv, hotkey, popup időtartam)
-- ✅ SettingsWindowController
-- ✅ PasteManager (auto-paste AppleScript-tel)
-- ✅ HistoryManager + HistoryWindowController
-- ✅ AboutWindowController (új ikon)
-- ✅ LaunchAtLoginManager
-- ✅ Új app ikon (rakéta + hangfülek)
+**Referencia:** `swift/WhisperRocket/WhisperRocket/ProcessingView.swift` - `FloatingWordsView` struct
 
-### Elkészült (2025-12-27) - Élő transzkripció progress
-- ✅ WhisperKit callback partial transcription-höz
-- ✅ "Felúszó szavak" animáció ProcessingView-ban
-- ✅ Fade in/out + felfelé mozgás animáció
-- ✅ Data flow: WhisperTranscriber → AppState → PopupWindowController → ProcessingView
+### 2. About Ablak 🟡 KÖZEPES PRIORITÁS
 
-### Folyamatban
-- (nincs)
+**Leírás:** Alkalmazás információk megjelenítése (verzió, copyright, stb.)
 
-### Várakozik / Jövőbeli fejlesztések
-- [ ] Hotkey testreszabás UI (jelenleg fix Ctrl+Shift+S)
-- [ ] App Store előkészítés / notarization
-- [ ] Több modell támogatás (base, small, medium, large)
+**Teendők:**
+- [ ] `about_window.py` - új fájl létrehozása
+- [ ] Ablak design (sötét téma, app ikon, verzió info)
+- [ ] App név: "WhisperRocket"
+- [ ] Verzió: "1.0.0"
+- [ ] Copyright szöveg
+- [ ] Website/GitHub link (opcionális)
+- [ ] `whisper_gui.py` - Menu-be "About" menüpont hozzáadása
+
+**Referencia:** `swift/WhisperRocket/WhisperRocket/AboutWindowController.swift`
+
+### 3. Settings Tooltipek 🟢 ALACSONY PRIORITÁS
+
+**Leírás:** Magyarázó szövegek a beállításoknál
+
+**Teendők:**
+- [ ] `settings_window.py` - Tooltip szövegek hozzáadása
+- [ ] Hotkey tooltip: "Press once to start recording, press again to stop and transcribe"
+- [ ] Language tooltip: "Transcription will be generated in the selected language"
+- [ ] Popup duration tooltip: "How long the text preview stays visible after transcription"
+- [ ] `translations.py` - Fordítások hozzáadása (magyar/angol)
+
+**Referencia:** `swift/WhisperRocket/WhisperRocket/SettingsView.swift` - GeneralTabView
+
+### 4. Ikon Frissítés 🟢 ALACSONY PRIORITÁS
+
+**Leírás:** A Swift verzióban új ikon van, a Python verzió még régit használ.
+
+**Megfigyelések:**
+- `assets/whisperrocket.png` - Dec 22, 3KB, 256x256 (régi)
+- Swift ikonok - Dec 27, 33KB, friss design (új)
+
+**Teendők:**
+- [ ] Új 256x256 PNG exportálása a Swift verzióból
+- [ ] `assets/whisperrocket.png` felülírása az új ikonnal
+- [ ] Tesztelés Linux-on
 
 ---
 
-## Swift fájlstruktúra
+## Technikai Részletek
 
+### Élő Transzkripció Implementáció (Python)
+
+A faster-whisper támogatja a partial transcription-t, de másképp működik mint a WhisperKit:
+
+```python
+# faster-whisper callback példa
+for segment in segments:
+    partial_text = segment.text
+    # Küldés a popup-nak
 ```
-swift/WhisperRocket/WhisperRocket/
-├── WhisperRocketApp.swift      # App entry point (MenuBarExtra)
-├── AppDelegate.swift           # NSApplicationDelegate
-├── AppState.swift              # Központi állapotkezelés
-├── MenuBarView.swift           # Menu bar menü
-├── HotkeyManager.swift         # Carbon hotkey (Ctrl+Shift+S)
-├── AudioRecorder.swift         # Hangfelvétel (AVAudioEngine, 16kHz WAV)
-├── ContentView.swift           # (nem használt)
-├── Info.plist                  # LSUIElement, mikrofon engedély
-└── Assets.xcassets/            # Ikonok
+
+**Fontos különbség:**
+- WhisperKit: `transcriptionCallback` minden token után hívódik
+- faster-whisper: `segments` generator, chunk-onként adja vissza
+
+Megoldás: A `whisper_gui.py`-ban a `transcribe_audio` függvényben kell a partial text-et átadni.
+
+### FloatingWordsView Logika (Python megfelelője)
+
+```python
+class FloatingWordsWidget(QWidget):
+    def __init__(self):
+        self.word_timer = QTimer()
+        self.word_timer.timeout.connect(self.show_random_phrase)
+        self.word_timer.start(2500)  # 2.5 másodpercenként
+
+        self.current_text = ""
+        self.displayed_phrase = ""
+        self.opacity = 0.0
+        self.offset_x = 0
+
+    def set_text(self, text):
+        self.current_text = text
+
+    def show_random_phrase(self):
+        if not self.current_text:
+            return
+        # Csak teljes szavak
+        if not self.is_complete_word(self.current_text):
+            return
+        # 2-3 szó kinyerése
+        words = self.current_text.split()[-3:]
+        phrase = " ".join(words)
+        self.displayed_phrase = f"„{phrase}""
+        # Random pozíció (bal vagy jobb)
+        # Fade animáció
+        self.start_fade_animation()
 ```
 
 ---
 
-## Technikai megjegyzések
+## Fájlok Módosítása
 
-### Hotkey implementáció
-- **Carbon RegisterEventHotKey** - legmegbízhatóbb módszer
-- NSEvent.addGlobalMonitorForEvents NEM működött megfelelően
-- CGEvent.tapCreate Input Monitoring problémák miatt elvetettük
-
-### Engedélyek
-- **Accessibility**: Szükséges lesz az auto-paste-hez
-- **Microphone**: Szükséges a hangfelvételhez
-- **Input Monitoring**: NEM szükséges a Carbon hotkey-hez
+| Fájl | Változtatás |
+|------|-------------|
+| `popup_window.py` | FloatingWordsWidget hozzáadása, ProcessingView módosítás |
+| `whisper_gui.py` | Partial transcription callback, popup-nak átadás |
+| `about_window.py` | ÚJ FÁJL - About ablak |
+| `settings_window.py` | Tooltip szövegek |
+| `translations.py` | Új fordítások |
+| `assets/whisperrocket.png` | Ikon csere |
 
 ---
 
-## Miért Swift?
+## Tesztelési Checklist
 
-| Python (jelenlegi) | Swift (cél) |
-|-------------------|-------------|
-| ~200 MB app méret | ~20-30 MB |
-| PyInstaller bundle | Natív macOS app |
-| Lassú indulás | Azonnali indulás |
-| Nehéz App Store | Egyszerű notarization |
+### Élő Transzkripció
+- [ ] Megjelenik a felúszó szöveg feldolgozás közben
+- [ ] 2.5 másodpercenként frissül
+- [ ] Nem takarja a rakétát (bal/jobb oldalon jelenik meg)
+- [ ] Magyar idézőjelek helyesek („szöveg")
+- [ ] Fade animáció működik
+- [ ] Nem jelenik meg félbevágott szó
+
+### About Ablak
+- [ ] Megnyílik a menüből
+- [ ] Helyes verzió szám
+- [ ] Helyes copyright
+- [ ] Bezárható
+
+### Settings Tooltipek
+- [ ] Hotkey tooltip megjelenik
+- [ ] Language tooltip megjelenik
+- [ ] Magyar és angol fordítás
+
+### Ikon
+- [ ] System tray ikon frissült
+- [ ] About ablakban helyes ikon
+
+---
+
+## Megjegyzések
+
+- A fejlesztést Linux környezetben érdemes folytatni a megfelelő teszteléshez
+- A faster-whisper partial transcription más API-t használ mint a WhisperKit
+- A Python verzióban a Qt animációk máshogy működnek mint a SwiftUI-ban
