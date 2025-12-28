@@ -1,31 +1,31 @@
 #!/bin/bash
 
-set -e  # Hiba esetén leállás
+set -e  # Exit on error
 
 echo ""
 echo "╔══════════════════════════════════════════╗"
-echo "║     WhisperRocket Telepítő                 ║"
+echo "║     WhisperRocket Installer              ║"
 echo "║     Speech-to-Text for Linux             ║"
 echo "╚══════════════════════════════════════════╝"
 echo ""
 
-# Színek
+# Colors
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
-# Segédfüggvények
+# Helper functions
 log_info() { echo -e "${BLUE}[INFO]${NC} $1"; }
 log_ok() { echo -e "${GREEN}[OK]${NC} $1"; }
-log_warn() { echo -e "${YELLOW}[FIGYELEM]${NC} $1"; }
-log_error() { echo -e "${RED}[HIBA]${NC} $1"; }
+log_warn() { echo -e "${YELLOW}[WARNING]${NC} $1"; }
+log_error() { echo -e "${RED}[ERROR]${NC} $1"; }
 
 # =============================================================================
-# 1. DISZTRIBÚCIÓ DETEKTÁLÁS
+# 1. DISTRIBUTION DETECTION
 # =============================================================================
-log_info "Disztribúció detektálása..."
+log_info "Detecting distribution..."
 
 DISTRO="unknown"
 PKG_MANAGER=""
@@ -38,31 +38,31 @@ fi
 case $DISTRO in
     ubuntu|debian|linuxmint|pop|elementary|zorin)
         PKG_MANAGER="apt"
-        log_ok "Ubuntu/Debian alapú rendszer detektálva ($DISTRO)"
+        log_ok "Ubuntu/Debian-based system detected ($DISTRO)"
         ;;
     fedora|rhel|centos|rocky|almalinux)
         PKG_MANAGER="dnf"
-        log_ok "Fedora/RHEL alapú rendszer detektálva ($DISTRO)"
+        log_ok "Fedora/RHEL-based system detected ($DISTRO)"
         ;;
     arch|manjaro|endeavouros|garuda)
         PKG_MANAGER="pacman"
-        log_ok "Arch alapú rendszer detektálva ($DISTRO)"
+        log_ok "Arch-based system detected ($DISTRO)"
         ;;
     opensuse*|suse)
         PKG_MANAGER="zypper"
-        log_ok "openSUSE rendszer detektálva ($DISTRO)"
+        log_ok "openSUSE system detected ($DISTRO)"
         ;;
     *)
-        log_warn "Ismeretlen disztribúció: $DISTRO"
-        log_warn "Megpróbáljuk apt-tal..."
+        log_warn "Unknown distribution: $DISTRO"
+        log_warn "Trying with apt..."
         PKG_MANAGER="apt"
         ;;
 esac
 
 # =============================================================================
-# 2. GPU DETEKTÁLÁS
+# 2. GPU DETECTION
 # =============================================================================
-log_info "GPU detektálása..."
+log_info "Detecting GPU..."
 
 GPU_TYPE="cpu"
 HAS_NVIDIA=false
@@ -72,26 +72,26 @@ if command -v nvidia-smi &> /dev/null; then
         GPU_TYPE="nvidia"
         HAS_NVIDIA=true
         GPU_NAME=$(nvidia-smi --query-gpu=name --format=csv,noheader 2>/dev/null | head -1)
-        log_ok "NVIDIA GPU detektálva: $GPU_NAME"
+        log_ok "NVIDIA GPU detected: $GPU_NAME"
     fi
 fi
 
 if [ "$GPU_TYPE" = "cpu" ]; then
     if lspci 2>/dev/null | grep -i "amd\|radeon" | grep -i "vga\|3d" &> /dev/null; then
         GPU_TYPE="amd"
-        log_warn "AMD GPU detektálva - CPU módban fog futni (AMD nincs támogatva GPU gyorsításhoz)"
+        log_warn "AMD GPU detected - will run in CPU mode (AMD not supported for GPU acceleration)"
     elif lspci 2>/dev/null | grep -i "intel" | grep -i "vga\|graphics" &> /dev/null; then
         GPU_TYPE="intel"
-        log_warn "Intel GPU detektálva - CPU módban fog futni"
+        log_warn "Intel GPU detected - will run in CPU mode"
     else
-        log_warn "Nem található dedikált GPU - CPU módban fog futni"
+        log_warn "No dedicated GPU found - will run in CPU mode"
     fi
 fi
 
 # =============================================================================
-# 3. RENDSZER CSOMAGOK TELEPÍTÉSE
+# 3. SYSTEM PACKAGES INSTALLATION
 # =============================================================================
-log_info "Rendszer csomagok telepítése..."
+log_info "Installing system packages..."
 
 case $PKG_MANAGER in
     apt)
@@ -141,14 +141,14 @@ case $PKG_MANAGER in
         ;;
 esac
 
-log_ok "Rendszer csomagok telepítve"
+log_ok "System packages installed"
 
 # =============================================================================
-# 4. PYTHON KÖRNYEZET
+# 4. PYTHON ENVIRONMENT
 # =============================================================================
-log_info "Python virtuális környezet létrehozása..."
+log_info "Creating Python virtual environment..."
 
-# Régi venv törlése ha létezik
+# Remove old venv if exists
 if [ -d "venv" ]; then
     rm -rf venv
 fi
@@ -156,31 +156,31 @@ fi
 python3 -m venv venv
 source venv/bin/activate
 
-log_ok "Virtuális környezet létrehozva"
+log_ok "Virtual environment created"
 
 # =============================================================================
-# 5. PYTHON CSOMAGOK
+# 5. PYTHON PACKAGES
 # =============================================================================
-log_info "Python csomagok telepítése..."
+log_info "Installing Python packages..."
 
 pip install --upgrade pip wheel setuptools
 pip install -r requirements.txt
 
-log_ok "Alap Python csomagok telepítve"
+log_ok "Base Python packages installed"
 
-# NVIDIA CUDA csomagok (csak ha van NVIDIA GPU)
+# NVIDIA CUDA packages (only if NVIDIA GPU present)
 if [ "$HAS_NVIDIA" = true ]; then
-    log_info "NVIDIA CUDA csomagok telepítése..."
+    log_info "Installing NVIDIA CUDA packages..."
     pip install -r requirements-cuda.txt
-    log_ok "CUDA csomagok telepítve"
+    log_ok "CUDA packages installed"
 fi
 
 # =============================================================================
-# 6. KONFIGURÁCIÓ
+# 6. CONFIGURATION
 # =============================================================================
-log_info "Konfiguráció beállítása..."
+log_info "Setting up configuration..."
 
-# config.json létrehozása/frissítése a detektált GPU alapján
+# Create/update config.json based on detected GPU
 CONFIG_FILE="config.json"
 
 if [ "$HAS_NVIDIA" = true ]; then
@@ -191,7 +191,7 @@ else
     COMPUTE_TYPE="int8"
 fi
 
-# Ha nincs config.json, létrehozzuk
+# If no config.json exists, create it
 if [ ! -f "$CONFIG_FILE" ]; then
     cat > "$CONFIG_FILE" << EOF
 {
@@ -207,16 +207,16 @@ if [ ! -f "$CONFIG_FILE" ]; then
     "popup_display_duration": 5
 }
 EOF
-    log_ok "Konfiguráció létrehozva ($DEVICE mód)"
+    log_ok "Configuration created ($DEVICE mode)"
 else
-    log_ok "Meglévő konfiguráció megtartva"
+    log_ok "Existing configuration preserved"
 fi
 
 # =============================================================================
-# 7. CUDA LIBRARY PATH (csak NVIDIA)
+# 7. CUDA LIBRARY PATH (NVIDIA only)
 # =============================================================================
 if [ "$HAS_NVIDIA" = true ]; then
-    log_info "CUDA könyvtárak beállítása..."
+    log_info "Setting up CUDA libraries..."
 
     if ! grep -q "WHISPER_LD_LIBRARY_PATH" ~/.bashrc 2>/dev/null; then
         cat >> ~/.bashrc << 'EOF'
@@ -224,18 +224,18 @@ if [ "$HAS_NVIDIA" = true ]; then
 # WhisperRocket CUDA libraries
 export LD_LIBRARY_PATH=$(python3 -c 'import nvidia.cudnn; print(nvidia.cudnn.__path__[0])' 2>/dev/null)/lib:$(python3 -c 'import nvidia.cublas; print(nvidia.cublas.__path__[0])' 2>/dev/null)/lib:$LD_LIBRARY_PATH # WHISPER_LD_LIBRARY_PATH
 EOF
-        log_ok "CUDA path hozzáadva a .bashrc-hez"
+        log_ok "CUDA path added to .bashrc"
     else
-        log_ok "CUDA path már beállítva"
+        log_ok "CUDA path already configured"
     fi
 fi
 
 # =============================================================================
-# 8. ALKALMAZÁS LAUNCHER
+# 8. APPLICATION LAUNCHER
 # =============================================================================
-log_info "Alkalmazás launcher telepítése..."
+log_info "Installing application launcher..."
 
-# Dinamikusan generáljuk a .desktop fájlt a telepítési útvonallal
+# Dynamically generate .desktop file with installation path
 INSTALL_DIR=$(pwd)
 
 mkdir -p ~/.local/share/applications
@@ -254,35 +254,35 @@ EOF
 
 chmod +x start.sh
 
-log_ok "Alkalmazás hozzáadva a menühöz"
+log_ok "Application added to menu"
 
 # =============================================================================
-# ÖSSZEFOGLALÓ
+# SUMMARY
 # =============================================================================
 echo ""
 echo "╔══════════════════════════════════════════╗"
-echo "║     Telepítés sikeres!                   ║"
+echo "║     Installation complete!               ║"
 echo "╚══════════════════════════════════════════╝"
 echo ""
 
 if [ "$HAS_NVIDIA" = true ]; then
-    echo -e "  GPU mód:     ${GREEN}NVIDIA CUDA ($GPU_NAME)${NC}"
-    echo "  Teljesítmény: Gyors (GPU gyorsítás)"
+    echo -e "  GPU mode:    ${GREEN}NVIDIA CUDA ($GPU_NAME)${NC}"
+    echo "  Performance: Fast (GPU acceleration)"
 else
-    echo -e "  GPU mód:     ${YELLOW}CPU${NC}"
-    echo "  Teljesítmény: Lassabb (nincs GPU gyorsítás)"
+    echo -e "  GPU mode:    ${YELLOW}CPU${NC}"
+    echo "  Performance: Slower (no GPU acceleration)"
 fi
 
 echo ""
-echo "  Indítás:"
-echo "    • Alkalmazások menüből: WhisperRocket"
-echo "    • Terminálból: ./start.sh"
+echo "  Launch:"
+echo "    • From application menu: WhisperRocket"
+echo "    • From terminal: ./start.sh"
 echo ""
-echo "  Hotkey: Ctrl+Shift+S (nyomva tartás = felvétel)"
+echo "  Hotkey: Ctrl+Shift+S (hold to record)"
 echo ""
 
 if [ "$HAS_NVIDIA" = true ]; then
-    echo -e "${YELLOW}FONTOS: Indíts új terminált vagy futtasd:${NC}"
+    echo -e "${YELLOW}IMPORTANT: Open a new terminal or run:${NC}"
     echo "  source ~/.bashrc"
     echo ""
 fi

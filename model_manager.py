@@ -2,6 +2,7 @@
 """
 WhisperRocket - Modell Manager
 Whisper modellek cache kezelése (lista, méret, törlés)
+Supports both local directory (new) and HuggingFace cache (legacy)
 """
 import os
 import shutil
@@ -13,7 +14,10 @@ from platform_support import get_platform_handler
 platform_handler = get_platform_handler()
 HF_CACHE_DIR = str(platform_handler.get_cache_dir())
 
-# Modell prefixek backend-enként
+# Local models directory (new, simpler structure)
+LOCAL_MODELS_DIR = os.path.join(HF_CACHE_DIR, 'whisperrocket_models')
+
+# Modell prefixek backend-enként (legacy HF cache)
 MODEL_PREFIX_FASTER_WHISPER = "models--Systran--faster-whisper-"
 MODEL_PREFIX_MLX = "models--mlx-community--whisper-"
 MODEL_SUFFIX_MLX = "-mlx"
@@ -32,8 +36,21 @@ MODEL_INFO = {
 }
 
 
+def get_local_model_path(model_name, device=None):
+    """Returns the local model directory path (new structure)
+
+    Args:
+        model_name: Model name (e.g. "large-v3")
+        device: "mlx", "cuda", "cpu" or None
+    """
+    if device == "mlx":
+        return os.path.join(LOCAL_MODELS_DIR, f"whisper-{model_name}-mlx")
+    else:
+        return os.path.join(LOCAL_MODELS_DIR, f"faster-whisper-{model_name}")
+
+
 def get_cache_path(model_name, device=None):
-    """Visszaadja a modell cache útvonalát
+    """Visszaadja a modell cache útvonalát (legacy HF cache)
 
     Args:
         model_name: Modell neve (pl. "large-v3")
@@ -146,6 +163,22 @@ def get_active_model():
         return "large-v3"
 
 
+def is_model_downloaded_local(model_name, device=None):
+    """Check if model is downloaded in local directory (new structure)"""
+    local_path = get_local_model_path(model_name, device)
+
+    if not os.path.exists(local_path) or not os.path.isdir(local_path):
+        return False
+
+    # Check for essential files
+    required_files = ['model.bin', 'config.json']
+    for f in required_files:
+        if not os.path.exists(os.path.join(local_path, f)):
+            return False
+
+    return True
+
+
 def is_model_downloaded(model_name, device=None):
     """Ellenőrzi, hogy a modell TELJESEN le van-e töltve
 
@@ -153,10 +186,13 @@ def is_model_downloaded(model_name, device=None):
         model_name: Modell neve (pl. "large-v3")
         device: "mlx", "cuda", "cpu" vagy None (faster-whisper default)
 
-    A HuggingFace cache-ben ellenőrizzük:
-    1. Nincs-e .incomplete fájl a blobs könyvtárban
-    2. Van-e refs/main fájl VAGY snapshots tartalom
+    Checks both local directory (new) and HuggingFace cache (legacy)
     """
+    # First check local directory (new download location)
+    if is_model_downloaded_local(model_name, device):
+        return True
+
+    # Fall back to legacy HuggingFace cache
     model_path = get_cache_path(model_name, device)
 
     if not os.path.exists(model_path) or not os.path.isdir(model_path):
@@ -186,6 +222,22 @@ def is_model_downloaded(model_name, device=None):
                 return len(files) > 0
 
     return False
+
+
+def get_model_path_for_loading(model_name, device=None):
+    """Returns the path to use for loading the model
+
+    Checks local directory first, then falls back to model name for HF cache.
+    Returns the local path if model is there, otherwise returns the model name
+    (which will trigger HuggingFace cache loading).
+    """
+    # First check local directory
+    local_path = get_local_model_path(model_name, device)
+    if is_model_downloaded_local(model_name, device):
+        return local_path
+
+    # Fall back to model name (will use HF cache or download)
+    return model_name
 
 
 def has_any_model_downloaded(device=None):

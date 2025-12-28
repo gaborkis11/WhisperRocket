@@ -49,7 +49,7 @@ def get_device():
     """Get device - platform detection first, then config"""
     platform_handler = get_platform_handler()
 
-    # Platform detekció - macOS Apple Silicon = MLX, NVIDIA = CUDA
+    # Platform detection - macOS Apple Silicon = MLX, NVIDIA = CUDA
     gpu_type = platform_handler.get_gpu_type()
     if gpu_type == "mlx":
         return "mlx"
@@ -241,6 +241,8 @@ class SetupWizard(QDialog):
             return
 
         self.is_downloading = True
+        self.download_success = False
+        self.download_error = None
 
         # Update UI
         self.download_btn.setEnabled(False)
@@ -250,58 +252,56 @@ class SetupWizard(QDialog):
         for radio in self.model_radios.values():
             radio.setEnabled(False)
 
-        # Show progress - indeterminate mode (pörgő animáció)
+        # Show progress - determinate mode with percentage
         self.progress_frame.setVisible(True)
         self.progress_bar.setMinimum(0)
-        self.progress_bar.setMaximum(0)  # Indeterminate mode
-        self.progress_label.setText(t("wizard_downloading", self.lang) + " - please wait...")
+        self.progress_bar.setMaximum(100)
+        self.progress_bar.setValue(0)
+        self.progress_label.setText(t("wizard_downloading", self.lang) + " - 0%")
 
-        # Start download in background thread
-        import threading
-        self.download_thread = threading.Thread(
-            target=self._do_download,
-            daemon=True
-        )
-        self.download_thread.start()
+        # Start download using DownloadManager
+        self.download_manager.start_download(self.selected_model, self.device)
 
-        # Check completion timer
-        self.progress_timer.start(1000)
-
-    def _do_download(self):
-        """Download worker - runs in background thread"""
-        from huggingface_hub import snapshot_download
-        try:
-            if self.device == "mlx":
-                repo_id = f"mlx-community/whisper-{self.selected_model}-mlx"
-            else:
-                repo_id = f"Systran/faster-whisper-{self.selected_model}"
-
-            snapshot_download(repo_id=repo_id, local_files_only=False)
-            self.download_success = True
-        except Exception as e:
-            self.download_error = str(e)
-            self.download_success = False
+        # Progress update timer (faster updates for smooth UI)
+        self.progress_timer.start(250)
 
     def update_progress(self):
-        """Check if download completed (called by timer)"""
-        # Check if download thread finished
-        if hasattr(self, 'download_thread') and not self.download_thread.is_alive():
+        """Update progress display from DownloadManager (called by timer)"""
+        state = self.download_manager.get_state()
+
+        if state.completed:
             self.progress_timer.stop()
+            self.on_download_complete()
+            return
 
-            if hasattr(self, 'download_success') and self.download_success:
-                self.on_download_complete()
-            elif hasattr(self, 'download_error'):
-                self.progress_label.setText(f"Hiba: {self.download_error[:50]}")
-                self.progress_label.setStyleSheet("color: #ff6b6b;")
-                self.progress_bar.setMaximum(100)
-                self.progress_bar.setValue(0)
+        if state.error:
+            self.progress_timer.stop()
+            self.progress_label.setText(f"Error: {state.error[:50]}")
+            self.progress_label.setStyleSheet("color: #ff6b6b; font-size: 12px;")
+            self.progress_bar.setValue(0)
 
-                # Re-enable for retry
-                self.is_downloading = False
-                self.download_btn.setEnabled(True)
-                self.download_btn.setText(t("wizard_download_start", self.lang))
-                for radio in self.model_radios.values():
-                    radio.setEnabled(True)
+            # Re-enable for retry
+            self.is_downloading = False
+            self.download_manager.clear_error()
+            self.download_btn.setEnabled(True)
+            self.download_btn.setText(t("wizard_download_start", self.lang))
+            for radio in self.model_radios.values():
+                radio.setEnabled(True)
+            return
+
+        if state.is_downloading:
+            # Update progress bar
+            progress_percent = int(state.progress * 100)
+            self.progress_bar.setValue(progress_percent)
+
+            # Format progress text with details
+            downloaded = self.download_manager.format_size(state.downloaded_bytes)
+            total = self.download_manager.format_size(state.total_bytes)
+            speed = self.download_manager.format_speed()
+            eta = self.download_manager.format_eta()
+
+            progress_text = f"{t('wizard_downloading', self.lang)} - {progress_percent}%  ({downloaded} / {total})  {speed}  ETA: {eta}"
+            self.progress_label.setText(progress_text)
 
     def on_download_complete(self):
         """Handle download completion"""
@@ -330,7 +330,7 @@ class SetupWizard(QDialog):
         config["device"] = self.device
         config["setup_complete"] = True
 
-        # compute_type beállítása device alapján
+        # Set compute_type based on device
         if self.device in ("cuda", "mlx"):
             config["compute_type"] = "float16"
         else:

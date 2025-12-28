@@ -139,6 +139,7 @@ stream = None
 tray_icon = None
 hotkey_pressed = {}
 actual_sample_rate = config.get("sample_rate", 16000)  # Tényleges sample rate
+keyboard_listener = None  # pynput keyboard listener
 
 # Popup ablak változók
 amplitude_queue = Queue(maxsize=100)  # Thread-safe queue a waveform adatokhoz
@@ -214,13 +215,31 @@ def update_icon(color, title):
 @Slot()
 def quit_app():
     """Alkalmazás leállítása"""
-    global stream, qt_app
+    global stream, qt_app, keyboard_listener
     print("[INFO] Kilépés...")
+
+    # Stop keyboard listener
+    try:
+        if keyboard_listener:
+            keyboard_listener.stop()
+    except:
+        pass
+
+    # Stop audio stream
     if stream:
-        stream.stop()
-        stream.close()
+        try:
+            stream.stop()
+            stream.close()
+        except:
+            pass
+
+    # Quit Qt app
     if qt_app:
         qt_app.quit()
+
+    # Force exit if qt_app.quit() doesn't work
+    import sys
+    sys.exit(0)
 
 @Slot()
 def open_settings():
@@ -330,9 +349,13 @@ def load_model():
             print(f"[INFO] MLX modell: {config['model']}")
             sys.stdout.flush()
         else:
-            # Faster-whisper backend
+            # Faster-whisper backend - use local path if available
+            from model_manager import get_model_path_for_loading
+            model_path = get_model_path_for_loading(config["model"], config["device"])
+            print(f"[INFO] Loading model from: {model_path}")
+
             model = WhisperModel(
-                config["model"],
+                model_path,
                 device=config["device"],
                 compute_type=config["compute_type"]
             )
@@ -690,8 +713,9 @@ def main():
         sys.stdout.flush()
 
     # Hotkey listener
-    listener = keyboard.Listener(on_press=on_press, on_release=on_release)
-    listener.start()
+    global keyboard_listener
+    keyboard_listener = keyboard.Listener(on_press=on_press, on_release=on_release)
+    keyboard_listener.start()
 
     # System Tray ikon menüvel (Qt QSystemTrayIcon)
     tray_icon = QSystemTrayIcon(create_icon('gray'), qt_app)
@@ -703,7 +727,7 @@ def main():
     # Menü létrehozása
     tray_menu = QMenu()
     settings_action = QAction(t("tray_settings", ui_lang), qt_app)
-    settings_action.triggered.connect(open_settings)
+    settings_action.triggered.connect(open_settings, Qt.QueuedConnection)
     tray_menu.addAction(settings_action)
     tray_menu.addSeparator()
 
@@ -717,12 +741,13 @@ def main():
     # About menüpont
     from about_window import show_about
     about_action = QAction(t("tray_about", ui_lang), qt_app)
-    about_action.triggered.connect(show_about)
+    about_action.triggered.connect(show_about, Qt.QueuedConnection)
     tray_menu.addAction(about_action)
 
     tray_menu.addSeparator()
     quit_action = QAction(t("tray_quit", ui_lang), qt_app)
-    quit_action.triggered.connect(quit_app)
+    # Qt.QueuedConnection needed for QSystemTrayIcon menu actions
+    quit_action.triggered.connect(quit_app, Qt.QueuedConnection)
     tray_menu.addAction(quit_action)
 
     tray_icon.setContextMenu(tray_menu)
