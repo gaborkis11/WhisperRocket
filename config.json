@@ -8,5 +8,6 @@
   "sample_rate": 16000,
   "input_device": null,
   "output_device": null,
-  "popup_display_duration": 3
+  "popup_display_duration": 7,
+  "setup_complete": true
 }

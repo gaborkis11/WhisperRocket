@@ -20,6 +20,21 @@ from enum import Enum, auto
 from translations import t
 
 
+def init_gtk():
+    """GTK inicializálása - FŐSZÁLBÓL hívandó!"""
+    Gtk.init()
+
+
+def pump_gtk_events():
+    """
+    GTK event-ek feldolgozása - Qt timer-ből hívandó.
+    Ez lehetővé teszi, hogy a GTK ablak működjön a Qt event loop mellett.
+    """
+    context = GLib.MainContext.default()
+    while context.pending():
+        context.iteration(False)
+
+
 class OverlayState(Enum):
     """Overlay állapotok"""
     HIDDEN = auto()
@@ -286,11 +301,22 @@ class WaylandOverlay:
         self._message_timer_id = None
         self._auto_hide_timer_id = None
 
-        # GTK inicializálás (lazy)
+        # GTK inicializálás - AZONNAL, nem lazy
         self._window = None
         self._waveform = None
         self._rocket = None
         self._initialized = False
+
+        # Ablak előre létrehozása ÉS "bemelegítése"
+        self._ensure_initialized()
+        # Warmup: megjelenítjük, pumpálunk, elrejtjük
+        self._window.show_all()
+        # Manuális GTK event feldolgozás (mert a Qt timer még nem fut!)
+        for _ in range(50):  # Több iteráció a biztonság kedvéért
+            pump_gtk_events()
+        self._window.hide()
+        for _ in range(10):
+            pump_gtk_events()
 
     def _ensure_initialized(self):
         """GTK ablak inicializálása"""
@@ -450,8 +476,8 @@ class WaylandOverlay:
         return False
 
     def _run_on_gtk_thread(self, func):
-        """Függvény futtatása a GTK főszálon"""
-        GLib.idle_add(func)
+        """Függvény futtatása - már a főszálban vagyunk, közvetlen hívás"""
+        func()
 
     # === Signal-szerű interface ===
 
@@ -683,71 +709,54 @@ class WaylandOverlay:
             self._auto_hide_timer_id = None
 
 
-def start_gtk_main_loop():
-    """GTK main loop indítása háttérszálban - szinkronizálva"""
-    ready_event = threading.Event()
-
-    def run_gtk():
-        # Jelzés küldése, amint a main loop fut
-        def signal_ready():
-            ready_event.set()
-            return False  # Ne ismétlődjön
-
-        # Ez a callback azonnal lefut, amint a Gtk.main() elindul
-        GLib.idle_add(signal_ready)
-
-        # Main loop indítása (blokkoló hívás)
-        Gtk.main()
-
-    thread = threading.Thread(target=run_gtk, daemon=True)
-    thread.start()
-
-    # KRITIKUS: Várjunk, amíg a main loop TÉNYLEGESEN fut
-    if not ready_event.wait(timeout=5.0):
-        print("[ERROR] GTK main loop nem indult el 5 másodpercen belül!")
-    else:
-        print("[INFO] GTK main loop ready")
-
-    return thread
-
-
-# Tesztelés
+# Tesztelés (főszálas GTK)
 if __name__ == "__main__":
     from queue import Queue
     import time
 
-    q = Queue()
-    overlay = WaylandOverlay(q, "Alt+S", 5, "en")
+    # GTK inicializálása FŐSZÁLBAN
+    init_gtk()
 
-    # GTK main loop háttérben
-    start_gtk_main_loop()
+    # Amplitude queue és overlay
+    amp_queue = Queue()
+    overlay = WaylandOverlay(amp_queue, "Alt+S", 5, "en")
 
-    # Teszt szekvencia
-    time.sleep(0.5)
+    # Teszt: recording megjelenítése
     print("Showing recording...")
     overlay.request_show_popup.emit()
 
-    # Szimulált audio
+    # Szimulált audio háttérszálban
     def simulate_audio():
         import math
         t = 0
         while True:
             amp = abs(math.sin(t * 3)) * 0.5 + random.random() * 0.2
-            q.put(amp)
+            amp_queue.put(amp)
             t += 0.05
             time.sleep(0.05)
 
-    import threading
     audio_thread = threading.Thread(target=simulate_audio, daemon=True)
     audio_thread.start()
 
-    time.sleep(4)
-    print("Showing processing...")
-    overlay.request_show_processing.emit()
+    # GTK main loop futtatása (főszál)
+    # Ez blokkoló - 4 másodperc után processing
+    def switch_to_processing():
+        print("Showing processing...")
+        overlay.request_show_processing.emit()
+        return False
 
-    time.sleep(4)
-    print("Showing text...")
-    overlay.request_show_text.emit("This is a test transcription that shows up after processing is complete.")
+    def switch_to_text():
+        print("Showing text...")
+        overlay.request_show_text.emit("This is a test transcription!")
+        return False
 
-    time.sleep(8)
-    print("Done!")
+    def quit_app():
+        print("Done!")
+        Gtk.main_quit()
+        return False
+
+    GLib.timeout_add(4000, switch_to_processing)
+    GLib.timeout_add(8000, switch_to_text)
+    GLib.timeout_add(14000, quit_app)
+
+    Gtk.main()

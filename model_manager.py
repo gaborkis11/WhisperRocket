@@ -96,6 +96,7 @@ def get_downloaded_models(device=None):
     Returns: [{"name": "large-v3", "size": 3045678901, "size_formatted": "2.84 GB", "path": "/...", "backend": "mlx"}]
     """
     models = []
+    found_models = set()  # Track already found models to avoid duplicates
 
     if not os.path.exists(HF_CACHE_DIR):
         return models
@@ -104,22 +105,54 @@ def get_downloaded_models(device=None):
     if device is None:
         device = get_current_device()
 
-    # Prefix kiválasztása device alapján
+    # Backend és prefix beállítása
     if device == "mlx":
-        prefix = MODEL_PREFIX_MLX
-        suffix = MODEL_SUFFIX_MLX
+        local_prefix = "whisper-"
+        local_suffix = "-mlx"
+        legacy_prefix = MODEL_PREFIX_MLX
+        legacy_suffix = MODEL_SUFFIX_MLX
         backend = "mlx"
     else:
-        prefix = MODEL_PREFIX_FASTER_WHISPER
-        suffix = ""
+        local_prefix = "faster-whisper-"
+        local_suffix = ""
+        legacy_prefix = MODEL_PREFIX_FASTER_WHISPER
+        legacy_suffix = ""
         backend = "faster-whisper"
 
+    # 1. Először ellenőrizzük a LOCAL_MODELS_DIR mappát (új struktúra)
+    if os.path.exists(LOCAL_MODELS_DIR) and os.path.isdir(LOCAL_MODELS_DIR):
+        for dirname in os.listdir(LOCAL_MODELS_DIR):
+            if dirname.startswith(local_prefix):
+                # Modell név kinyerése
+                model_name = dirname.replace(local_prefix, "")
+                if local_suffix and model_name.endswith(local_suffix):
+                    model_name = model_name[:-len(local_suffix)]
+
+                model_path = os.path.join(LOCAL_MODELS_DIR, dirname)
+
+                if os.path.isdir(model_path) and is_model_downloaded_local(model_name, device):
+                    size = get_directory_size(model_path)
+                    models.append({
+                        "name": model_name,
+                        "display_name": MODEL_INFO.get(model_name, {}).get("name", model_name),
+                        "size": size,
+                        "size_formatted": format_size(size),
+                        "path": model_path,
+                        "backend": backend
+                    })
+                    found_models.add(model_name)
+
+    # 2. Utána ellenőrizzük a legacy HF cache-t
     for dirname in os.listdir(HF_CACHE_DIR):
-        if dirname.startswith(prefix):
+        if dirname.startswith(legacy_prefix):
             # Modell név kinyerése
-            model_name = dirname.replace(prefix, "")
-            if suffix and model_name.endswith(suffix):
-                model_name = model_name[:-len(suffix)]
+            model_name = dirname.replace(legacy_prefix, "")
+            if legacy_suffix and model_name.endswith(legacy_suffix):
+                model_name = model_name[:-len(legacy_suffix)]
+
+            # Skip if already found in local directory
+            if model_name in found_models:
+                continue
 
             model_path = os.path.join(HF_CACHE_DIR, dirname)
 
@@ -290,18 +323,27 @@ def delete_model(model_name, device=None):
 
     # Aktív modell ellenőrzés
     if model_name == get_active_model():
-        return False, "Az aktív modell nem törölhető!"
+        return False, "active_model_cannot_delete"
 
-    model_path = get_cache_path(model_name, device)
+    # Először ellenőrizzük a lokális mappát (új struktúra)
+    local_path = get_local_model_path(model_name, device)
+    if os.path.exists(local_path) and os.path.isdir(local_path):
+        try:
+            shutil.rmtree(local_path)
+            return True, f"model_deleted:{model_name}"
+        except Exception as e:
+            return False, f"delete_error:{str(e)}"
 
-    if not os.path.exists(model_path):
-        return False, "A modell nem található!"
+    # Ha nincs lokálisan, ellenőrizzük a legacy cache-t
+    legacy_path = get_cache_path(model_name, device)
+    if os.path.exists(legacy_path) and os.path.isdir(legacy_path):
+        try:
+            shutil.rmtree(legacy_path)
+            return True, f"model_deleted:{model_name}"
+        except Exception as e:
+            return False, f"delete_error:{str(e)}"
 
-    try:
-        shutil.rmtree(model_path)
-        return True, f"A {model_name} modell törölve!"
-    except Exception as e:
-        return False, f"Törlési hiba: {str(e)}"
+    return False, "model_not_found"
 
 
 def delete_all_unused():

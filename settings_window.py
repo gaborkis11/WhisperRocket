@@ -478,10 +478,19 @@ class SettingsWindow(QMainWindow):
         if reply == QMessageBox.StandardButton.Yes:
             success, message = delete_model(model_name)
             if success:
-                QMessageBox.information(self, t("dlg_success", self.ui_lang), message)
+                QMessageBox.information(self, t("dlg_success", self.ui_lang), t("dlg_model_deleted", self.ui_lang, model=model_name))
                 self.refresh_models_list()
             else:
-                QMessageBox.warning(self, t("dlg_error", self.ui_lang), message)
+                # Translate error messages
+                if message == "active_model_cannot_delete":
+                    msg = t("info_active_model", self.ui_lang)
+                elif message == "model_not_found":
+                    msg = t("dlg_model_not_found", self.ui_lang)
+                elif message.startswith("delete_error:"):
+                    msg = t("dlg_delete_error", self.ui_lang, error=message.split(":", 1)[1])
+                else:
+                    msg = message
+                QMessageBox.warning(self, t("dlg_error", self.ui_lang), msg)
 
     def delete_all_unused_models(self):
         """Összes nem használt modell törlése"""

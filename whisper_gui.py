@@ -694,15 +694,19 @@ def main():
 
     if _is_wayland_session():
         try:
-            from wayland_overlay import WaylandOverlay, start_gtk_main_loop
-            # GTK main loop indítása háttérszálban
-            start_gtk_main_loop()
+            from wayland_overlay import WaylandOverlay, init_gtk, pump_gtk_events
+            # GTK inicializálása FŐSZÁLBAN
+            init_gtk()
             popup_window = WaylandOverlay(
                 amplitude_queue,
                 config["hotkey"],
                 config.get("popup_display_duration", 5),
                 ui_lang
             )
+            # Qt timer a GTK event-ek pumpálásához (10ms intervallum)
+            gtk_pump_timer = QTimer()
+            gtk_pump_timer.timeout.connect(pump_gtk_events)
+            gtk_pump_timer.start(10)
             print("[INFO] Wayland detected - using GTK layer-shell overlay (no focus stealing)")
         except ImportError as e:
             print(f"[WARN] GTK layer-shell not available: {e}")
