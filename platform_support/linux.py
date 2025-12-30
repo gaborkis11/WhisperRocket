@@ -32,15 +32,35 @@ class LinuxHandler(PlatformHandler):
         """Cache mappa: ~/.cache/huggingface/hub/"""
         return Path.home() / ".cache" / "huggingface" / "hub"
 
+    def _is_wayland(self) -> bool:
+        """Check if running on Wayland"""
+        session_type = os.environ.get('XDG_SESSION_TYPE', '').lower()
+        if session_type == 'wayland':
+            return True
+        if os.environ.get('WAYLAND_DISPLAY'):
+            return True
+        return False
+
     def paste_text(self, is_terminal: bool = False) -> None:
-        """Szöveg beillesztése xdotool-lal
+        """Szöveg beillesztése - Wayland: wtype, X11: xdotool
 
         Args:
             is_terminal: True ha terminál/IDE ablakba kell beilleszteni (Ctrl+Shift+V)
         """
-        paste_key = "ctrl+shift+v" if is_terminal else "ctrl+v"
         try:
-            subprocess.run(['xdotool', 'key', paste_key], check=True)
+            if self._is_wayland():
+                # Wayland: use wtype
+                # MINDIG Ctrl+Shift+V-t használunk, mert:
+                # 1. Wayland-en nem tudjuk detektálni az aktív ablak típusát
+                # 2. Ctrl+Shift+V mindenhol működik (terminál ÉS normál appok)
+                subprocess.run(['wtype', '-M', 'ctrl', '-M', 'shift', '-k', 'v', '-m', 'shift', '-m', 'ctrl'], check=True)
+            else:
+                # X11: use xdotool - itt tudjuk detektálni a terminált
+                paste_key = "ctrl+shift+v" if is_terminal else "ctrl+v"
+                subprocess.run(['xdotool', 'key', paste_key], check=True)
+        except FileNotFoundError as e:
+            tool = "wtype" if self._is_wayland() else "xdotool"
+            print(f"[FIGYELEM] {tool} nincs telepítve! Telepítsd: sudo apt install {tool}")
         except Exception as e:
             print(f"[FIGYELEM] Beillesztés sikertelen: {e}")
 
@@ -81,8 +101,7 @@ class LinuxHandler(PlatformHandler):
             ).stdout.strip().lower()
 
             return f"{window_name}|{window_class}"
-        except Exception as e:
-            print(f"[DEBUG] Ablak detektálás sikertelen: {e}")
+        except Exception:
             return ""
 
     def is_terminal_window(self, window_class: str) -> bool:

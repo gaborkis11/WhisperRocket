@@ -10,6 +10,7 @@ import sounddevice as sd
 import soundfile as sf
 import pyperclip
 from pynput import keyboard
+from platform_support.keyboard_listener import create_keyboard_listener, get_session_type
 import numpy as np
 from PySide6.QtWidgets import QApplication, QSystemTrayIcon, QMenu
 from PySide6.QtCore import QTimer, Slot, Signal, QObject, Qt
@@ -589,8 +590,11 @@ def on_press(key):
             cancel_recording()
         return
 
-    # Modifier billentyűk
-    if key in [keyboard.Key.ctrl_l, keyboard.Key.ctrl_r]:
+    # Check for evdev modifier keys (has _modifier_name attribute)
+    if hasattr(key, '_modifier_name') and key._modifier_name:
+        hotkey_pressed[key._modifier_name] = True
+    # Modifier billentyűk (pynput)
+    elif key in [keyboard.Key.ctrl_l, keyboard.Key.ctrl_r]:
         hotkey_pressed['ctrl'] = True
     elif key in [keyboard.Key.alt_l, keyboard.Key.alt_r, keyboard.Key.alt_gr]:
         hotkey_pressed['alt'] = True
@@ -599,15 +603,17 @@ def on_press(key):
     elif key in [keyboard.Key.cmd, keyboard.Key.cmd_r]:
         hotkey_pressed['cmd'] = True
     else:
-        # Normál billentyűk - használjuk a vk kódot (macOS Alt workaround)
-        vk_key = get_key_from_vk(key)
-        if vk_key:
-            hotkey_pressed[vk_key] = True
-        elif hasattr(key, 'char') and key.char:
+        # Normál billentyűk
+        # Evdev keys: use char attribute directly (don't use macOS VK codes!)
+        if hasattr(key, 'char') and key.char:
             hotkey_pressed[key.char.lower()] = True
-        elif hasattr(key, 'name'):
+        elif hasattr(key, 'name') and key.name:
             hotkey_pressed[key.name.lower()] = True
-
+        else:
+            # Fallback: macOS VK codes (pynput on macOS)
+            vk_key = get_key_from_vk(key)
+            if vk_key:
+                hotkey_pressed[vk_key] = True
     if check_hotkey_match():
         if not recording:
             start_recording()
@@ -616,7 +622,11 @@ def on_press(key):
 
 def on_release(key):
     global hotkey_pressed
-    if key in [keyboard.Key.ctrl_l, keyboard.Key.ctrl_r]:
+    # Check for evdev modifier keys (has _modifier_name attribute)
+    if hasattr(key, '_modifier_name') and key._modifier_name:
+        hotkey_pressed[key._modifier_name] = False
+    # Modifier billentyűk (pynput)
+    elif key in [keyboard.Key.ctrl_l, keyboard.Key.ctrl_r]:
         hotkey_pressed['ctrl'] = False
     elif key in [keyboard.Key.alt_l, keyboard.Key.alt_r, keyboard.Key.alt_gr]:
         hotkey_pressed['alt'] = False
@@ -625,14 +635,17 @@ def on_release(key):
     elif key in [keyboard.Key.cmd, keyboard.Key.cmd_r]:
         hotkey_pressed['cmd'] = False
     else:
-        # Normál billentyűk - használjuk a vk kódot (macOS Alt workaround)
-        vk_key = get_key_from_vk(key)
-        if vk_key:
-            hotkey_pressed[vk_key] = False
-        elif hasattr(key, 'char') and key.char:
+        # Normál billentyűk
+        # Evdev keys: use char attribute directly (don't use macOS VK codes!)
+        if hasattr(key, 'char') and key.char:
             hotkey_pressed[key.char.lower()] = False
-        elif hasattr(key, 'name'):
+        elif hasattr(key, 'name') and key.name:
             hotkey_pressed[key.name.lower()] = False
+        else:
+            # Fallback: macOS VK codes (pynput on macOS)
+            vk_key = get_key_from_vk(key)
+            if vk_key:
+                hotkey_pressed[vk_key] = False
 
 # Fő program
 def main():
@@ -673,13 +686,43 @@ def main():
             sys.exit(0)  # Biztonsági exit (nem kellene ide jutni)
 
     # Popup ablak létrehozása (hotkey és nyelv átadása)
-    from popup_window import RecordingPopup
-    popup_window = RecordingPopup(
-        amplitude_queue,
-        config["hotkey"],
-        config.get("popup_display_duration", 5),
-        ui_lang
-    )
+    # Wayland: GTK layer-shell (nem lop fókuszt)
+    # X11: Qt PopupManager (eredeti működés)
+    def _is_wayland_session():
+        session = os.environ.get('XDG_SESSION_TYPE', '').lower()
+        return session == 'wayland' or bool(os.environ.get('WAYLAND_DISPLAY'))
+
+    if _is_wayland_session():
+        try:
+            from wayland_overlay import WaylandOverlay, start_gtk_main_loop
+            # GTK main loop indítása háttérszálban
+            start_gtk_main_loop()
+            popup_window = WaylandOverlay(
+                amplitude_queue,
+                config["hotkey"],
+                config.get("popup_display_duration", 5),
+                ui_lang
+            )
+            print("[INFO] Wayland detected - using GTK layer-shell overlay (no focus stealing)")
+        except ImportError as e:
+            print(f"[WARN] GTK layer-shell not available: {e}")
+            print("[WARN] Falling back to Qt popup (may steal focus on Wayland)")
+            from popup_window import PopupManager
+            popup_window = PopupManager(
+                amplitude_queue,
+                config["hotkey"],
+                config.get("popup_display_duration", 5),
+                ui_lang
+            )
+    else:
+        from popup_window import PopupManager
+        popup_window = PopupManager(
+            amplitude_queue,
+            config["hotkey"],
+            config.get("popup_display_duration", 5),
+            ui_lang
+        )
+        print("[INFO] X11 detected - using Qt popup")
 
     # Audio stream (rendszer alapértelmezett mikrofon)
     global actual_sample_rate
@@ -705,17 +748,24 @@ def main():
     print("[INFO] Audio rendszer inicializálva")
     sys.stdout.flush()
 
-    # macOS: Input Monitoring - csak konzol figyelmeztetés (IOHIDCheckAccess nem megbízható)
+    # Platform-specifikus figyelmeztetések
     import platform as py_platform
     if py_platform.system() == "Darwin":
         print("[INFO] macOS: Ha a hotkey nem működik, add hozzá az appot az Input Monitoring-hoz:")
         print("[INFO]   System Settings → Privacy & Security → Input Monitoring")
         sys.stdout.flush()
+    elif py_platform.system() == "Linux":
+        session_type = get_session_type()
+        if session_type == "wayland":
+            print("[INFO] Wayland session detected")
+            print("[INFO] Ha a hotkey nem működik, add hozzá a felhasználót az input csoporthoz:")
+            print("[INFO]   sudo usermod -a -G input $USER")
+            print("[INFO]   Majd jelentkezz ki és vissza.")
+            sys.stdout.flush()
 
-    # Hotkey listener
+    # Hotkey listener (platform-aware: X11/Wayland/macOS)
     global keyboard_listener
-    keyboard_listener = keyboard.Listener(on_press=on_press, on_release=on_release)
-    keyboard_listener.start()
+    keyboard_listener = create_keyboard_listener(on_press=on_press, on_release=on_release)
 
     # System Tray ikon menüvel (Qt QSystemTrayIcon)
     tray_icon = QSystemTrayIcon(create_icon('gray'), qt_app)

@@ -69,6 +69,9 @@ TRANSLATIONS = {
         "dlg_download_ask": "{model} is not downloaded.\n\nDownload now?",
         "dlg_settings_saved": "Settings saved!\n\nChanges take effect after restart.",
         "dlg_download_in_progress": "A download is in progress.\n\nCancel and switch to new model?",
+        "dlg_model_deleted": "Model {model} deleted!",
+        "dlg_model_not_found": "Model not found.",
+        "dlg_delete_error": "Delete error: {error}",
 
         # Download
         "download_title": "Downloading: {model}",
@@ -183,6 +186,9 @@ TRANSLATIONS = {
         "dlg_download_ask": "A(z) {model} modell nincs letöltve.\n\nLetöltöd most?",
         "dlg_settings_saved": "Beállítások elmentve!\n\nA változások újraindítás után lépnek érvénybe.",
         "dlg_download_in_progress": "Letöltés folyamatban.\n\nMegszakítod és váltasz az új modellre?",
+        "dlg_model_deleted": "A(z) {model} modell törölve!",
+        "dlg_model_not_found": "A modell nem található.",
+        "dlg_delete_error": "Törlési hiba: {error}",
 
         # Download
         "download_title": "Letöltés: {model}",

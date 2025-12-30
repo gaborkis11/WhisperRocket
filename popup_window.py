@@ -5,9 +5,10 @@ Valós idejű waveform vizualizáció felvétel közben
 Transzkripció utáni szöveg megjelenítés
 """
 from PySide6.QtWidgets import QWidget, QApplication
-from PySide6.QtCore import Qt, QTimer, QPoint, QRectF, Slot, Signal
+from PySide6.QtCore import Qt, QTimer, QPoint, QRectF, Slot, Signal, QObject
 from PySide6.QtGui import QPainter, QColor, QPen, QBrush, QPainterPath, QFont, QFontDatabase
 from queue import Queue, Empty
+import os
 
 # Font fallback lista - az első elérhető fontot használjuk
 FONT_FALLBACK = ["Noto Sans", "Ubuntu", "DejaVu Sans", "Liberation Sans", "Arial", "Sans Serif"]
@@ -54,6 +55,7 @@ class RecordingPopup(QWidget):
     request_show_processing = Signal()
     request_show_text = Signal(str)
     request_hide_popup = Signal()
+    popup_closed = Signal()  # Jelzi a managernek hogy bezáródott
 
     def __init__(self, amplitude_queue: Queue, hotkey: str = "Ctrl+Shift+S", popup_duration: int = 5, ui_language: str = "en"):
         super().__init__()
@@ -154,7 +156,7 @@ class RecordingPopup(QWidget):
                 Qt.WindowType.WindowDoesNotAcceptFocus
             )
         else:
-            # Linux/Windows: Tool flag megtartása (nem jelenik meg taskbar-on)
+            # Linux: Tool ablak, fókusz nélkül
             self.setWindowFlags(
                 Qt.WindowType.FramelessWindowHint |
                 Qt.WindowType.WindowStaysOnTopHint |
@@ -162,7 +164,7 @@ class RecordingPopup(QWidget):
                 Qt.WindowType.WindowDoesNotAcceptFocus
             )
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
-        self.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating)  # Megjelenéskor se aktiválódjon
+        self.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating)
 
         # Méret
         self.setFixedSize(350, 80)
@@ -699,17 +701,15 @@ class RecordingPopup(QWidget):
 
     @Slot()
     def show_popup(self):
-        """Popup megjelenítése felvételhez"""
+        """Popup megjelenítése felvételhez (X11)"""
         self.state = PopupState.RECORDING
-        self.auto_hide_timer.stop()  # Timer leállítása ha fut
+        self.auto_hide_timer.stop()
+
         self.setFixedSize(self.base_width, self.base_height)
-        if self.saved_position:
-            self.move(self.saved_position)
-        else:
-            self._center_on_screen()
+        self._center_on_screen()
+
         self.show()
         self.raise_()
-        self.activateWindow()
 
     @Slot()
     def show_processing(self):
@@ -760,15 +760,143 @@ class RecordingPopup(QWidget):
 
     @Slot()
     def hide_popup(self):
-        """Popup elrejtése"""
+        """Popup elrejtése (X11 - egyszerű hide)"""
         self.state = PopupState.HIDDEN
         self.auto_hide_timer.stop()
         self.countdown_timer.stop()
-        self.message_timer.stop()  # Processing timer leállítása
-        self.hide()
+        self.message_timer.stop()
+
         # Amplitude reset
         self.current_amplitude = 0.0
         self.smoothed_amplitude = 0.0
+
+        self.hide()
+
+
+def _is_wayland() -> bool:
+    """Check if running on Wayland"""
+    session_type = os.environ.get('XDG_SESSION_TYPE', '').lower()
+    if session_type == 'wayland':
+        return True
+    if os.environ.get('WAYLAND_DISPLAY'):
+        return True
+    return False
+
+
+class PopupManager(QObject):
+    """
+    Popup ablak manager - Wayland workaround.
+    Wayland-en a Qt hide()/show() nem működik megbízhatóan,
+    ezért minden megjelenítéskor új ablakot hozunk létre.
+    """
+
+    # Signalok a thread-safe kommunikációhoz (publikus API)
+    request_show_popup = Signal()
+    request_show_processing = Signal()
+    request_show_text = Signal(str)
+    request_hide_popup = Signal()
+
+    def __init__(self, amplitude_queue: Queue, hotkey: str = "Ctrl+Shift+S",
+                 popup_duration: int = 5, ui_language: str = "en"):
+        super().__init__()
+        self.amplitude_queue = amplitude_queue
+        self.hotkey = hotkey
+        self.popup_duration = popup_duration
+        self.ui_language = ui_language
+
+        self._popup = None  # Aktuális popup instance
+        self._saved_position = None  # Pozíció megőrzése session alatt
+        self._is_wayland = _is_wayland()
+
+        # Signal összekötések
+        self.request_show_popup.connect(self._show_popup)
+        self.request_show_processing.connect(self._show_processing)
+        self.request_show_text.connect(self._show_text)
+        self.request_hide_popup.connect(self._hide_popup)
+
+    def _create_popup(self) -> RecordingPopup:
+        """Új popup példány létrehozása"""
+        popup = RecordingPopup(
+            self.amplitude_queue,
+            self.hotkey,
+            self.popup_duration,
+            self.ui_language
+        )
+        # Pozíció visszaállítása ha van mentett
+        if self._saved_position:
+            popup.saved_position = self._saved_position
+
+        # Wayland: csatlakozás a popup_closed signal-hoz
+        if self._is_wayland:
+            popup.popup_closed.connect(self._on_popup_closed)
+
+        return popup
+
+    @Slot()
+    def _on_popup_closed(self):
+        """Popup bezáródott - referencia nullázása (Wayland)"""
+        # Pozíció mentése ha volt
+        if self._popup and self._popup.saved_position:
+            self._saved_position = self._popup.saved_position
+        # Referencia nullázása (a popup már törli magát)
+        self._popup = None
+
+    def _destroy_popup(self):
+        """Popup törlése (Wayland workaround)"""
+        if self._popup:
+            # Pozíció mentése ha a user mozgatta
+            if self._popup.saved_position:
+                self._saved_position = self._popup.saved_position
+            self._popup.close()
+            self._popup.deleteLater()
+            self._popup = None
+
+    @Slot()
+    def _show_popup(self):
+        """Popup megjelenítése felvételhez"""
+        if self._is_wayland:
+            # Wayland: mindig új ablakot hozunk létre
+            self._destroy_popup()
+            self._popup = self._create_popup()
+            self._popup.show_popup()
+        else:
+            # X11: újrafelhasználhatjuk az ablakot
+            if not self._popup:
+                self._popup = self._create_popup()
+            self._popup.request_show_popup.emit()
+
+    @Slot()
+    def _show_processing(self):
+        """Processing állapot megjelenítése"""
+        if self._popup:
+            if self._is_wayland:
+                self._popup.show_processing()
+            else:
+                self._popup.request_show_processing.emit()
+
+    @Slot(str)
+    def _show_text(self, text: str):
+        """Szöveg megjelenítése transzkripció után"""
+        if self._popup:
+            if self._is_wayland:
+                self._popup.show_text(text)
+            else:
+                self._popup.request_show_text.emit(text)
+
+    @Slot()
+    def _hide_popup(self):
+        """Popup elrejtése"""
+        if self._popup:
+            # Pozíció mentése ha a user mozgatta
+            if self._popup.saved_position:
+                self._saved_position = self._popup.saved_position
+
+            if self._is_wayland:
+                # Wayland: ablak törlése
+                self._destroy_popup()
+            else:
+                # X11: egyszerű hide
+                self._popup.request_hide_popup.emit()
 
 
 # Tesztelés

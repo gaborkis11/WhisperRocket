@@ -144,7 +144,104 @@ esac
 log_ok "System packages installed"
 
 # =============================================================================
-# 4. PYTHON ENVIRONMENT
+# 4. WAYLAND/X11 DETECTION & INPUT GROUP
+# =============================================================================
+log_info "Detecting display server..."
+
+SESSION_TYPE="${XDG_SESSION_TYPE:-unknown}"
+NEEDS_RELOGIN=false
+
+# Fallback detection if XDG_SESSION_TYPE is not set
+if [ "$SESSION_TYPE" = "unknown" ]; then
+    if [ -n "$WAYLAND_DISPLAY" ]; then
+        SESSION_TYPE="wayland"
+    elif [ -n "$DISPLAY" ]; then
+        SESSION_TYPE="x11"
+    fi
+fi
+
+if [ "$SESSION_TYPE" = "wayland" ]; then
+    log_ok "Wayland session detected"
+    log_info "Wayland requires 'input' group membership for global hotkeys"
+
+    # Check if user is in input group
+    if groups "$USER" | grep -q '\binput\b'; then
+        log_ok "User is already in 'input' group"
+    else
+        log_warn "User is NOT in 'input' group"
+        echo ""
+        echo -e "${YELLOW}┌─────────────────────────────────────────────────────────────┐${NC}"
+        echo -e "${YELLOW}│  WAYLAND HOTKEY SUPPORT                                     │${NC}"
+        echo -e "${YELLOW}├─────────────────────────────────────────────────────────────┤${NC}"
+        echo -e "${YELLOW}│  Wayland sessions require the user to be in the 'input'    │${NC}"
+        echo -e "${YELLOW}│  group for global hotkey support.                          │${NC}"
+        echo -e "${YELLOW}│                                                            │${NC}"
+        echo -e "${YELLOW}│  Without this, the recording hotkey will NOT work.         │${NC}"
+        echo -e "${YELLOW}└─────────────────────────────────────────────────────────────┘${NC}"
+        echo ""
+        read -p "Add user '$USER' to 'input' group? [Y/n] " -n 1 -r
+        echo ""
+
+        if [[ $REPLY =~ ^[Nn]$ ]]; then
+            log_warn "Skipping input group addition"
+            log_warn "Hotkeys may not work on Wayland!"
+        else
+            sudo usermod -a -G input "$USER"
+            if [ $? -eq 0 ]; then
+                log_ok "User added to 'input' group"
+                NEEDS_RELOGIN=true
+            else
+                log_error "Failed to add user to 'input' group"
+                log_warn "You can manually run: sudo usermod -a -G input $USER"
+            fi
+        fi
+    fi
+elif [ "$SESSION_TYPE" = "x11" ]; then
+    log_ok "X11 session detected (hotkeys will work without additional setup)"
+else
+    log_warn "Could not detect display server (SESSION_TYPE: $SESSION_TYPE)"
+    log_warn "If hotkeys don't work, you may need to add yourself to the 'input' group:"
+    log_warn "  sudo usermod -a -G input \$USER"
+fi
+
+# Install wtype for Wayland auto-paste support
+if [ "$SESSION_TYPE" = "wayland" ]; then
+    log_info "Installing wtype for Wayland auto-paste support..."
+    case $PKG_MANAGER in
+        apt)
+            sudo apt install -y wtype 2>/dev/null || log_warn "wtype not available in repos, auto-paste may not work"
+            ;;
+        dnf)
+            sudo dnf install -y wtype 2>/dev/null || log_warn "wtype not available in repos, auto-paste may not work"
+            ;;
+        pacman)
+            sudo pacman -S --noconfirm wtype 2>/dev/null || log_warn "wtype not available in repos, auto-paste may not work"
+            ;;
+        zypper)
+            sudo zypper install -y wtype 2>/dev/null || log_warn "wtype not available in repos, auto-paste may not work"
+            ;;
+    esac
+
+    # Install GTK Layer Shell for focus-free popup overlay
+    log_info "Installing GTK Layer Shell for Wayland overlay support..."
+    case $PKG_MANAGER in
+        apt)
+            sudo apt install -y libgtk-layer-shell-dev gir1.2-gtklayershell-0.1 python3-gi 2>/dev/null || log_warn "GTK Layer Shell not available, popup may steal focus"
+            ;;
+        dnf)
+            sudo dnf install -y gtk-layer-shell-devel python3-gobject 2>/dev/null || log_warn "GTK Layer Shell not available, popup may steal focus"
+            ;;
+        pacman)
+            sudo pacman -S --noconfirm gtk-layer-shell python-gobject 2>/dev/null || log_warn "GTK Layer Shell not available, popup may steal focus"
+            ;;
+        zypper)
+            sudo zypper install -y gtk-layer-shell-devel python3-gobject 2>/dev/null || log_warn "GTK Layer Shell not available, popup may steal focus"
+            ;;
+    esac
+fi
+
+# =============================================================================
+# 5. PYTHON ENVIRONMENT
 # =============================================================================
 log_info "Creating Python virtual environment..."
 
@@ -176,7 +273,7 @@ if [ "$HAS_NVIDIA" = true ]; then
 fi
 
 # =============================================================================
-# 6. CONFIGURATION
+# 7. CONFIGURATION
 # =============================================================================
 log_info "Setting up configuration..."
 
@@ -213,7 +310,7 @@ else
 fi
 
 # =============================================================================
-# 7. CUDA LIBRARY PATH (NVIDIA only)
+# 8. CUDA LIBRARY PATH (NVIDIA only)
 # =============================================================================
 if [ "$HAS_NVIDIA" = true ]; then
     log_info "Setting up CUDA libraries..."
@@ -231,7 +328,7 @@ EOF
 fi
 
 # =============================================================================
-# 8. APPLICATION LAUNCHER
+# 9. APPLICATION LAUNCHER
 # =============================================================================
 log_info "Installing application launcher..."
 
@@ -278,11 +375,27 @@ echo "  Launch:"
 echo "    • From application menu: WhisperRocket"
 echo "    • From terminal: ./start.sh"
 echo ""
-echo "  Hotkey: Ctrl+Shift+S (hold to record)"
+echo "  Default hotkey: Ctrl+Shift+S (configurable in Settings)"
 echo ""
 
 if [ "$HAS_NVIDIA" = true ]; then
     echo -e "${YELLOW}IMPORTANT: Open a new terminal or run:${NC}"
     echo "  source ~/.bashrc"
+    echo ""
+fi
+
+# Wayland relogin warning
+if [ "$NEEDS_RELOGIN" = true ]; then
+    echo ""
+    echo -e "${RED}╔══════════════════════════════════════════════════════════════╗${NC}"
+    echo -e "${RED}║  IMPORTANT: LOG OUT AND LOG BACK IN!                         ║${NC}"
+    echo -e "${RED}╠══════════════════════════════════════════════════════════════╣${NC}"
+    echo -e "${RED}║  You were added to the 'input' group for Wayland hotkey      ║${NC}"
+    echo -e "${RED}║  support. This change requires you to LOG OUT and LOG BACK   ║${NC}"
+    echo -e "${RED}║  IN (or restart your computer) before the hotkey will work.  ║${NC}"
+    echo -e "${RED}║                                                              ║${NC}"
+    echo -e "${RED}║  After logging back in, launch WhisperRocket from the menu   ║${NC}"
+    echo -e "${RED}║  or run: ./start.sh                                          ║${NC}"
+    echo -e "${RED}╚══════════════════════════════════════════════════════════════╝${NC}"
     echo ""
 fi
