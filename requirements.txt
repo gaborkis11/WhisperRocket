@@ -6,3 +6,4 @@ pynput
 pillow
 numpy
 PySide6
+requests
