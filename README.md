@@ -24,6 +24,7 @@ WhisperRocket is a desktop application that converts speech to text in real-time
 - **Smart paste detection** - Automatically uses Ctrl+Shift+V for terminals
 - **Visual feedback** - Modern popup with equalizer visualization during recording
 - **Rocket animation** - Fun animated rocket with witty messages during processing
+- **Wayland native** - GTK Layer Shell overlay that doesn't steal focus (COSMIC, GNOME, KDE)
 - **History** - Browse and copy previous transcriptions from the system tray
 - **System tray** - Runs quietly in the background with color-coded status
 - **Configurable** - Adjust language, model, hotkey, popup duration, and more
@@ -133,13 +134,16 @@ Configuration is stored in `config.json`.
 - [sounddevice](https://python-sounddevice.readthedocs.io/) - Audio recording
 - [pynput](https://pynput.readthedocs.io/) - Global hotkey handling
 - [pyperclip](https://pyperclip.readthedocs.io/) - Clipboard operations
+- [GTK Layer Shell](https://github.com/wmww/gtk-layer-shell) - Wayland overlay support
+- [PyGObject](https://pygobject.readthedocs.io/) - GTK Python bindings (Wayland)
 
 ## Project Structure
 
 ```
 WhisperRocket/
 ├── whisper_gui.py        # Main application
-├── popup_window.py       # Popup window (equalizer, rocket, text)
+├── popup_window.py       # Popup window for X11 (equalizer, rocket, text)
+├── wayland_overlay.py    # Wayland popup (GTK Layer Shell, no focus steal)
 ├── settings_window.py    # Settings dialog
 ├── about_window.py       # About dialog
 ├── history_manager.py    # History storage and management
@@ -183,8 +187,17 @@ The installer has been tested on:
 - Try running with `sudo` once to register the hotkey
 
 ### Wayland compatibility
-- Auto-paste (`xdotool`) works best on X11
-- On Wayland, use manual Ctrl+V to paste
+WhisperRocket has **full Wayland support**:
+- ✅ GTK Layer Shell popup that doesn't steal focus
+- ✅ Native evdev hotkey detection (no X11 required)
+- ✅ Auto-paste via `wtype` (Wayland) or `xdotool` (X11)
+- ✅ Tested on Pop!_OS with COSMIC, GNOME Wayland, KDE Plasma Wayland
+
+**Note for Wayland users**: Add your user to the `input` group for hotkey support:
+```bash
+sudo usermod -a -G input $USER
+```
+Then log out and back in.
 
 ## License
 
