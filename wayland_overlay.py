@@ -476,8 +476,8 @@ class WaylandOverlay:
         return False
 
     def _run_on_gtk_thread(self, func):
-        """Függvény futtatása - már a főszálban vagyunk, közvetlen hívás"""
-        func()
+        """Függvény futtatása a GTK főszálban (thread-safe)"""
+        GLib.idle_add(func)
 
     # === Signal-szerű interface ===
 
@@ -694,18 +694,30 @@ class WaylandOverlay:
             self._window.hide()
 
     def _stop_all_timers(self):
-        """Összes timer leállítása"""
+        """Összes timer leállítása (biztonságos)"""
         if self._animation_timer_id:
-            GLib.source_remove(self._animation_timer_id)
+            try:
+                GLib.source_remove(self._animation_timer_id)
+            except:
+                pass
             self._animation_timer_id = None
         if self._countdown_timer_id:
-            GLib.source_remove(self._countdown_timer_id)
+            try:
+                GLib.source_remove(self._countdown_timer_id)
+            except:
+                pass
             self._countdown_timer_id = None
         if self._message_timer_id:
-            GLib.source_remove(self._message_timer_id)
+            try:
+                GLib.source_remove(self._message_timer_id)
+            except:
+                pass
             self._message_timer_id = None
         if self._auto_hide_timer_id:
-            GLib.source_remove(self._auto_hide_timer_id)
+            try:
+                GLib.source_remove(self._auto_hide_timer_id)
+            except:
+                pass
             self._auto_hide_timer_id = None
 
 
