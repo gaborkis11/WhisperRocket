@@ -24,7 +24,7 @@ WhisperRocket is a desktop application that converts speech to text in real-time
 - **Smart paste detection** - Automatically uses Ctrl+Shift+V for terminals
 - **Visual feedback** - Modern popup with equalizer visualization during recording
 - **Rocket animation** - Fun animated rocket with witty messages during processing
-- **Wayland native** - GTK Layer Shell overlay that doesn't steal focus (COSMIC, GNOME, KDE)
+- **Wayland support** - GTK Layer Shell overlay (experimental, X11 recommended)
 - **History** - Browse and copy previous transcriptions from the system tray
 - **System tray** - Runs quietly in the background with color-coded status
 - **Configurable** - Adjust language, model, hotkey, popup duration, and more
@@ -171,6 +171,16 @@ The installer has been tested on:
 - Arch Linux / Manjaro
 - openSUSE Tumbleweed
 
+### Tested Platforms
+
+| Distribution | Display Server | Status |
+|--------------|----------------|--------|
+| Pop!_OS | X11 | ✅ Fully working |
+| Linux Mint | X11 | ✅ Fully working |
+| Pop!_OS | Wayland (COSMIC) | ⚠️ Experimental |
+| GNOME | Wayland | ⚠️ Experimental |
+| KDE Plasma | Wayland | ⚠️ Experimental |
+
 ## Troubleshooting
 
 ### No audio input
@@ -187,11 +197,12 @@ The installer has been tested on:
 - Try running with `sudo` once to register the hotkey
 
 ### Wayland compatibility
-WhisperRocket has **full Wayland support**:
+WhisperRocket has **experimental Wayland support**:
 - ✅ GTK Layer Shell popup that doesn't steal focus
 - ✅ Native evdev hotkey detection (no X11 required)
 - ✅ Auto-paste via `wtype` (Wayland) or `xdotool` (X11)
-- ✅ Tested on Pop!_OS with COSMIC, GNOME Wayland, KDE Plasma Wayland
+
+> ⚠️ **Warning**: Wayland support is experimental. Due to Wayland's stricter security model, some features may not work reliably on all desktop environments. For the best experience, **X11 is recommended**. Full functionality is not guaranteed on Wayland.
 
 **Note for Wayland users**: Add your user to the `input` group for hotkey support:
 ```bash
