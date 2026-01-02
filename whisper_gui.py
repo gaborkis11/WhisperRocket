@@ -6,6 +6,13 @@ import tempfile
 import time
 import threading
 from queue import Queue
+
+# Check for --uninstall flag BEFORE Qt imports
+if "--uninstall" in sys.argv:
+    from appimage_uninstall import run_uninstall
+    run_uninstall()
+    sys.exit(0)
+
 import sounddevice as sd
 import soundfile as sf
 import pyperclip
@@ -19,6 +26,14 @@ from PySide6.QtGui import QIcon, QPixmap, QPainter, QColor, QBrush, QPen, QActio
 # Platform absztrakció
 from platform_support import get_platform_handler
 platform_handler = get_platform_handler()
+
+# CUDA LD_LIBRARY_PATH setup (must be BEFORE WhisperModel import for AppImage support)
+try:
+    from cuda_manager import is_cuda_installed, setup_ld_library_path
+    if is_cuda_installed():
+        setup_ld_library_path()
+except ImportError:
+    pass  # cuda_manager not available (normal installation)
 
 # Whisper backend (MLX vagy faster-whisper)
 whisper_backend = None  # "mlx" vagy "faster-whisper"
@@ -37,7 +52,7 @@ def init_whisper_backend():
             print("[INFO] MLX Whisper backend (Apple Silicon)")
             return
         except ImportError:
-            print("[INFO] MLX nem elérhető, faster-whisper használata")
+            print("[INFO] MLX not available, using faster-whisper")
 
     # Fallback: faster-whisper
     from faster_whisper import WhisperModel as FasterWhisperModel
@@ -217,7 +232,7 @@ def update_icon(color, title):
 def quit_app():
     """Alkalmazás leállítása"""
     global stream, qt_app, keyboard_listener
-    print("[INFO] Kilépés...")
+    print("[INFO] Exiting...")
 
     # Stop keyboard listener
     try:
@@ -245,7 +260,7 @@ def quit_app():
 @Slot()
 def open_settings():
     """Beállítások ablak megnyitása"""
-    print("[INFO] Beállítások megnyitása...")
+    print("[INFO] Opening settings...")
     global settings_window_instance
     from settings_window import SettingsWindow
     if settings_window_instance is None or not settings_window_instance.isVisible():
@@ -286,7 +301,7 @@ def clear_history_action():
     if msg.exec() == QMessageBox.StandardButton.Yes:
         history_manager.clear_history()
         refresh_history_menu()
-        print("[INFO] History törölve")
+        print("[INFO] History cleared")
 
 def refresh_history_menu():
     """History menü frissítése a legújabb adatokkal"""
@@ -382,19 +397,19 @@ def audio_callback(indata, frames, time_info, status):
 # Feldolgozás
 def process_audio(audio_copy):
     print("\n" + "="*60)
-    print("[FELDOLGOZAS] Indul...")
-    
-    try:
-        # Audio összefűzés
-        audio_array = np.concatenate(audio_copy, axis=0)
-        print(f"[INFO] Audio hossz: {len(audio_array)/actual_sample_rate:.2f}s")
+    print("[PROCESSING] Starting...")
 
-        # Temp fájl (Whisper automatikusan resample-öl)
+    try:
+        # Audio concatenation
+        audio_array = np.concatenate(audio_copy, axis=0)
+        print(f"[INFO] Audio length: {len(audio_array)/actual_sample_rate:.2f}s")
+
+        # Temp file (Whisper auto-resamples)
         temp_file = tempfile.NamedTemporaryFile(delete=False, suffix=".wav")
         sf.write(temp_file.name, audio_array, actual_sample_rate)
-        
+
         # Whisper transcribe
-        print("[INFO] Whisper feldolgozas...")
+        print("[INFO] Whisper processing...")
         start_time = time.time()
 
         if whisper_backend == "mlx":
@@ -420,25 +435,25 @@ def process_audio(audio_copy):
         
         # Vágólapra másolás
         pyperclip.copy(text)
-        # Automatikus beillesztés (platform-független)
+        # Auto-paste (platform-independent)
         try:
-            print("[INFO] Automatikus beillesztes...")
+            print("[INFO] Auto-pasting...")
             time.sleep(0.3)
 
-            # Aktív ablak detektálás
+            # Active window detection
             window_class = platform_handler.get_active_window_class()
             is_terminal = platform_handler.is_terminal_window(window_class)
 
-            # Beillesztés (terminálban más billentyűkombináció)
+            # Paste (different key combo for terminals)
             platform_handler.paste_text(is_terminal=is_terminal)
-            print(f"[INFO] Beillesztve!")
+            print(f"[INFO] Pasted!")
         except Exception as e:
-            print(f"[FIGYELEM] Beillesztes sikertelen: {e}")
+            print(f"[WARNING] Paste failed: {e}")
         print("="*60)
-        print(f"EREDMENY: '{text}'")
-        print(f"IDO: {elapsed:.2f}s")
+        print(f"RESULT: '{text}'")
+        print(f"TIME: {elapsed:.2f}s")
         print("="*60)
-        print(">>> VAGOLAP: Nyomd meg Ctrl+V! <<<")
+        print(">>> CLIPBOARD: Press Ctrl+V to paste! <<<")
         print("="*60 + "\n")
         
         # Temp fájl törlés
@@ -510,7 +525,7 @@ def start_recording():
                 break
         show_popup()
         play_sound(SOUND_START)
-        print("\n[ROGZITES] Indul...")
+        print("\n[RECORDING] Starting...")
         update_icon('red', t("tray_recording", ui_lang))
 
 def stop_recording():
@@ -518,7 +533,7 @@ def stop_recording():
     if recording:
         recording = False
         play_sound(SOUND_STOP)
-        print("[ROGZITES] Megall")
+        print("[RECORDING] Stopped")
         update_icon('yellow', t("tray_processing", ui_lang))
 
         if len(audio_data) > 0:
@@ -538,7 +553,7 @@ def cancel_recording():
         recording = False
         audio_data = []
         hide_popup()
-        print("[ROGZITES] Megszakítva (Cancel)")
+        print("[RECORDING] Cancelled")
         update_icon('blue', t("tray_ready", ui_lang))
 
 # Hotkey
@@ -675,7 +690,7 @@ def main():
                 sys.exit(0)
             # Wizard után ÚJRAINDÍTÁS szükséges (Qt/Metal konfliktus elkerülése)
             # Az app újraindítja magát, most már letöltött modellel
-            print("[INFO] Modell letöltve, app újraindítása...")
+            print("[INFO] Model downloaded, restarting app...")
             qt_app.quit()
             if getattr(sys, 'frozen', False):
                 # Bundled app
@@ -734,7 +749,7 @@ def main():
         # Lekérdezzük az alapértelmezett input device sample rate-jét
         default_input = sd.query_devices(kind='input')
         actual_sample_rate = int(default_input['default_samplerate'])
-        print(f"[INFO] Mikrofon sample rate: {actual_sample_rate} Hz")
+        print(f"[INFO] Microphone sample rate: {actual_sample_rate} Hz")
     except:
         actual_sample_rate = 48000  # Biztonságos alapértelmezett
 
@@ -749,22 +764,22 @@ def main():
     # Audio rendszer "felébresztése" - csendes warmup (platform-specifikus)
     if hasattr(platform_handler, 'warmup_audio'):
         platform_handler.warmup_audio(SOUND_START)
-    print("[INFO] Audio rendszer inicializálva")
+    print("[INFO] Audio system initialized")
     sys.stdout.flush()
 
     # Platform-specifikus figyelmeztetések
     import platform as py_platform
     if py_platform.system() == "Darwin":
-        print("[INFO] macOS: Ha a hotkey nem működik, add hozzá az appot az Input Monitoring-hoz:")
+        print("[INFO] macOS: If hotkey doesn't work, add the app to Input Monitoring:")
         print("[INFO]   System Settings → Privacy & Security → Input Monitoring")
         sys.stdout.flush()
     elif py_platform.system() == "Linux":
         session_type = get_session_type()
         if session_type == "wayland":
             print("[INFO] Wayland session detected")
-            print("[INFO] Ha a hotkey nem működik, add hozzá a felhasználót az input csoporthoz:")
+            print("[INFO] If hotkey doesn't work, add user to input group:")
             print("[INFO]   sudo usermod -a -G input $USER")
-            print("[INFO]   Majd jelentkezz ki és vissza.")
+            print("[INFO]   Then log out and back in.")
             sys.stdout.flush()
 
     # Hotkey listener (platform-aware: X11/Wayland/macOS)
@@ -814,18 +829,18 @@ def main():
     print("  WHISPER SPEECH-TO-TEXT")
     print("="*60)
     print(f"  Hotkey: {config['hotkey']}")
-    print(f"  Modell: {config['model']}")
+    print(f"  Model: {config['model']}")
     actual_device = "mlx" if whisper_backend == "mlx" else config['device']
     print(f"  Device: {actual_device}")
     print("")
-    print("  SYSTEM TRAY SZINEK:")
-    print("    KEK     = Keszen all")
-    print("    PIROS   = Rogzites")
-    print("    SARGA   = Feldolgozas")
-    print("    ZOLD    = Kesz! (Ctrl+V beillesztes)")
+    print("  SYSTEM TRAY COLORS:")
+    print("    BLUE    = Ready")
+    print("    RED     = Recording")
+    print("    YELLOW  = Processing")
+    print("    GREEN   = Done! (Ctrl+V to paste)")
     print("")
-    print("  Leallit: Jobb klikk tray ikonra -> Kilépés")
-    print("  Config:  nano config.json")
+    print("  Exit: Right-click tray icon -> Exit")
+    print("  Config: ~/.config/whisperrocket/config.json")
     print("="*60)
     print("")
     sys.stdout.flush()
@@ -836,7 +851,7 @@ def main():
     def check_restart_flag():
         """Restart flag ellenőrzése - Settings-ből jövő kérés"""
         if os.path.exists(RESTART_FLAG_FILE):
-            print("[INFO] Restart kérés észlelve, újraindítás...")
+            print("[INFO] Restart request detected, restarting...")
             os.remove(RESTART_FLAG_FILE)
 
             import platform

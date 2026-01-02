@@ -121,6 +121,12 @@ TRANSLATIONS = {
         "model_warning_title": "Model Not Downloaded",
         "model_warning_text": "The selected model \"{model}\" is not downloaded. The app won't work until you download a model.",
         "model_warning_download": "Download Now",
+
+        # CUDA Download
+        "cuda_downloading": "Downloading CUDA libraries...",
+        "cuda_installed": "CUDA libraries installed",
+        "cuda_download_failed": "CUDA download failed. The app will use CPU mode.",
+        "cuda_download_progress": "Downloading {name}...",
     },
     "hu": {
         # System tray
@@ -238,6 +244,12 @@ TRANSLATIONS = {
         "model_warning_title": "Modell nincs letöltve",
         "model_warning_text": "A kiválasztott \"{model}\" modell nincs letöltve. Az alkalmazás nem működik modell nélkül.",
         "model_warning_download": "Letöltés most",
+
+        # CUDA Download
+        "cuda_downloading": "CUDA könyvtárak letöltése...",
+        "cuda_installed": "CUDA könyvtárak telepítve",
+        "cuda_download_failed": "CUDA letöltés sikertelen. Az alkalmazás CPU módban fog működni.",
+        "cuda_download_progress": "{name} letöltése...",
     }
 }
 

@@ -32,6 +32,14 @@ class LinuxHandler(PlatformHandler):
         """Cache mappa: ~/.cache/huggingface/hub/"""
         return Path.home() / ".cache" / "huggingface" / "hub"
 
+    def is_appimage(self) -> bool:
+        """Detect if running in AppImage environment"""
+        return "APPIMAGE" in os.environ or "APPDIR" in os.environ
+
+    def get_cuda_libs_dir(self) -> Path:
+        """CUDA libraries directory for AppImage"""
+        return Path.home() / ".local" / "share" / "whisperrocket" / "cuda_libs"
+
     def _is_wayland(self) -> bool:
         """Check if running on Wayland"""
         session_type = os.environ.get('XDG_SESSION_TYPE', '').lower()

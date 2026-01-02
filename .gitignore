@@ -21,11 +21,16 @@ config.json
 # macOS
 .DS_Store
 
-# Build output (PyInstaller)
+# Build output (PyInstaller/AppImage)
 build/
+build_appimage/
 dist/
 *.spec
 
 # Development files (not for public repo)
 CLAUDE.md
 tasks/
+.claude/
+
+# Runtime state files
+.download_state.json

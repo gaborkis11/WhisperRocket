@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=WhisperRocket
+Comment=Local Speech-to-Text with Whisper AI
+Exec=whisperrocket
+Icon=whisperrocket
+Terminal=false
+Categories=AudioVideo;Audio;Utility;
+StartupNotify=false

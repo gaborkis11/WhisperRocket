@@ -1,0 +1,32 @@
+#!/bin/bash
+# WhisperRocket AppImage Entry Point
+APPDIR="$(dirname "$(readlink -f "$0")")"
+
+# CUDA library path setup (structure: package/subpackage/lib/)
+# e.g., nvidia-cudnn-cu12/cudnn/lib/, nvidia-cublas-cu12/cublas/lib/
+CUDA_LIB_DIR="$HOME/.local/share/whisperrocket/cuda_libs"
+if [ -d "$CUDA_LIB_DIR" ]; then
+    for package in "$CUDA_LIB_DIR"/*; do
+        if [ -d "$package" ]; then
+            for subdir in "$package"/*; do
+                if [ -d "$subdir/lib" ]; then
+                    export LD_LIBRARY_PATH="$subdir/lib:${LD_LIBRARY_PATH}"
+                fi
+            done
+        fi
+    done
+    echo "[INFO] LD_LIBRARY_PATH: $LD_LIBRARY_PATH"
+fi
+
+# Qt platform plugin path
+export QT_QPA_PLATFORM_PLUGIN_PATH="$APPDIR/usr/plugins/platforms"
+
+# Auto-detect Wayland/X11
+if [ -n "$WAYLAND_DISPLAY" ]; then
+    export QT_QPA_PLATFORM=wayland
+else
+    export QT_QPA_PLATFORM=xcb
+fi
+
+# Execute WhisperRocket
+exec "$APPDIR/usr/bin/whisperrocket" "$@"

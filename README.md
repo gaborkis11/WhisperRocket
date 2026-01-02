@@ -38,14 +38,35 @@ WhisperRocket is a desktop application that converts speech to text in real-time
 
 ## Installation
 
-### 1. Clone the repository
+### Option A: AppImage (Recommended)
+
+The easiest way to install WhisperRocket - just download and run!
+
+1. Download `WhisperRocket-x86_64.AppImage` from the [Releases](https://github.com/gaborkis11/WhisperRocket/releases) page
+2. Make it executable and run:
+
+```bash
+chmod +x WhisperRocket-x86_64.AppImage
+./WhisperRocket-x86_64.AppImage
+```
+
+On first run, the application will:
+- Detect your GPU (NVIDIA/CPU)
+- Download CUDA libraries if needed (~900MB for NVIDIA users)
+- Download the Whisper model of your choice
+
+### Option B: Install from Source
+
+For developers or if you prefer a traditional installation:
+
+#### 1. Clone the repository
 
 ```bash
 git clone https://github.com/gaborkis11/WhisperRocket.git
 cd WhisperRocket
 ```
 
-### 2. Run the installer
+#### 2. Run the installer
 
 ```bash
 chmod +x install.sh
@@ -150,14 +171,20 @@ WhisperRocket/
 ├── history_viewer.py     # History entry viewer window
 ├── model_manager.py      # Whisper model management
 ├── download_manager.py   # Model download handling
+├── cuda_manager.py       # CUDA runtime download (AppImage)
 ├── translations.py       # Multi-language UI support (EN/HU)
 ├── platform_support/     # Platform abstraction layer
 │   ├── base.py           # Abstract interface
 │   ├── linux.py          # Linux-specific implementation
 │   └── utils.py          # Platform detection
+├── packaging/            # AppImage build files
+│   ├── build_appimage.sh # Build script
+│   ├── AppRun            # AppImage entry point
+│   └── whisperrocket.spec # PyInstaller config
 ├── config.json           # User configuration
 ├── start.sh              # Startup script
-├── install.sh            # Installation script (generates desktop launcher)
+├── install.sh            # Installation script
+├── uninstall.sh          # Uninstallation script
 ├── requirements.txt      # Python dependencies
 ├── requirements-cuda.txt # NVIDIA CUDA dependencies
 └── assets/               # Icons and sounds
@@ -209,6 +236,34 @@ WhisperRocket has **experimental Wayland support**:
 sudo usermod -a -G input $USER
 ```
 Then log out and back in.
+
+## Uninstall
+
+### AppImage
+Run the uninstaller:
+```bash
+./WhisperRocket-x86_64.AppImage --uninstall
+```
+
+Or manually delete user data:
+```bash
+rm -rf ~/.config/whisperrocket
+rm -rf ~/.cache/huggingface/hub/whisperrocket_models
+rm -rf ~/.local/share/whisperrocket
+```
+Then delete the AppImage file itself.
+
+### Source Installation
+Run the uninstaller from the project directory:
+```bash
+cd WhisperRocket
+./uninstall.sh
+```
+
+The uninstaller offers three options:
+- **Quick uninstall**: Removes launcher and venv (keeps config and models)
+- **Full uninstall**: Removes everything including downloaded models
+- **Custom**: Choose what to remove
 
 ## License
 

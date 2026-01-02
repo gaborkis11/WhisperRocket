@@ -7,6 +7,7 @@ First-run blocking dialog for model selection and download
 import json
 import os
 import sys
+import threading
 
 from PySide6.QtCore import Qt, QTimer, Signal
 from PySide6.QtWidgets import (
@@ -18,6 +19,13 @@ from PySide6.QtGui import QFont, QCursor
 from translations import t
 from download_manager import get_download_manager
 from platform_support import get_platform_handler
+
+# CUDA manager (optional - only for NVIDIA GPU)
+try:
+    from cuda_manager import is_cuda_installed, download_cuda_wheels, CudaDownloadState
+    CUDA_AVAILABLE = True
+except ImportError:
+    CUDA_AVAILABLE = False
 
 
 # Available models for selection
@@ -34,9 +42,16 @@ MODELS = [
 DEFAULT_MODEL = "small"
 
 
+def get_config_path():
+    """Get user config file path"""
+    config_dir = os.path.join(os.path.expanduser("~"), ".config", "whisperrocket")
+    os.makedirs(config_dir, exist_ok=True)
+    return os.path.join(config_dir, "config.json")
+
+
 def get_ui_language():
     """Get UI language from config"""
-    config_path = os.path.join(os.path.dirname(__file__), 'config.json')
+    config_path = get_config_path()
     try:
         with open(config_path, 'r') as f:
             config = json.load(f)
@@ -57,7 +72,7 @@ def get_device():
         return "cuda"
 
     # Fallback: config-ból vagy CPU
-    config_path = os.path.join(os.path.dirname(__file__), 'config.json')
+    config_path = get_config_path()
     try:
         with open(config_path, 'r') as f:
             config = json.load(f)
@@ -70,6 +85,7 @@ class SetupWizard(QDialog):
     """Blocking first-run setup dialog"""
 
     download_complete = Signal()
+    cuda_progress_signal = Signal(object)  # CudaDownloadState
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -78,6 +94,8 @@ class SetupWizard(QDialog):
         self.download_manager = get_download_manager()
         self.selected_model = DEFAULT_MODEL
         self.is_downloading = False
+        self.cuda_download_complete = False
+        self.needs_cuda = self.device == "cuda" and CUDA_AVAILABLE and not is_cuda_installed()
 
         self.setup_ui()
         self.setup_connections()
@@ -223,6 +241,7 @@ class SetupWizard(QDialog):
         """Connect signals"""
         self.download_btn.clicked.connect(self.start_download)
         self.button_group.buttonClicked.connect(self.on_model_selected)
+        self.cuda_progress_signal.connect(self.on_cuda_progress)
 
         # Progress update timer
         self.progress_timer = QTimer()
@@ -236,7 +255,7 @@ class SetupWizard(QDialog):
                 break
 
     def start_download(self):
-        """Start model download"""
+        """Start download (CUDA first if needed, then model)"""
         if self.is_downloading:
             return
 
@@ -252,17 +271,58 @@ class SetupWizard(QDialog):
         for radio in self.model_radios.values():
             radio.setEnabled(False)
 
-        # Show progress - determinate mode with percentage
+        # Show progress
         self.progress_frame.setVisible(True)
         self.progress_bar.setMinimum(0)
         self.progress_bar.setMaximum(100)
         self.progress_bar.setValue(0)
+
+        # If CUDA is needed, download it first
+        if self.needs_cuda and not self.cuda_download_complete:
+            self.progress_label.setText(t("cuda_downloading", self.lang))
+            self.start_cuda_download()
+        else:
+            # Start model download directly
+            self.progress_label.setText(t("wizard_downloading", self.lang) + " - 0%")
+            self.download_manager.start_download(self.selected_model, self.device)
+            self.progress_timer.start(250)
+
+    def start_cuda_download(self):
+        """Start CUDA libraries download in background thread"""
+        def cuda_progress_callback(state: CudaDownloadState):
+            # Emit signal to update UI on main thread
+            self.cuda_progress_signal.emit(state)
+
+        # Start CUDA download in thread
+        threading.Thread(
+            target=download_cuda_wheels,
+            args=(cuda_progress_callback,),
+            daemon=True
+        ).start()
+
+    def on_cuda_progress(self, state: CudaDownloadState):
+        """Handle CUDA progress update from background thread (runs on main thread)"""
+        self.progress_bar.setValue(int(state.progress * 100))
+        if state.current_package:
+            self.progress_label.setText(
+                t("cuda_download_progress", self.lang, name=state.current_package)
+            )
+
+        if state.completed:
+            self.cuda_download_complete = True
+            # Now start model download
+            QTimer.singleShot(500, self.start_model_download)
+        elif state.error:
+            # CUDA download failed - continue with CPU mode
+            self.progress_label.setText(t("cuda_download_failed", self.lang))
+            self.device = "cpu"  # Fallback to CPU
+            QTimer.singleShot(2000, self.start_model_download)
+
+    def start_model_download(self):
+        """Start model download after CUDA is ready"""
+        self.progress_bar.setValue(0)
         self.progress_label.setText(t("wizard_downloading", self.lang) + " - 0%")
-
-        # Start download using DownloadManager
         self.download_manager.start_download(self.selected_model, self.device)
-
-        # Progress update timer (faster updates for smooth UI)
         self.progress_timer.start(250)
 
     def update_progress(self):
@@ -308,17 +368,39 @@ class SetupWizard(QDialog):
         self.progress_timer.stop()
         self.progress_bar.setMaximum(100)  # Back to determinate
         self.progress_bar.setValue(100)
-        self.progress_label.setText("✓ " + t("download_complete", self.lang) + " - Restarting...")
-        self.progress_label.setStyleSheet("color: #4CAF50; font-size: 13px; font-weight: bold;")
-        self.download_btn.setText("✓ Complete!")
 
-        # Save config and complete
+        # Save config first
         self.save_config()
-        QTimer.singleShot(1500, self.accept)  # Longer delay so user can see the message
+
+        # If CUDA was downloaded and we're in AppImage, need to restart
+        # so AppRun can set LD_LIBRARY_PATH correctly
+        if self.needs_cuda and os.environ.get("APPIMAGE"):
+            self.progress_label.setText("✓ " + t("download_complete", self.lang) + " - Restarting...")
+            self.progress_label.setStyleSheet("color: #4CAF50; font-size: 13px; font-weight: bold;")
+            self.download_btn.setText("✓ Complete!")
+            QTimer.singleShot(1500, self.restart_app)
+        else:
+            self.progress_label.setText("✓ " + t("download_complete", self.lang))
+            self.progress_label.setStyleSheet("color: #4CAF50; font-size: 13px; font-weight: bold;")
+            self.download_btn.setText("✓ Complete!")
+            QTimer.singleShot(1500, self.accept)
+
+    def restart_app(self):
+        """Restart the app (for AppImage after CUDA download)"""
+        appimage_path = os.environ.get("APPIMAGE")
+        if appimage_path:
+            # Re-execute the AppImage - this replaces the current process
+            os.execv(appimage_path, [appimage_path] + sys.argv[1:])
+        else:
+            # Fallback - just close wizard
+            self.accept()
 
     def save_config(self):
         """Save selected model and device to config"""
-        config_path = os.path.join(os.path.dirname(__file__), 'config.json')
+        # Use user config directory (writable) instead of app directory (read-only in AppImage)
+        config_dir = os.path.join(os.path.expanduser("~"), ".config", "whisperrocket")
+        os.makedirs(config_dir, exist_ok=True)
+        config_path = os.path.join(config_dir, "config.json")
 
         try:
             with open(config_path, 'r') as f:
@@ -326,6 +408,7 @@ class SetupWizard(QDialog):
         except:
             config = {}
 
+        # Set values from wizard
         config["model"] = self.selected_model
         config["device"] = self.device
         config["setup_complete"] = True
@@ -335,6 +418,15 @@ class SetupWizard(QDialog):
             config["compute_type"] = "float16"
         else:
             config["compute_type"] = "int8"
+
+        # Set defaults for missing keys (required for first run)
+        config.setdefault("hotkey", "alt+s")
+        config.setdefault("language", "en")
+        config.setdefault("ui_language", "en")
+        config.setdefault("sample_rate", 16000)
+        config.setdefault("input_device", None)
+        config.setdefault("output_device", None)
+        config.setdefault("popup_display_duration", 5)
 
         with open(config_path, 'w') as f:
             json.dump(config, f, indent=2)
@@ -354,7 +446,7 @@ def run_setup_wizard() -> bool:
     Run the setup wizard if needed.
     Returns True if app should continue, False to exit.
     """
-    config_path = os.path.join(os.path.dirname(__file__), 'config.json')
+    config_path = get_config_path()
 
     # Check if setup is complete
     try:
