@@ -36,6 +36,7 @@ MODELS = [
     ("medium", "wizard_model_medium"),
     ("large-v3-turbo", "wizard_model_turbo"),
     ("large-v3", "wizard_model_large"),
+    ("large-v3-hu", "wizard_model_hu"),
 ]
 
 # Default model
@@ -254,10 +255,52 @@ class SetupWizard(QDialog):
                 self.selected_model = model_id
                 break
 
+    def _show_conversion_deps_dialog(self):
+        """Show dialog for missing conversion dependencies with copyable command"""
+        from PySide6.QtWidgets import QDialog, QVBoxLayout, QLabel, QLineEdit, QPushButton, QHBoxLayout
+        venv_pip = os.path.join(os.path.dirname(os.path.abspath(__file__)), "venv", "bin", "pip")
+        cmd = f"{venv_pip} install torch transformers"
+
+        dlg = QDialog(self)
+        dlg.setWindowTitle("WhisperRocket")
+        dlg.setMinimumWidth(420)
+        layout = QVBoxLayout(dlg)
+
+        msg = QLabel(t("download_install_deps_msg", self.lang))
+        msg.setWordWrap(True)
+        layout.addWidget(msg)
+
+        cmd_field = QLineEdit(cmd)
+        cmd_field.setReadOnly(True)
+        cmd_field.setStyleSheet("font-family: monospace; font-size: 13px; padding: 6px; background: #2b2b2b; color: #e0e0e0; border: 1px solid #555;")
+        layout.addWidget(cmd_field)
+
+        btn_row = QHBoxLayout()
+        copy_btn = QPushButton(t("download_copy_cmd", self.lang))
+        copy_btn.clicked.connect(lambda: (QApplication.clipboard().setText(cmd), copy_btn.setText("✓")))
+        btn_row.addWidget(copy_btn)
+
+        ok_btn = QPushButton("OK")
+        ok_btn.clicked.connect(dlg.accept)
+        btn_row.addWidget(ok_btn)
+        layout.addLayout(btn_row)
+
+        dlg.exec()
+
     def start_download(self):
         """Start download (CUDA first if needed, then model)"""
         if self.is_downloading:
             return
+
+        # Check conversion dependencies before starting
+        from download_manager import _needs_conversion
+        if _needs_conversion(self.selected_model):
+            try:
+                import torch
+                import transformers
+            except ImportError:
+                self._show_conversion_deps_dialog()
+                return
 
         self.is_downloading = True
         self.download_success = False
@@ -336,7 +379,8 @@ class SetupWizard(QDialog):
 
         if state.error:
             self.progress_timer.stop()
-            self.progress_label.setText(f"Error: {state.error[:50]}")
+            error_text = t(state.error, self.lang)
+            self.progress_label.setText(f"Error: {error_text[:80]}")
             self.progress_label.setStyleSheet("color: #ff6b6b; font-size: 12px;")
             self.progress_bar.setValue(0)
 
@@ -354,13 +398,20 @@ class SetupWizard(QDialog):
             progress_percent = int(state.progress * 100)
             self.progress_bar.setValue(progress_percent)
 
-            # Format progress text with details
-            downloaded = self.download_manager.format_size(state.downloaded_bytes)
-            total = self.download_manager.format_size(state.total_bytes)
-            speed = self.download_manager.format_speed()
-            eta = self.download_manager.format_eta()
+            # If there's a status message (e.g. conversion phase), show it
+            if state.status_message:
+                self.progress_bar.setMaximum(0)  # Pulsating mode
+                progress_text = f"{t(state.status_message, self.lang)}"
+            else:
+                if self.progress_bar.maximum() == 0:
+                    self.progress_bar.setMaximum(100)
+                # Format progress text with details
+                downloaded = self.download_manager.format_size(state.downloaded_bytes)
+                total = self.download_manager.format_size(state.total_bytes)
+                speed = self.download_manager.format_speed()
+                eta = self.download_manager.format_eta()
+                progress_text = f"{t('wizard_downloading', self.lang)} - {progress_percent}%  ({downloaded} / {total})  {speed}  ETA: {eta}"
 
-            progress_text = f"{t('wizard_downloading', self.lang)} - {progress_percent}%  ({downloaded} / {total})  {speed}  ETA: {eta}"
             self.progress_label.setText(progress_text)
 
     def on_download_complete(self):

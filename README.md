@@ -17,7 +17,7 @@ WhisperRocket is a desktop application that converts speech to text in real-time
 
 ## Features
 
-- **Real-time transcription** - Whisper large-v3 model with multi-language support
+- **Real-time transcription** - Whisper large-v3 model with multi-language support (including Hungarian-optimized model)
 - **GPU acceleration** - NVIDIA CUDA support for fast processing (CPU fallback available)
 - **Global hotkey** - Press Alt+S (configurable) anywhere to start/stop recording
 - **Auto-paste** - Transcribed text is automatically pasted into the active window
@@ -141,12 +141,28 @@ Right-click the tray icon → **Settings** to configure:
 - **Language** - Transcription language (Hungarian, English, German, etc.)
 - **Hotkey** - Global shortcut key
 - **UI Language** - Interface language (English, Hungarian)
-- **Model** - Whisper model size (tiny, base, small, medium, large-v3-turbo, large-v3)
+- **Model** - Whisper model size (tiny, base, small, medium, large-v3-turbo, large-v3, large-v3-hu)
 - **Device** - GPU (CUDA) or CPU
 - **Popup duration** - How long the result popup stays visible (1-30 seconds)
 - **Autostart** - Launch on system startup
 
 Configuration is stored in `config.json`.
+
+### Hungarian-optimized model (Large-v3-hu)
+
+WhisperRocket includes support for the [Trendency/whisper-large-v3-hu](https://huggingface.co/Trendency/whisper-large-v3-hu) model, which is fine-tuned for Hungarian speech recognition. This model requires a one-time conversion to CTranslate2 format.
+
+To use it:
+1. Install conversion dependencies:
+   ```bash
+   ./venv/bin/pip install torch transformers
+   ```
+2. Select **Large-v3-hu** in Settings → Model
+3. The app will download and convert the model automatically (~6 GB download, ~5-15 min conversion)
+4. After conversion, you can optionally remove the conversion dependencies to save ~3 GB:
+   ```bash
+   ./venv/bin/pip uninstall torch transformers -y
+   ```
 
 ## Dependencies
 

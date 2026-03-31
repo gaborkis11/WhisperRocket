@@ -72,6 +72,7 @@ MODELS = [
     ("medium", "Medium (~1.5 GB) - Jó"),
     ("large-v3-turbo", "Large-v3-turbo (~1.6 GB) - Gyors és jó"),
     ("large-v3", "Large-v3 (~6 GB) - Legjobb"),
+    ("large-v3-hu", "Large-v3-hu (~3 GB) - Magyar optimalizált"),
 ]
 
 # Device opciók (platform-függő)
@@ -560,6 +561,17 @@ class SettingsWindow(QMainWindow):
 
     def start_model_download(self, model_name):
         """Modell letöltés indítása"""
+        # Check conversion dependencies before starting
+        from download_manager import _needs_conversion
+        if _needs_conversion(model_name):
+            try:
+                import torch
+                import transformers
+            except ImportError:
+                self._show_conversion_deps_dialog()
+                self.set_combo_value(self.model_combo, self.config.get("model", "large-v3"))
+                return
+
         self.progress_panel.setVisible(True)
         self.progress_bar.setValue(0)
         self.progress_info.setText(f"⬇ {model_name} - {t('download_starting', self.ui_lang)}")
@@ -587,8 +599,13 @@ class SettingsWindow(QMainWindow):
                 self._stall_count = 0
                 self._last_progress_bytes = current_progress
 
+            # If there's a status message (e.g. conversion phase), show it
+            if state.status_message:
+                if self.progress_bar.maximum() != 0:
+                    self.progress_bar.setRange(0, 0)  # Pulsating mode
+                self.progress_info.setText(f"⬇ {state.model_name} - {t(state.status_message, self.ui_lang)}")
             # Ha 4+ tick (2+ sec) óta nem változott, pulzáló mód
-            if self._stall_count >= 4:
+            elif self._stall_count >= 4:
                 if self.progress_bar.maximum() != 0:
                     self.progress_bar.setRange(0, 0)
                 self.progress_info.setText(f"⬇ {state.model_name} - {t('download_stall', self.ui_lang)}")
@@ -613,13 +630,21 @@ class SettingsWindow(QMainWindow):
             self._last_progress_bytes = 0
             self._stall_count = 0
 
-            QTimer.singleShot(2000, self.hide_progress_panel)
+            # Offer to remove conversion deps if this was a converted model
+            completed_model = state.model_name
             self.download_manager.clear_completed()
             self.refresh_model_combo()
 
+            from download_manager import _needs_conversion
+            if _needs_conversion(completed_model):
+                QTimer.singleShot(500, self._offer_remove_conversion_deps)
+            else:
+                QTimer.singleShot(2000, self.hide_progress_panel)
+
         elif state.error:
             self.progress_panel.setVisible(True)
-            self.progress_info.setText(f"✗ {state.model_name}: {state.error}")
+            error_text = t(state.error, self.ui_lang)
+            self.progress_info.setText(f"✗ {state.model_name}: {error_text}")
             self.cancel_btn.setText("✕")
             try:
                 self.cancel_btn.clicked.disconnect()
@@ -645,6 +670,59 @@ class SettingsWindow(QMainWindow):
                     QTimer.singleShot(2000, self.hide_progress_panel)
                     self.download_manager.clear_completed()
                     self.refresh_model_combo()
+
+    def _show_conversion_deps_dialog(self):
+        """Show dialog for missing conversion dependencies with copyable command"""
+        from PySide6.QtWidgets import QDialog, QVBoxLayout, QLabel, QLineEdit, QPushButton, QHBoxLayout
+        venv_pip = os.path.join(os.path.dirname(os.path.abspath(__file__)), "venv", "bin", "pip")
+        cmd = f"{venv_pip} install torch transformers"
+
+        dlg = QDialog(self)
+        dlg.setWindowTitle(t("dlg_warning", self.ui_lang))
+        dlg.setMinimumWidth(420)
+        layout = QVBoxLayout(dlg)
+
+        msg = QLabel(t("download_install_deps_msg", self.ui_lang))
+        msg.setWordWrap(True)
+        layout.addWidget(msg)
+
+        cmd_field = QLineEdit(cmd)
+        cmd_field.setReadOnly(True)
+        cmd_field.setStyleSheet("font-family: monospace; font-size: 13px; padding: 6px; background: #2b2b2b; color: #e0e0e0; border: 1px solid #555;")
+        layout.addWidget(cmd_field)
+
+        btn_row = QHBoxLayout()
+        copy_btn = QPushButton(t("download_copy_cmd", self.ui_lang))
+        copy_btn.clicked.connect(lambda: (QApplication.clipboard().setText(cmd), copy_btn.setText("✓")))
+        btn_row.addWidget(copy_btn)
+
+        ok_btn = QPushButton("OK")
+        ok_btn.clicked.connect(dlg.accept)
+        btn_row.addWidget(ok_btn)
+        layout.addLayout(btn_row)
+
+        dlg.exec()
+
+    def _offer_remove_conversion_deps(self):
+        """Offer to uninstall torch/transformers after successful conversion"""
+        self.hide_progress_panel()
+        reply = QMessageBox.question(
+            self,
+            t("download_conversion_done", self.ui_lang),
+            t("download_remove_deps", self.ui_lang),
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+        )
+        if reply == QMessageBox.StandardButton.Yes:
+            import subprocess
+            venv_pip = os.path.join(os.path.dirname(os.path.abspath(__file__)), "venv", "bin", "pip")
+            try:
+                subprocess.Popen(
+                    [venv_pip, "uninstall", "torch", "transformers", "-y"],
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                )
+            except Exception as e:
+                print(f"[WARNING] Failed to uninstall conversion deps: {e}")
 
     def hide_progress_panel(self):
         """Progress panel elrejtése"""

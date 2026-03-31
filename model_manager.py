@@ -33,6 +33,12 @@ MODEL_INFO = {
     "medium": {"name": "Medium", "size_estimate": "769 MB"},
     "large-v3-turbo": {"name": "Large-v3-turbo", "size_estimate": "1.6 GB"},
     "large-v3": {"name": "Large-v3", "size_estimate": "3 GB"},
+    "large-v3-hu": {
+        "name": "Large-v3-hu (Magyar)",
+        "size_estimate": "3 GB",
+        "source_repo": "Trendency/whisper-large-v3-hu",
+        "needs_conversion": True,
+    },
 }
 
 

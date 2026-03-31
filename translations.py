@@ -81,6 +81,12 @@ TRANSLATIONS = {
         "download_error": "Error: {model}",
         "download_cancelled": "Download cancelled",
         "download_stall": "Downloading... (writing large file)",
+        "download_converting": "Converting to faster-whisper format...",
+        "download_conversion_done": "Conversion complete!",
+        "download_install_deps": "This model requires 'torch' and 'transformers' packages.\nInstall them in the venv first:\n\npip install torch transformers",
+        "download_install_deps_msg": "This model needs to be converted before use.\n\n1. First, install the required packages by running this command in the terminal:\n\n2. Then restart the app and try downloading the model again.",
+        "download_copy_cmd": "Copy command",
+        "download_remove_deps": "The conversion is complete!\n\nThe 'torch' and 'transformers' packages (~3 GB) are no longer needed.\n\nWould you like to remove them to free up disk space?",
 
         # Hotkey
         "hotkey_press": "Press key combination...",
@@ -105,6 +111,7 @@ TRANSLATIONS = {
         "wizard_model_medium": "Medium (~1.5 GB) - Good accuracy",
         "wizard_model_large": "Large-v3 (~3 GB) - Best accuracy",
         "wizard_model_turbo": "Large-v3-turbo (~1.6 GB) - Fast & accurate",
+        "wizard_model_hu": "Large-v3-hu (~3 GB) - Best for Hungarian",
         "wizard_download_start": "Download & Start",
         "wizard_downloading": "Downloading...",
         "wizard_progress": "{downloaded} / {total}",
@@ -204,6 +211,12 @@ TRANSLATIONS = {
         "download_error": "Hiba: {model}",
         "download_cancelled": "Letöltés megszakítva",
         "download_stall": "Letöltés... (nagy fájl írása)",
+        "download_converting": "Konvertálás faster-whisper formátumba...",
+        "download_conversion_done": "Konvertálás kész!",
+        "download_install_deps": "Ez a modell 'torch' és 'transformers' csomagokat igényel.\nTelepítsd előbb a venv-be:\n\npip install torch transformers",
+        "download_install_deps_msg": "Ez a modell használat előtt konvertálást igényel.\n\n1. Először telepítsd a szükséges csomagokat az alábbi paranccsal a terminálban:\n\n2. Utána indítsd újra az appot és próbáld meg újra letölteni a modellt.",
+        "download_copy_cmd": "Parancs másolása",
+        "download_remove_deps": "A konvertálás sikeresen befejeződött!\n\nA 'torch' és 'transformers' csomagok (~3 GB) már nem szükségesek.\n\nSzeretnéd eltávolítani őket a helytakarékosság érdekében?",
 
         # Hotkey
         "hotkey_press": "Nyomd meg a billentyűkombinációt...",
@@ -228,6 +241,7 @@ TRANSLATIONS = {
         "wizard_model_medium": "Medium (~1.5 GB) - Jó pontosság",
         "wizard_model_large": "Large-v3 (~3 GB) - Legjobb pontosság",
         "wizard_model_turbo": "Large-v3-turbo (~1.6 GB) - Gyors és pontos",
+        "wizard_model_hu": "Large-v3-hu (~3 GB) - Magyar beszédre optimalizált",
         "wizard_download_start": "Letöltés és indítás",
         "wizard_downloading": "Letöltés...",
         "wizard_progress": "{downloaded} / {total}",

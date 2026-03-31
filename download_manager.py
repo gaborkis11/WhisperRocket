@@ -31,6 +31,7 @@ MODEL_SIZES = {
     "medium": 1550 * 1024 * 1024,    # ~1.5 GB cache
     "large-v3-turbo": 1600 * 1024 * 1024,  # ~1.6 GB cache
     "large-v3": 6200 * 1024 * 1024,  # ~6 GB cache
+    "large-v3-hu": 3100 * 1024 * 1024,  # ~3 GB (CT2 float16 after conversion)
 }
 
 
@@ -47,14 +48,25 @@ class DownloadState:
     error: str = ""
     cancelled: bool = False
     completed: bool = False
+    status_message: str = ""  # Optional override for UI progress text (translation key)
+
+
+def _needs_conversion(model_name: str) -> bool:
+    """Check if a model needs conversion from Transformers to CT2 format"""
+    from model_manager import MODEL_INFO
+    return MODEL_INFO.get(model_name, {}).get("needs_conversion", False)
 
 
 def get_repo_id(model_name: str, device: str) -> str:
     """Returns the HuggingFace repo ID based on device"""
     if device == "mlx":
         return f"mlx-community/whisper-{model_name}-mlx"
-    else:
-        return f"Systran/faster-whisper-{model_name}"
+    # Check for custom source repo (e.g. non-Systran models that need conversion)
+    from model_manager import MODEL_INFO
+    source_repo = MODEL_INFO.get(model_name, {}).get("source_repo")
+    if source_repo:
+        return source_repo
+    return f"Systran/faster-whisper-{model_name}"
 
 
 def get_local_model_dir(model_name: str, device: str) -> str:
@@ -236,6 +248,204 @@ class DownloadManager:
                     pass
         return total
 
+    def _download_and_convert_worker(self, model_name: str, device: str = "cpu"):
+        """Download a Transformers model and convert it to CTranslate2 format"""
+        import shutil
+        import tempfile
+
+        try:
+            self.state.model_name = model_name
+            self.state.device = device
+            self.state.is_downloading = True
+            self.state.progress = 0.0
+            self.state.error = ""
+            self.state.cancelled = False
+            self.state.completed = False
+            self.state.downloaded_bytes = 0
+            self._last_update_time = time.time()
+            self._last_bytes = 0
+            self._save_state()
+
+            # Step 1: Check conversion dependencies
+            try:
+                import torch
+                import transformers
+            except ImportError:
+                self.state.error = "download_install_deps"
+                self.state.is_downloading = False
+                self._save_state()
+                if self._progress_callback:
+                    self._progress_callback(self.state)
+                return
+
+            if self._cancel_flag:
+                self.state.cancelled = True
+                self.state.is_downloading = False
+                self._save_state()
+                return
+
+            repo_id = get_repo_id(model_name, device)
+            model_dir = get_local_model_dir(model_name, device)
+            os.makedirs(model_dir, exist_ok=True)
+
+            # Step 2: Download the Transformers model with HTTP streaming (0-80%)
+            tmp_dir = tempfile.mkdtemp(prefix="whisperrocket_convert_")
+
+            try:
+                print(f"[INFO] Downloading {repo_id} for conversion...")
+
+                # Get file list with sizes (same as _download_worker)
+                try:
+                    file_list = get_file_list_with_sizes(repo_id)
+                    self.state.total_bytes = sum(f['size'] for f in file_list)
+                except Exception as e:
+                    # Fallback to estimated size and snapshot_download
+                    print(f"[WARNING] File list failed ({e}), using snapshot_download fallback")
+                    self.state.total_bytes = MODEL_SIZES.get(model_name, 3000 * 1024 * 1024)
+                    self.state.status_message = "download_starting"
+                    self._save_state()
+                    if self._progress_callback:
+                        self._progress_callback(self.state)
+                    from huggingface_hub import snapshot_download
+                    snapshot_download(repo_id=repo_id, local_dir=tmp_dir)
+                    file_list = None  # Skip streaming loop
+
+                self.state.status_message = ""
+                self._save_state()
+
+                # Download each file with streaming progress
+                if file_list is not None:
+                    total_downloaded = 0
+                    chunk_size = 64 * 1024  # 64KB
+
+                    for file_info in file_list:
+                        if self._cancel_flag:
+                            self.state.cancelled = True
+                            self.state.is_downloading = False
+                            self._save_state()
+                            return
+
+                        filename = file_info['name']
+                        url = file_info['url']
+                        file_size = file_info['size']
+
+                        # Create subdirectories if needed
+                        target_path = os.path.join(tmp_dir, filename)
+                        os.makedirs(os.path.dirname(target_path), exist_ok=True)
+
+                        # Skip if already exists with correct size
+                        if os.path.exists(target_path):
+                            existing_size = os.path.getsize(target_path)
+                            if existing_size == file_size:
+                                total_downloaded += file_size
+                                self.state.downloaded_bytes = total_downloaded
+                                self.state.progress = min(total_downloaded / self.state.total_bytes * 0.80, 0.80)
+                                self._save_state()
+                                continue
+
+                        try:
+                            response = requests.get(url, stream=True, timeout=30)
+                            response.raise_for_status()
+
+                            with open(target_path, 'wb') as f:
+                                for chunk in response.iter_content(chunk_size=chunk_size):
+                                    if self._cancel_flag:
+                                        response.close()
+                                        self.state.cancelled = True
+                                        self.state.is_downloading = False
+                                        self._save_state()
+                                        return
+
+                                    if chunk:
+                                        f.write(chunk)
+                                        total_downloaded += len(chunk)
+
+                                        current_time = time.time()
+                                        time_diff = current_time - self._last_update_time
+                                        if time_diff > 0.1:
+                                            bytes_diff = total_downloaded - self._last_bytes
+                                            self.state.speed = bytes_diff / time_diff
+                                            self._last_bytes = total_downloaded
+                                            self._last_update_time = current_time
+
+                                        self.state.downloaded_bytes = total_downloaded
+                                        self.state.progress = min(
+                                            total_downloaded / self.state.total_bytes * 0.80,
+                                            0.80
+                                        )
+                                        self._save_state()
+
+                        except requests.RequestException as e:
+                            self.state.error = f"Download error: {str(e)[:100]}"
+                            self.state.is_downloading = False
+                            self._save_state()
+                            return
+
+                if self._cancel_flag:
+                    self.state.cancelled = True
+                    self.state.is_downloading = False
+                    self._save_state()
+                    return
+
+                # Step 3: Convert to CTranslate2 format (80-95% progress)
+                print(f"[INFO] Converting {model_name} to CTranslate2 format...")
+                self.state.progress = 0.80
+                self.state.status_message = "download_converting"
+                self.state.speed = 0
+                self._save_state()
+                if self._progress_callback:
+                    self._progress_callback(self.state)
+
+                from ctranslate2.converters import TransformersConverter
+
+                converter = TransformersConverter(
+                    tmp_dir,
+                    copy_files=["tokenizer.json", "preprocessor_config.json"],
+                )
+
+                converter.convert(
+                    model_dir,
+                    quantization="float16",
+                    force=True,
+                )
+
+                # Update progress to 95%
+                self.state.progress = 0.95
+                self.state.status_message = "download_conversion_done"
+                self._save_state()
+                if self._progress_callback:
+                    self._progress_callback(self.state)
+
+                print(f"[INFO] Conversion complete: {model_dir}")
+
+            finally:
+                # Step 4: Clean up temporary source model (95-100%)
+                if os.path.exists(tmp_dir):
+                    try:
+                        shutil.rmtree(tmp_dir)
+                        print(f"[INFO] Cleaned up temporary files: {tmp_dir}")
+                    except Exception as e:
+                        print(f"[WARNING] Failed to clean up {tmp_dir}: {e}")
+
+            # Done
+            self.state.progress = 1.0
+            self.state.completed = True
+            self.state.is_downloading = False
+            self._save_state()
+
+            if self._progress_callback:
+                self._progress_callback(self.state)
+
+        except Exception as e:
+            self.state.error = str(e)
+            self.state.is_downloading = False
+            self._save_state()
+            if self._progress_callback:
+                self._progress_callback(self.state)
+        finally:
+            self.state.is_downloading = False
+            self._save_state()
+
     def _download_worker(self, model_name: str, device: str = "cpu"):
         """Download worker thread - uses HTTP streaming for real-time byte-level progress"""
         try:
@@ -405,8 +615,14 @@ class DownloadManager:
         self._last_update_time = 0
         self._last_downloaded_bytes = 0
 
+        # Use conversion worker for models that need it
+        if _needs_conversion(model_name):
+            worker = self._download_and_convert_worker
+        else:
+            worker = self._download_worker
+
         self._download_thread = threading.Thread(
-            target=self._download_worker,
+            target=worker,
             args=(model_name, device),
             daemon=True
         )
