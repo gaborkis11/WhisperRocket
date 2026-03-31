@@ -165,7 +165,9 @@ qt_app = None
 history_detail_window = None  # History részlet ablak
 history_menu = None  # History almenü referencia
 settings_window_instance = None  # Settings ablak (közvetlen megnyitáshoz)
+file_transcription_window_instance = None  # File transcription ablak
 history_viewers = []  # Aktív history viewer ablakok
+model_lock = threading.Lock()  # Lock for concurrent model access
 
 # Hang lejátszás (platform-független)
 def play_sound(sound_file):
@@ -269,6 +271,25 @@ def open_settings():
     else:
         settings_window_instance.raise_()
         settings_window_instance.activateWindow()
+
+@Slot()
+def open_file_transcription():
+    """Fájl átírás ablak megnyitása"""
+    print("[INFO] Opening file transcription...")
+    global file_transcription_window_instance
+    from file_transcription_window import FileTranscriptionWindow
+    if file_transcription_window_instance is None or not file_transcription_window_instance.isVisible():
+        file_transcription_window_instance = FileTranscriptionWindow(
+            model=model,
+            whisper_backend=whisper_backend,
+            config=config,
+            ui_lang=ui_lang,
+            model_lock=model_lock,
+        )
+        file_transcription_window_instance.show()
+    else:
+        file_transcription_window_instance.raise_()
+        file_transcription_window_instance.activateWindow()
 
 def show_history_entry(entry_id: str, checked: bool = False):
     """History bejegyzés megjelenítése"""
@@ -412,24 +433,25 @@ def process_audio(audio_copy):
         print("[INFO] Whisper processing...")
         start_time = time.time()
 
-        if whisper_backend == "mlx":
-            # MLX backend
-            import mlx_whisper
-            result = mlx_whisper.transcribe(
-                temp_file.name,
-                path_or_hf_repo=f"mlx-community/whisper-{model['model_name']}-mlx",
-                language=config["language"]
-            )
-            text = result.get("text", "").strip()
-        else:
-            # Faster-whisper backend
-            segments, info = model.transcribe(
-                temp_file.name,
-                language=config["language"],
-                beam_size=5
-            )
-            # Szöveg összegyűjtés
-            text = " ".join([segment.text.strip() for segment in segments])
+        with model_lock:
+            if whisper_backend == "mlx":
+                # MLX backend
+                import mlx_whisper
+                result = mlx_whisper.transcribe(
+                    temp_file.name,
+                    path_or_hf_repo=f"mlx-community/whisper-{model['model_name']}-mlx",
+                    language=config["language"]
+                )
+                text = result.get("text", "").strip()
+            else:
+                # Faster-whisper backend
+                segments, info = model.transcribe(
+                    temp_file.name,
+                    language=config["language"],
+                    beam_size=5
+                )
+                # Szöveg összegyűjtés
+                text = " ".join([segment.text.strip() for segment in segments])
         
         elapsed = time.time() - start_time
         
@@ -798,6 +820,10 @@ def main():
     settings_action = QAction(t("tray_settings", ui_lang), qt_app)
     settings_action.triggered.connect(open_settings, Qt.QueuedConnection)
     tray_menu.addAction(settings_action)
+
+    file_transcription_action = QAction(t("tray_file_transcription", ui_lang), qt_app)
+    file_transcription_action.triggered.connect(open_file_transcription, Qt.QueuedConnection)
+    tray_menu.addAction(file_transcription_action)
     tray_menu.addSeparator()
 
     # History almenü
