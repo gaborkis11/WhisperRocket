@@ -25,6 +25,9 @@ WhisperRocket is a desktop application that converts speech to text in real-time
 - **Visual feedback** - Modern popup with equalizer visualization during recording
 - **Rocket animation** - Fun animated rocket with witty messages during processing
 - **Wayland support** - GTK Layer Shell overlay (experimental, X11 recommended)
+- **File transcription** - Transcribe audio/video files (meetings, interviews, podcasts) with drag & drop
+- **Speaker diarization** - Identify who is speaking (optional, via [pyannote-audio](https://github.com/pyannote/pyannote-audio))
+- **Export** - Save transcriptions as SRT, VTT, TXT, or JSON
 - **History** - Browse and copy previous transcriptions from the system tray
 - **System tray** - Runs quietly in the background with color-coded status
 - **Configurable** - Adjust language, model, hotkey, popup duration, and more
@@ -134,6 +137,42 @@ Right-click the tray icon → **History** to:
 
 History is stored locally (~/.config/whisperrocket/history.json) with a 100MB limit.
 
+### File Transcription
+
+Right-click the tray icon → **File Transcription** to transcribe audio/video files:
+
+1. **Load file**: Drag & drop or click Browse (supports WAV, MP3, M4A, FLAC, OGG, MP4, MKV, WEBM)
+2. **Configure**: Select language, enable/disable VAD filter and speaker diarization
+3. **Transcribe**: Click "Start Transcription" — segments appear in real-time with timestamps
+4. **Export**: Save as SRT (subtitles), VTT (web subtitles), TXT (timestamped text), or JSON (structured)
+
+Performance with CUDA GPU: ~3-8 min for a 1-hour recording.
+
+### Speaker Diarization (optional)
+
+Speaker diarization identifies who is speaking in a recording. It uses [pyannote-audio](https://github.com/pyannote/pyannote-audio) (MIT license) and requires a free [HuggingFace](https://huggingface.co) account.
+
+**Setup via the app:**
+
+Click the **"Setup..."** button next to the "Speaker diarization" checkbox. The app guides you through:
+1. Installing pyannote-audio
+2. Creating a HuggingFace token (select **Read** type)
+3. Accepting the model licenses (both [speaker-diarization-3.1](https://huggingface.co/pyannote/speaker-diarization-3.1) and [segmentation-3.0](https://huggingface.co/pyannote/segmentation-3.0))
+4. Pasting the token into the app
+
+**Manual setup:**
+```bash
+# 1. Install pyannote-audio
+./venv/bin/pip install pyannote-audio
+
+# 2. Accept model licenses on HuggingFace (requires login):
+#    - https://huggingface.co/pyannote/speaker-diarization-3.1
+#    - https://huggingface.co/pyannote/segmentation-3.0
+#    - https://huggingface.co/pyannote/speaker-diarization-community-1
+
+# 3. The app will ask for your HuggingFace token on first use
+```
+
 ## Configuration
 
 Right-click the tray icon → **Settings** to configure:
@@ -173,6 +212,7 @@ To use it:
 - [pyperclip](https://pyperclip.readthedocs.io/) - Clipboard operations
 - [GTK Layer Shell](https://github.com/wmww/gtk-layer-shell) - Wayland overlay support
 - [PyGObject](https://pygobject.readthedocs.io/) - GTK Python bindings (Wayland)
+- [pyannote-audio](https://github.com/pyannote/pyannote-audio) - Speaker diarization (optional, MIT license)
 
 ## Project Structure
 
@@ -188,6 +228,9 @@ WhisperRocket/
 ├── model_manager.py      # Whisper model management
 ├── download_manager.py   # Model download handling
 ├── cuda_manager.py       # CUDA runtime download (AppImage)
+├── file_transcription_window.py  # File transcription UI
+├── transcription_engine.py       # Transcription backend & export
+├── diarization_manager.py        # Speaker diarization (pyannote)
 ├── translations.py       # Multi-language UI support (EN/HU)
 ├── platform_support/     # Platform abstraction layer
 │   ├── base.py           # Abstract interface
@@ -301,3 +344,5 @@ See [LICENSE](LICENSE) for full details. For commercial licensing, contact the a
 
 - [OpenAI Whisper](https://github.com/openai/whisper) - The amazing speech recognition model
 - [faster-whisper](https://github.com/guillaumekln/faster-whisper) - CTranslate2-based Whisper implementation
+- [pyannote-audio](https://github.com/pyannote/pyannote-audio) - Speaker diarization framework
+- [Trendency/whisper-large-v3-hu](https://huggingface.co/Trendency/whisper-large-v3-hu) - Hungarian-optimized Whisper model
