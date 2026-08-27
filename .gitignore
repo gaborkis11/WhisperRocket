@@ -52,6 +52,7 @@ tasks/
 # added by a later feature is covered without anyone having to remember to
 # update this list. The .example templates are re-included below - those are the
 # versions that ship.
+DEVLOG.md
 *style_profile*.md
 *dictionary*.md
 *dictionary*.json*

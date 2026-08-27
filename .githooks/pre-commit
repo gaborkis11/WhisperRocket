@@ -42,6 +42,9 @@ done <<< "$staged_files"
 #    public. The .example.* templates are the versions that ship.
 while IFS= read -r file; do
     case "$(basename "$file")" in
+        DEVLOG.md)
+            report "$file — internal development log, deliberately not published"
+            ;;
         style_profile.md|dictionary.md|dictionary.json|prompt_transcript.md|prompt_compose.md|history.json|config.json)
             report "$file — personal settings (keep it in ~/.config/whisperrocket/; commit the .example version instead)"
             ;;
