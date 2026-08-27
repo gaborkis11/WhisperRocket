@@ -257,8 +257,8 @@ def detect_mode(text: str, phrases) -> Tuple[str, str]:
     """
     Decide between transcript and compose mode from how the dictation starts.
 
-    A trigger phrase is used instead of a button because the whole point is to
-    switch modes while driving, without touching anything. Matching tolerates
+    A trigger phrase is used instead of a button so the mode can be switched
+    hands-free, without looking at the screen. Matching tolerates
     the punctuation and capitalisation the recogniser invents, so a single
     configured phrase covers "Fogalmazzuk meg, hogy" and "fogalmazzuk meg hogy".
 
@@ -387,7 +387,7 @@ def enhance(raw_text: str, config: Optional[Dict] = None) -> EnhanceResult:
     Every failure path - CLI missing, not signed in, usage limit reached,
     timeout, or a response the guard rejects - returns the raw transcript with
     enhanced=False and a reason. Losing the tidying is an inconvenience; losing
-    the message while driving is not acceptable.
+    the dictated message is not.
 
     The catch-all is the outer edge of that contract, not decoration: callers
     are entitled to rely on getting text back, so a bug anywhere below has to

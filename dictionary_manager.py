@@ -123,10 +123,10 @@ def _variant_pattern(variant: str, allow_suffix: bool = False) -> re.Pattern:
     Word-bounded pattern for one misheard variant, tolerant of extra spaces.
 
     allow_suffix widens the match over a short Hungarian case ending, so
-    "dzsarvisz" also matches "dzsarviszt". That is right for a hint the model
-    weighs against context, and wrong for an automatic replacement - mangling
-    "gaborka" into "Gaborka" is exactly the false positive this feature must not
-    produce - so apply() leaves it off.
+    "kubernetesz" also matches "kuberneteszt". That is right for a hint the model
+    weighs against context, and wrong for an automatic replacement - turning
+    "reszelo" into "Reszelot" because "reszel" was listed is exactly the false
+    positive this feature must not produce - so apply() leaves it off.
     """
     parts = [re.escape(fold(part)) for part in variant.split() if part]
     if not parts:
@@ -142,7 +142,7 @@ def apply(text: str, data: Optional[Dict] = None) -> Tuple[str, int]:
 
     Only "high" confidence entries are replaced; "low" ones go to prompt_hint().
     Matching ignores case and accents, but the replacement keeps the spelling
-    from the dictionary, so "gabor" becomes "Gabor" and not "gabor".
+    from the dictionary, so "tail scale" becomes "Tailscale" and not "tailscale".
 
     Returns:
         (corrected_text, number_of_replacements)
@@ -244,7 +244,7 @@ def import_from_file(source_path: str) -> Tuple[bool, str]:
 if __name__ == "__main__":
     import sys
 
-    sample = sys.argv[1] if len(sys.argv) > 1 else "szia gabor itt a tail scale"
+    sample = sys.argv[1] if len(sys.argv) > 1 else "megy a tail scale meg a kubernetesz"
     fixed, n = apply(sample)
     print(f"path:     {get_dictionary_path()}")
     print(f"stats:    {stats()}")

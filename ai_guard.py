@@ -5,8 +5,8 @@ WhisperRocket - AI output guard
 The cleanup model is not trustworthy by default. Measured on this project with a
 permissive prompt, Sonnet swapped the speaker and the addressee ("I will be
 standing in the water" became "you will be"), invented a sentence that was never
-said, and replaced "kurva elet" with the softer "Baszki". While driving, none of
-that gets noticed.
+said, and replaced "kurva elet" with the softer "Baszki". Dictation is often
+used without watching the screen, so none of that gets noticed.
 
 So every model response passes these checks before it is allowed near the
 clipboard. A failed check is not an error: it means the raw transcript is used
