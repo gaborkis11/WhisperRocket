@@ -487,6 +487,55 @@ The uninstaller offers three options:
 - **Full uninstall**: Removes everything including downloaded models
 - **Custom**: Choose what to remove
 
+## Changelog
+
+### v1.1.0
+
+**AI cleanup** — optional, off by default. Turns the raw transcript into the message you
+meant to send, in your own voice, using **your own Claude subscription** through your own
+Claude Code CLI. See [AI cleanup](#ai-cleanup-optional).
+
+- **Two modes.** Transcript mode fixes punctuation, spelling and filler words and changes
+  nothing else. Compose mode, triggered by a configurable opening phrase so it works while
+  driving, writes the message from what you described.
+- **Your swearing is never touched.** The cleanup is instructed to keep it verbatim, *and
+  the output is checked afterwards* — if the model softens, substitutes or drops a swear
+  word, swaps who is speaking and who is addressed, summarises instead of tidying, or
+  answers with commentary, the response is thrown away and the plain transcript is used.
+  Every one of those failures was observed in testing before the check existed.
+- **Nothing is ever lost.** CLI missing, not signed in, usage limit reached, timeout, no
+  network, or a rejected response — every path falls back to the plain transcript and marks
+  the tray icon orange with the reason.
+- **Custom dictionary** with an in-app table editor, for the proper nouns speech
+  recognition reliably mangles. Entries marked automatic are replaced in code before the
+  model sees the text; the rest are offered to it as hints. Works with AI cleanup off.
+- **Style profile** — a short description of how you write, so the cleanup keeps your voice
+  instead of flattening it. Template in [`style_profile.example.md`](style_profile.example.md).
+- **Editable prompts** for both modes, with a reset to the built-in default.
+- **Setup entirely in Settings → AI**: install the Claude Code CLI with Anthropic's official
+  installer, sign in through Anthropic's own browser flow, pick a model. No terminal needed.
+- **Credentials are never handled by WhisperRocket.** Sign-in is delegated to
+  `claude auth login`; there is deliberately no field to paste a token into.
+
+**Fixes and housekeeping**
+
+- `packaging/whisperrocket.spec` now ships. A blanket `*.spec` ignore rule had excluded it,
+  so an AppImage could not be built from a clean checkout.
+- The pre-commit hook refuses personal settings (style profile, dictionary, prompts,
+  history, config), not just credentials. `.gitignore` covers them, but `git add -f` did not.
+- The AI tab has its own Save button. The only one previously lived on the first tab, so
+  settings changed on the AI tab were silently lost.
+- A failing `claude auth status` probe no longer unchecks the AI cleanup box — right after a
+  reboot it could report not-ready for a signed-in machine, and the next save persisted that.
+- An unfilled style profile template is ignored instead of being fed to the model as if it
+  described the user.
+- `save_settings()` and `save_and_restart()` no longer duplicate the field list.
+
+### v1.0.0
+
+First stable release — see the
+[release notes](https://github.com/gaborkis11/WhisperRocket/releases/tag/v1.0.0).
+
 ## License
 
 **Source Available License** - Free for personal, non-commercial use only.
