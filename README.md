@@ -585,6 +585,10 @@ Claude Code CLI. See [AI cleanup](#ai-cleanup-optional).
   is now 60 seconds rather than 20: a call usually takes about 4 seconds, but one was
   measured at 15, and a timeout that trips on a slow-but-working call costs the cleanup
   for nothing.
+- Dropdowns and number fields no longer change when the mouse wheel passes over them.
+  Qt lets them consume wheel events, so scrolling a settings page with the pointer
+  resting on the model selector switched the model. The wheel now scrolls the page
+  instead, and a setting changes only when you open its menu and pick something.
 
 ### v1.0.0
 

@@ -30,6 +30,7 @@ from model_manager import (
 from download_manager import get_download_manager
 from translations import t
 from platform_support import get_platform_handler
+from qt_helpers import block_wheel_changes
 
 import ai_enhancer
 import claude_cli
@@ -548,6 +549,11 @@ class SettingsWindow(QMainWindow):
         self.tabs.addTab(self.create_models_tab(), t("tab_models", self.ui_lang))
         self.tabs.addTab(self.create_ai_tab(), t("tab_ai", self.ui_lang))
         layout.addWidget(self.tabs)
+
+        # A wheel over a dropdown or a number field must not change it - see
+        # _NoWheelFilter. Applied after the tabs exist so it covers all of them,
+        # including any control added later.
+        block_wheel_changes(self)
 
         # Hotkey rögzítés állapota
         self.recording_hotkey = False

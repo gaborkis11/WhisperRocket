@@ -17,6 +17,7 @@ from PySide6.QtCore import Qt, Signal, Slot, QTimer
 from PySide6.QtGui import QFont, QDragEnterEvent, QDropEvent, QAction
 
 from translations import t
+from qt_helpers import block_wheel_changes
 from transcription_engine import (
     TranscriptionEngine, TranscriptionResult, TranscriptionSegment,
     format_timestamp, export_srt, export_vtt, export_txt, export_json,
@@ -151,6 +152,9 @@ class FileTranscriptionWindow(QMainWindow):
 
         self._setup_ui()
         self._connect_signals()
+
+        # A wheel over the language dropdown must not change it - see qt_helpers
+        block_wheel_changes(self)
 
     def _setup_ui(self):
         central = QWidget()

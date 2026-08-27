@@ -44,6 +44,7 @@ hiddenimports = [
     'ai_guard',
     'claude_cli',
     'dictionary_manager',
+    'qt_helpers',
 ]
 
 # Exclude CUDA libraries (downloaded at runtime)
