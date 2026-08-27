@@ -49,11 +49,22 @@ PROMPT_FILENAMES = {
     "compose": "prompt_compose.md",
 }
 
-DEFAULT_TRIGGER_PHRASES: Tuple[str, ...] = ("fogalmazzuk meg hogy",)
-# 60, not 20: a single call was measured at 15 seconds against a usual ~4, and a
-# timeout that trips on a slow-but-working call costs the cleanup for no reason.
-# Waiting longer only matters when something is already wrong.
-DEFAULT_TIMEOUT = 60
+# Több alak, mert a diktálás közben az jön ki a szájából, ami épp jön - és egy
+# egyetlen frázisra szűkített lista azt jelenti, hogy a fogalmazó mód csendben
+# nem indul el. Élesben ez történt: Gábor „segíts megfogalmazni"-t mondott,
+# a lista meg csak „fogalmazzuk meg hogy"-ot ismerte.
+DEFAULT_TRIGGER_PHRASES: Tuple[str, ...] = (
+    "fogalmazzuk meg hogy",
+    "fogalmazd meg hogy",
+    "segíts megfogalmazni",
+    "jarvis segíts megfogalmazni",
+)
+# 120, raised from 60 after real use. The typical call is 6-8 seconds, but the
+# tail is long and API-side: the same 93-word input that timed out at 60s ran in
+# 8.1s minutes later. A timeout that trips on a slow-but-working call throws away
+# the cleanup, and the user notices only that the text came out unpunctuated.
+# Waiting longer costs nothing in the common case.
+DEFAULT_TIMEOUT = 120
 DEFAULT_MODEL = claude_cli.DEFAULT_MODEL
 
 # Human-readable names for the languages WhisperRocket transcribes, so the
@@ -354,6 +365,10 @@ def _run_claude(text: str, system_prompt: str, model: str,
         "--model", model,
         "--safe-mode",
         "--no-session-persistence",
+        # Cleaning up a transcript is mechanical - deep reasoning buys nothing
+        # here. Measured on a real 93-word dictation: 8.1s at the default,
+        # 7.2s at low, with identical output and the same guard verdict.
+        "--effort", "low",
         "--system-prompt", system_prompt,
         "--output-format", "json",
     ]

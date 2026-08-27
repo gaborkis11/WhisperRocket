@@ -139,8 +139,9 @@ def load_config():
             # setup wizard once wrote to a file the app never read.
             "ai_enhance_enabled": False,
             "ai_model": "sonnet",
-            "ai_trigger_phrases": ["fogalmazzuk meg hogy"],
-            "ai_timeout_seconds": 60,
+            "ai_trigger_phrases": ["fogalmazzuk meg hogy", "fogalmazd meg hogy",
+                                   "segíts megfogalmazni", "jarvis segíts megfogalmazni"],
+            "ai_timeout_seconds": 120,
             "ai_dictionary_enabled": True
         }
 

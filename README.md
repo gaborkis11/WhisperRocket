@@ -598,6 +598,15 @@ Claude Code CLI. See [AI cleanup](#ai-cleanup-optional).
   for someone who can push to this repository; to everyone else it only raises a question
   they never had about where their files might end up. Settings now just says where your
   setup lives and that copying that folder moves it to another machine.
+- Compose mode recognises several trigger phrases, not one. In real use the speaker said
+  "segíts megfogalmazni" while the list held only "fogalmazzuk meg hogy", so the mode
+  silently never started. Dictation produces whatever phrasing comes out of your mouth, and
+  one phrase is not enough.
+- The AI timeout defaults to 120 seconds, and the call runs at low effort. A cleanup is
+  mechanical, so deep reasoning buys nothing: measured on a real 93-word dictation, 8.1s at
+  the default effort against 7.2s at low, identical output. The tail is what matters — the
+  same input that timed out at 60 seconds ran in 8 seconds minutes later, so the limit
+  exists to catch a stuck call, not a slow one.
 
 ### v1.0.0
 

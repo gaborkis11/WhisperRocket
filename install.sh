@@ -304,8 +304,8 @@ if [ ! -f "$CONFIG_FILE" ]; then
     "popup_display_duration": 5,
     "ai_enhance_enabled": false,
     "ai_model": "sonnet",
-    "ai_trigger_phrases": ["fogalmazzuk meg hogy"],
-    "ai_timeout_seconds": 60,
+    "ai_trigger_phrases": ["fogalmazzuk meg hogy", "fogalmazd meg hogy", "segíts megfogalmazni", "jarvis segíts megfogalmazni"],
+    "ai_timeout_seconds": 120,
     "ai_dictionary_enabled": true
 }
 EOF
