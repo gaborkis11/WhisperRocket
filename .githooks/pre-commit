@@ -1,12 +1,16 @@
 #!/usr/bin/env bash
 #
-# WhisperRocket pre-commit hook - refuses to commit credentials.
+# WhisperRocket pre-commit hook - refuses to commit credentials or personal data.
 #
 # Enable once per clone:
 #   git config core.hooksPath .githooks
 #
-# Tokens belong in ~/.config/whisperrocket/.env (see secrets_manager.py),
-# never in a tracked file.
+# Tokens belong in ~/.config/whisperrocket/.env (see secrets_manager.py), and
+# personal settings - style profile, custom dictionary, edited prompts, history -
+# belong in ~/.config/whisperrocket/ as well. Never in a tracked file.
+#
+# .gitignore already covers all of these, but `git add -f` bypasses it, so the
+# ones that would leak something about a person are checked again here.
 
 set -uo pipefail
 
@@ -15,7 +19,7 @@ failed=0
 
 report() {
     if [ "$failed" -eq 0 ]; then
-        printf '%s\n' "${RED}✖ Commit blocked: possible credential in staged changes${RESET}" >&2
+        printf '%s\n' "${RED}✖ Commit blocked: credential or personal data in staged changes${RESET}" >&2
     fi
     failed=1
     printf '  %s\n' "$1" >&2
@@ -33,7 +37,18 @@ while IFS= read -r file; do
     esac
 done <<< "$staged_files"
 
-# 2. Scan added lines for credential shapes.
+# 2. Never commit personal settings. These describe a specific person - how they
+#    write, which names they use, what they dictated - and the repository is
+#    public. The .example.* templates are the versions that ship.
+while IFS= read -r file; do
+    case "$(basename "$file")" in
+        style_profile.md|dictionary.json|prompt_transcript.md|prompt_compose.md|history.json|config.json)
+            report "$file — personal settings (keep it in ~/.config/whisperrocket/; commit the .example version instead)"
+            ;;
+    esac
+done <<< "$staged_files"
+
+# 3. Scan added lines for credential shapes.
 #    Patterns are deliberately length-bound so documenting them stays safe.
 # Parallel arrays - a pattern may contain ':' (e.g. [[:space:]]), so the label
 # cannot be packed into the same string.
@@ -71,8 +86,10 @@ while IFS= read -r file; do
 done <<< "$staged_files"
 
 if [ "$failed" -ne 0 ]; then
-    printf '\n%s\n' "${YELLOW}Move the value to ~/.config/whisperrocket/.env (mode 0600) and" >&2
-    printf '%s\n' "read it via secrets_manager.get_secret(), then stage again." >&2
+    printf '\n%s\n' "${YELLOW}Credentials: move the value to ~/.config/whisperrocket/.env (mode 0600)" >&2
+    printf '%s\n' "and read it via secrets_manager.get_secret(), then stage again." >&2
+    printf '%s\n' "Personal settings: unstage the file (git restore --staged <file>). It" >&2
+    printf '%s\n' "belongs in ~/.config/whisperrocket/; commit the .example template instead." >&2
     printf '%s\n\n' "If this is a false positive: git commit --no-verify${RESET}" >&2
     exit 1
 fi

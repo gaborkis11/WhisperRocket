@@ -312,7 +312,11 @@ If you are contributing, enable the secret-scanning hook once per clone:
 git config core.hooksPath .githooks
 ```
 
-It blocks commits containing API-token-shaped strings or a staged `.env` file.
+It blocks commits containing API-token-shaped strings, a staged `.env` file, or
+personal settings (`style_profile.md`, `dictionary.json`, `prompt_*.md`,
+`config.json`, `history.json`). `.gitignore` already covers those, but `git add -f`
+bypasses it — the hook is the second line of defence. The `.example` templates are
+the versions meant to ship.
 
 > **Upgrading from an earlier version?** `config.json` used to be tracked in
 > this repository. If `git pull` complains about it, run
