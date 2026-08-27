@@ -142,7 +142,14 @@ def load_config():
             "language": "hu",
             "sample_rate": 16000,
             "input_device": None,
-            "output_device": None
+            "output_device": None,
+            # AI enhancement - off by default, so a fresh install behaves
+            # exactly as it did before the feature existed
+            "ai_enhance_enabled": False,
+            "ai_model": "sonnet",
+            "ai_trigger_phrases": ["fogalmazzuk meg hogy"],
+            "ai_timeout_seconds": 20,
+            "ai_dictionary_enabled": True
         }
 
 # Globális változók
@@ -415,6 +422,80 @@ def audio_callback(indata, frames, time_info, status):
         except:
             pass  # Queue tele - nem gond, csak vizualizáció
 
+# AI failure reasons -> translation keys, so the tray tooltip says something a
+# person understands instead of an internal token.
+AI_REASON_KEYS = {
+    "not_installed": "ai_reason_not_installed",
+    "not_logged_in": "ai_reason_not_logged_in",
+    "usage_limit": "ai_reason_usage_limit",
+    "billing": "ai_reason_billing",
+    "timeout": "ai_reason_timeout",
+    "network": "ai_reason_network",
+    "disabled": "ai_reason_disabled",
+}
+
+
+def ai_reason_label(reason: str) -> str:
+    """Human-readable label for why the AI cleanup did not deliver"""
+    if reason.startswith("guard:"):
+        return t("ai_reason_guard", ui_lang)
+    return t(AI_REASON_KEYS.get(reason, "ai_reason_other"), ui_lang)
+
+
+def current_ai_config():
+    """
+    Config for the AI path, with the ai_* keys re-read from disk.
+
+    The module-level `config` is loaded once at startup, so without this a user
+    who ticks "Clean up dictation with AI" in Settings and saves would see no
+    change until the app restarted - and there is no reason to restart for a
+    prompt or a trigger phrase. Only the ai_* keys are refreshed; model, device
+    and hotkey genuinely need a restart and keep coming from `config`.
+    """
+    settings = dict(config)
+    try:
+        with open(CONFIG_FILE, 'r') as f:
+            stored = json.load(f)
+    except Exception:
+        return settings
+
+    for key, value in stored.items():
+        if key.startswith("ai_"):
+            settings[key] = value
+    return settings
+
+
+def apply_ai_enhancement(raw_text):
+    """
+    Custom-dictionary fix plus AI cleanup, or None when neither is switched on.
+
+    Imported lazily and wrapped in a catch-all on purpose: plain dictation is
+    this app's original feature and predates the AI path, so a missing or broken
+    ai_enhancer must cost the tidying and never the transcript.
+    """
+    ai_config = current_ai_config()
+    if not (ai_config.get("ai_enhance_enabled")
+            or ai_config.get("ai_dictionary_enabled", True)):
+        return None
+
+    try:
+        from ai_enhancer import enhance
+        result = enhance(raw_text, ai_config)
+    except Exception as e:
+        print(f"[WARN] AI enhancement unavailable: {e}")
+        return None
+
+    if result.enhanced:
+        print(f"[AI] {result.mode} mode, {result.elapsed:.2f}s, "
+              f"{result.dictionary_hits} dictionary fix(es)")
+    elif result.failed:
+        print(f"[AI] plain transcript used ({result.reason})")
+    elif result.dictionary_hits:
+        print(f"[AI] {result.dictionary_hits} dictionary fix(es), cleanup off")
+
+    return result
+
+
 # Feldolgozás
 def process_audio(audio_copy):
     print("\n" + "="*60)
@@ -454,7 +535,13 @@ def process_audio(audio_copy):
                 text = " ".join([segment.text.strip() for segment in segments])
         
         elapsed = time.time() - start_time
-        
+
+        # AI enhancement. The processing popup started in stop_recording() is
+        # still up, so it covers this step too - no new popup state needed.
+        ai_result = apply_ai_enhancement(text)
+        if ai_result is not None:
+            text = ai_result.text
+
         # Vágólapra másolás
         pyperclip.copy(text)
         # Auto-paste (platform-independent)
@@ -483,13 +570,22 @@ def process_audio(audio_copy):
 
         # History mentés
         if text.strip():
-            history_manager.add_entry(text, elapsed, config["language"])
+            history_manager.add_entry(
+                text, elapsed, config["language"],
+                enhanced=(ai_result.enhanced if ai_result else None),
+                raw_text=(ai_result.raw_text if ai_result else None),
+            )
             # Menü frissítése a főszálban (QTimer.singleShot thread-safe)
             from PySide6.QtCore import QTimer
             QTimer.singleShot(0, refresh_history_menu)
 
-        # Ikon frissítés
-        update_icon('green', t("tray_done", ui_lang))
+        # Ikon frissítés - orange amikor az AI tisztítás nem tudott lefutni és a
+        # nyers átirat került a vágólapra, hogy egy pillantásból látszódjon
+        if ai_result is not None and ai_result.failed:
+            update_icon('orange', f'{t("tray_done", ui_lang)} - '
+                                  f'{t("popup_plain", ui_lang)}: {ai_reason_label(ai_result.reason)}')
+        else:
+            update_icon('green', t("tray_done", ui_lang))
 
         # Szöveg megjelenítése a popup-ban (3mp-ig látszik, kattintásra expand)
         show_text_popup(text)

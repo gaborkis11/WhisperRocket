@@ -37,5 +37,13 @@ CLAUDE.md
 tasks/
 .claude/
 
+# AI enhancement - user-specific, never committed.
+# These live in ~/.config/whisperrocket/ ; this is a safety net in case a copy
+# ends up in the project directory during development.
+style_profile.md
+dictionary.json
+prompt_transcript.md
+prompt_compose.md
+
 # Runtime state files
 .download_state.json

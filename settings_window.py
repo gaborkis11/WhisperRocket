@@ -5,17 +5,22 @@ PyQt6 alapú modern UI tab-okkal
 """
 import os
 import json
+import pathlib
+import re
 import sys
 import shutil
 import platform as py_platform
+from functools import partial
 from PySide6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QLabel, QComboBox, QLineEdit, QPushButton, QCheckBox,
     QGroupBox, QFormLayout, QMessageBox, QTabWidget,
-    QProgressBar, QListWidget, QListWidgetItem, QFrame, QSpinBox
+    QProgressBar, QListWidget, QListWidgetItem, QFrame, QSpinBox,
+    QScrollArea, QPlainTextEdit, QTextEdit, QDialog, QFileDialog,
+    QDialogButtonBox
 )
-from PySide6.QtCore import Qt, QTimer
-from PySide6.QtGui import QFont, QKeySequence
+from PySide6.QtCore import Qt, QTimer, QThread, Signal, QUrl
+from PySide6.QtGui import QFont, QKeySequence, QDesktopServices
 
 from model_manager import (
     get_downloaded_models, get_active_model, delete_model,
@@ -25,6 +30,10 @@ from model_manager import (
 from download_manager import get_download_manager
 from translations import t
 from platform_support import get_platform_handler
+
+import ai_enhancer
+import claude_cli
+import dictionary_manager
 
 # Platform handler
 platform_handler = get_platform_handler()
@@ -143,6 +152,260 @@ def set_autostart(enabled):
     platform_handler.setup_autostart(enabled, app_path=DESKTOP_FILE)
 
 
+
+# Seeded into ~/.config/whisperrocket/style_profile.md when the user first opens
+# it for editing. Deliberately a set of prompts to answer rather than an example
+# profile: a filled-in example would get shipped back to the model as if it
+# described the user.
+STYLE_PROFILE_TEMPLATE = """# Style profile
+
+Describe how you write, so the cleanup keeps your voice instead of flattening it.
+Aggregate traits only - no real messages, no names, nothing you would not want in
+a prompt. Delete the questions and leave your answers.
+
+## Sentence length and rhythm
+(Short and clipped, or long and flowing? Do you use dashes, ellipses?)
+
+## Greetings and sign-offs
+(Do you open with a greeting, or start straight into the message?)
+
+## Language mixing
+(Do you mix in English words? Which kinds - technical terms, slang?)
+
+## Swearing
+(Where and how do you swear? Which words? This is kept verbatim, never softened.)
+
+## Formality
+(How do you address people? Formal, informal, depends on who?)
+
+## Anything else
+"""
+
+# Seeded into ~/.config/whisperrocket/dictionary.json on first edit.
+DICTIONARY_TEMPLATE = """{
+  "version": 1,
+  "_comment": "correct = the right spelling. heard = what the recogniser produces instead. confidence 'high' is replaced automatically, 'low' is only suggested to the model.",
+  "entries": [
+    {"correct": "Tailscale", "heard": ["tail scale"], "confidence": "high"},
+    {"correct": "Kubernetes", "heard": ["kubernetesz", "kuberneteszt"], "confidence": "low"}
+  ]
+}
+"""
+
+
+class _ClaudeInstallWorker(QThread):
+    """Runs the official installer off the UI thread so the window stays alive"""
+    output = Signal(str)
+    done = Signal(bool, str)
+
+    def run(self):
+        ok, message = claude_cli.install(on_output=self.output.emit)
+        self.done.emit(ok, message)
+
+
+class ClaudeInstallDialog(QDialog):
+    """
+    Confirms and runs Anthropic's official Claude Code installer.
+
+    The command is shown in full before anything runs. It downloads and executes
+    a script from the network, which is not something to do behind the user's
+    back - and it is the same command they would paste into a terminal, which is
+    also why the binary stays exactly as Anthropic publishes it.
+    """
+
+    def __init__(self, ui_lang, parent=None):
+        super().__init__(parent)
+        self.ui_lang = ui_lang
+        self.worker = None
+        self.installed_path = None
+
+        self.setWindowTitle(t("ai_install_title", ui_lang))
+        self.setMinimumWidth(520)
+
+        layout = QVBoxLayout(self)
+        layout.setSpacing(10)
+
+        layout.addWidget(self._wrapped(t("ai_install_intro", ui_lang)))
+
+        command = QLineEdit(claude_cli.INSTALL_COMMAND)
+        command.setReadOnly(True)
+        command.setStyleSheet("font-family: monospace;")
+        layout.addWidget(command)
+
+        note = self._wrapped(t("ai_install_note", ui_lang))
+        note.setStyleSheet("color: #888; font-size: 11px;")
+        layout.addWidget(note)
+
+        self.log = QPlainTextEdit()
+        self.log.setReadOnly(True)
+        self.log.setMaximumBlockCount(500)
+        self.log.setStyleSheet("font-family: monospace; font-size: 11px;")
+        self.log.setFixedHeight(160)
+        self.log.setVisible(False)
+        layout.addWidget(self.log)
+
+        self.status = QLabel("")
+        self.status.setWordWrap(True)
+        layout.addWidget(self.status)
+
+        buttons = QHBoxLayout()
+        buttons.addStretch()
+        self.run_btn = QPushButton(t("ai_install_run", ui_lang))
+        self.run_btn.clicked.connect(self.start_install)
+        buttons.addWidget(self.run_btn)
+        self.close_btn = QPushButton(t("ft_close", ui_lang))
+        self.close_btn.clicked.connect(self.reject)
+        buttons.addWidget(self.close_btn)
+        layout.addLayout(buttons)
+
+        missing = claude_cli.install_prerequisites_missing()
+        if missing:
+            self.run_btn.setEnabled(False)
+            self.status.setText(
+                t("ai_install_missing_tools", ui_lang, tools=", ".join(missing))
+            )
+
+    @staticmethod
+    def _wrapped(text):
+        label = QLabel(text)
+        label.setWordWrap(True)
+        return label
+
+    def start_install(self):
+        self.run_btn.setEnabled(False)
+        self.close_btn.setEnabled(False)
+        self.log.setVisible(True)
+        self.status.setText(t("ai_install_running", self.ui_lang))
+        self.adjustSize()
+
+        self.worker = _ClaudeInstallWorker()
+        self.worker.output.connect(self.log.appendPlainText)
+        self.worker.done.connect(self.on_done)
+        self.worker.start()
+
+    def on_done(self, ok, message):
+        self.close_btn.setEnabled(True)
+        if ok:
+            self.installed_path = message
+            self.status.setText(t("ai_install_done", self.ui_lang, path=message))
+            self.accept()
+        else:
+            self.run_btn.setEnabled(True)
+            self.status.setText(t("ai_install_failed", self.ui_lang, error=message))
+
+
+class ClaudeLoginDialog(QDialog):
+    """
+    Runs `claude auth login`, which performs Anthropic's own browser sign-in.
+
+    WhisperRocket only starts the process and then watches `claude auth status`
+    until it reports success. It never reads, transports or stores the resulting
+    credential - Anthropic's policy requires that sign-in complete through their
+    own flow, and this is how that requirement is met.
+
+    If the CLI cannot open a browser itself, it prints a URL. That URL is picked
+    out of its output and offered here, because a sign-in that silently waits
+    forever is worse than one that asks for a click.
+    """
+    _URL_PATTERN = re.compile(r"https://\S+")
+    POLL_MS = 2000
+    TIMEOUT_MS = 180_000
+
+    def __init__(self, ui_lang, parent=None):
+        super().__init__(parent)
+        self.ui_lang = ui_lang
+        self.process = None
+        self.elapsed_ms = 0
+        self.found_url = None
+
+        self.setWindowTitle(t("ai_login_btn", ui_lang).rstrip("."))
+        self.setMinimumWidth(480)
+
+        layout = QVBoxLayout(self)
+        layout.setSpacing(10)
+
+        hint = QLabel(t("ai_login_hint", ui_lang))
+        hint.setWordWrap(True)
+        hint.setStyleSheet("color: #888; font-size: 11px;")
+        layout.addWidget(hint)
+
+        self.status = QLabel(t("ai_login_waiting", ui_lang))
+        self.status.setWordWrap(True)
+        layout.addWidget(self.status)
+
+        self.url_row = QWidget()
+        url_layout = QHBoxLayout(self.url_row)
+        url_layout.setContentsMargins(0, 0, 0, 0)
+        self.url_field = QLineEdit()
+        self.url_field.setReadOnly(True)
+        self.url_field.setStyleSheet("font-family: monospace; font-size: 11px;")
+        url_layout.addWidget(self.url_field)
+        open_btn = QPushButton("↗")
+        open_btn.setFixedWidth(32)
+        open_btn.clicked.connect(self.open_url)
+        url_layout.addWidget(open_btn)
+        self.url_row.setVisible(False)
+        layout.addWidget(self.url_row)
+
+        buttons = QHBoxLayout()
+        buttons.addStretch()
+        cancel = QPushButton(t("ft_cancel", ui_lang))
+        cancel.clicked.connect(self.reject)
+        buttons.addWidget(cancel)
+        layout.addLayout(buttons)
+
+        self.timer = QTimer(self)
+        self.timer.timeout.connect(self.poll)
+        self.start()
+
+    def start(self):
+        self.process = claude_cli.start_login()
+        if self.process is None:
+            self.status.setText(t("ai_not_installed", self.ui_lang))
+            return
+        self.timer.start(self.POLL_MS)
+
+    def poll(self):
+        self.elapsed_ms += self.POLL_MS
+
+        if claude_cli.auth_status(use_cache=False).logged_in:
+            self.timer.stop()
+            self.accept()
+            return
+
+        if self.found_url is None and self.process is not None:
+            # The process already exited: whatever it printed is all we get, and
+            # it may hold the URL the CLI could not open itself.
+            if self.process.poll() is not None:
+                try:
+                    remaining = self.process.stdout.read() or ""
+                except Exception:
+                    remaining = ""
+                match = self._URL_PATTERN.search(remaining)
+                if match:
+                    self.found_url = match.group(0).rstrip(".,)")
+                    self.url_field.setText(self.found_url)
+                    self.url_row.setVisible(True)
+                    self.adjustSize()
+
+        if self.elapsed_ms >= self.TIMEOUT_MS:
+            self.timer.stop()
+            self.status.setText(t("ai_login_failed", self.ui_lang))
+
+    def open_url(self):
+        if self.found_url:
+            QDesktopServices.openUrl(QUrl(self.found_url))
+
+    def reject(self):
+        self.timer.stop()
+        if self.process is not None and self.process.poll() is None:
+            try:
+                self.process.terminate()
+            except Exception:
+                pass
+        super().reject()
+
+
 class SettingsWindow(QMainWindow):
     """Beállítások ablak tab-okkal"""
 
@@ -190,6 +453,7 @@ class SettingsWindow(QMainWindow):
         self.tabs = QTabWidget()
         self.tabs.addTab(self.create_settings_tab(), t("tab_settings", self.ui_lang))
         self.tabs.addTab(self.create_models_tab(), t("tab_models", self.ui_lang))
+        self.tabs.addTab(self.create_ai_tab(), t("tab_ai", self.ui_lang))
         layout.addWidget(self.tabs)
 
         # Hotkey rögzítés állapota
@@ -804,6 +1068,7 @@ class SettingsWindow(QMainWindow):
         self.config["model"] = self.model_combo.currentData()
         self.config["device"] = self.device_combo.currentData()
         self.config["popup_display_duration"] = self.popup_duration_spin.value()
+        self.collect_ai_settings()
 
         if self.config["device"] in ("cuda", "mlx"):
             self.config["compute_type"] = "float16"
@@ -828,6 +1093,7 @@ class SettingsWindow(QMainWindow):
         self.config["model"] = self.model_combo.currentData()
         self.config["device"] = self.device_combo.currentData()
         self.config["popup_display_duration"] = self.popup_duration_spin.value()
+        self.collect_ai_settings()
 
         if self.config["device"] in ("cuda", "mlx"):
             self.config["compute_type"] = "float16"
@@ -1011,6 +1277,408 @@ class SettingsWindow(QMainWindow):
         if hasattr(self, 'permission_timer'):
             self.permission_timer.stop()
         super().closeEvent(event)
+
+
+    # ------------------------------------------------------------------
+    # AI tab
+    #
+    # Three buttons in order - Install, Sign in, Enable - so the whole setup
+    # happens here and never in a terminal. Everything is off by default: a user
+    # who ignores this tab gets exactly the dictation the app always had.
+    # ------------------------------------------------------------------
+
+    def create_ai_tab(self):
+        """AI cleanup tab: account, cleanup, compose mode, style, prompts, dictionary"""
+        inner = QWidget()
+        layout = QVBoxLayout(inner)
+        layout.setSpacing(12)
+        layout.setContentsMargins(4, 4, 4, 4)
+
+        intro = QLabel(t("ai_intro", self.ui_lang))
+        intro.setWordWrap(True)
+        intro.setStyleSheet("color: #888; font-size: 11px;")
+        layout.addWidget(intro)
+
+        layout.addWidget(self._build_ai_account_group())
+        layout.addWidget(self._build_ai_cleanup_group())
+        layout.addWidget(self._build_ai_compose_group())
+        layout.addWidget(self._build_ai_style_group())
+        layout.addWidget(self._build_ai_prompts_group())
+        layout.addWidget(self._build_ai_dictionary_group())
+        layout.addStretch()
+
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.Shape.NoFrame)
+        scroll.setWidget(inner)
+
+        self.refresh_ai_status()
+        return scroll
+
+    def _build_ai_account_group(self):
+        group = QGroupBox(t("ai_group_account", self.ui_lang))
+        layout = QVBoxLayout(group)
+        layout.setSpacing(8)
+
+        self.ai_account_label = QLabel("")
+        self.ai_account_label.setWordWrap(True)
+        layout.addWidget(self.ai_account_label)
+
+        row = QHBoxLayout()
+        self.ai_install_btn = QPushButton(t("ai_install_btn", self.ui_lang))
+        self.ai_install_btn.clicked.connect(self.on_ai_install)
+        row.addWidget(self.ai_install_btn)
+
+        self.ai_login_btn = QPushButton(t("ai_login_btn", self.ui_lang))
+        self.ai_login_btn.clicked.connect(self.on_ai_login)
+        row.addWidget(self.ai_login_btn)
+
+        self.ai_logout_btn = QPushButton(t("ai_logout_btn", self.ui_lang))
+        self.ai_logout_btn.clicked.connect(self.on_ai_logout)
+        row.addWidget(self.ai_logout_btn)
+        row.addStretch()
+        layout.addLayout(row)
+
+        return group
+
+    def _build_ai_cleanup_group(self):
+        group = QGroupBox(t("ai_group_enhance", self.ui_lang))
+        layout = QVBoxLayout(group)
+        layout.setSpacing(8)
+
+        self.ai_enable_check = QCheckBox(t("ai_enable", self.ui_lang))
+        self.ai_enable_check.setChecked(bool(self.config.get("ai_enhance_enabled")))
+        layout.addWidget(self.ai_enable_check)
+
+        hint = QLabel(t("ai_enable_hint", self.ui_lang))
+        hint.setWordWrap(True)
+        hint.setStyleSheet("color: #888; font-size: 11px;")
+        layout.addWidget(hint)
+
+        form = QFormLayout()
+        form.setSpacing(8)
+
+        self.ai_model_combo = QComboBox()
+        for code, name in claude_cli.available_models():
+            self.ai_model_combo.addItem(name, code)
+        self.set_combo_value(
+            self.ai_model_combo,
+            self.config.get("ai_model", claude_cli.DEFAULT_MODEL),
+        )
+        form.addRow(t("ai_model", self.ui_lang), self.ai_model_combo)
+
+        self.ai_timeout_spin = QSpinBox()
+        self.ai_timeout_spin.setRange(5, 120)
+        self.ai_timeout_spin.setValue(
+            int(self.config.get("ai_timeout_seconds", ai_enhancer.DEFAULT_TIMEOUT))
+        )
+        form.addRow(t("ai_timeout", self.ui_lang), self.ai_timeout_spin)
+
+        layout.addLayout(form)
+        return group
+
+    def _build_ai_compose_group(self):
+        group = QGroupBox(t("ai_group_mode", self.ui_lang))
+        layout = QVBoxLayout(group)
+        layout.setSpacing(8)
+
+        hint = QLabel(t("ai_trigger_hint", self.ui_lang))
+        hint.setWordWrap(True)
+        hint.setStyleSheet("color: #888; font-size: 11px;")
+        layout.addWidget(hint)
+
+        phrases = self.config.get("ai_trigger_phrases") or ai_enhancer.DEFAULT_TRIGGER_PHRASES
+        self.ai_trigger_edit = QPlainTextEdit("\n".join(phrases))
+        self.ai_trigger_edit.setFixedHeight(64)
+        layout.addWidget(self.ai_trigger_edit)
+
+        return group
+
+    def _build_ai_style_group(self):
+        group = QGroupBox(t("ai_group_style", self.ui_lang))
+        layout = QVBoxLayout(group)
+        layout.setSpacing(8)
+
+        self.ai_style_label = QLabel("")
+        self.ai_style_label.setWordWrap(True)
+        layout.addWidget(self.ai_style_label)
+
+        hint = QLabel(t("ai_style_hint", self.ui_lang))
+        hint.setWordWrap(True)
+        hint.setStyleSheet("color: #888; font-size: 11px;")
+        layout.addWidget(hint)
+
+        row = QHBoxLayout()
+        load_btn = QPushButton(t("ai_style_load", self.ui_lang))
+        load_btn.clicked.connect(self.on_ai_style_load)
+        row.addWidget(load_btn)
+        edit_btn = QPushButton(t("ai_style_edit", self.ui_lang))
+        edit_btn.clicked.connect(self.on_ai_style_edit)
+        row.addWidget(edit_btn)
+        row.addStretch()
+        layout.addLayout(row)
+
+        self.update_ai_style_label()
+        return group
+
+    def _build_ai_prompts_group(self):
+        group = QGroupBox(t("ai_group_prompts", self.ui_lang))
+        layout = QVBoxLayout(group)
+        layout.setSpacing(8)
+
+        self.ai_prompt_labels = {}
+        for mode, key in (("transcript", "ai_prompt_transcript"),
+                          ("compose", "ai_prompt_compose")):
+            row = QHBoxLayout()
+
+            label = QLabel("")
+            label.setMinimumWidth(150)
+            self.ai_prompt_labels[mode] = label
+            row.addWidget(label)
+
+            edit_btn = QPushButton(t("ai_prompt_edit", self.ui_lang))
+            edit_btn.clicked.connect(partial(self.on_ai_prompt_edit, mode))
+            row.addWidget(edit_btn)
+
+            reset_btn = QPushButton(t("ai_prompt_reset", self.ui_lang))
+            reset_btn.clicked.connect(partial(self.on_ai_prompt_reset, mode))
+            row.addWidget(reset_btn)
+            row.addStretch()
+
+            container = QWidget()
+            container.setLayout(row)
+            form_label = QLabel(t(key, self.ui_lang))
+            form_label.setStyleSheet("font-weight: bold;")
+            layout.addWidget(form_label)
+            layout.addWidget(container)
+
+        self.update_ai_prompt_labels()
+        return group
+
+    def _build_ai_dictionary_group(self):
+        group = QGroupBox(t("ai_group_dict", self.ui_lang))
+        layout = QVBoxLayout(group)
+        layout.setSpacing(8)
+
+        self.ai_dict_check = QCheckBox(t("ai_dict_enable", self.ui_lang))
+        self.ai_dict_check.setChecked(bool(self.config.get("ai_dictionary_enabled", True)))
+        layout.addWidget(self.ai_dict_check)
+
+        hint = QLabel(t("ai_dict_hint", self.ui_lang))
+        hint.setWordWrap(True)
+        hint.setStyleSheet("color: #888; font-size: 11px;")
+        layout.addWidget(hint)
+
+        self.ai_dict_label = QLabel("")
+        layout.addWidget(self.ai_dict_label)
+
+        row = QHBoxLayout()
+        load_btn = QPushButton(t("ai_dict_load", self.ui_lang))
+        load_btn.clicked.connect(self.on_ai_dict_load)
+        row.addWidget(load_btn)
+        edit_btn = QPushButton(t("ai_dict_edit", self.ui_lang))
+        edit_btn.clicked.connect(self.on_ai_dict_edit)
+        row.addWidget(edit_btn)
+        row.addStretch()
+        layout.addLayout(row)
+
+        self.update_ai_dict_label()
+        return group
+
+    # --- AI tab state ---
+
+    def refresh_ai_status(self):
+        """
+        Reflect the CLI and sign-in state, and gate the cleanup switch on it.
+
+        The switch is disabled rather than hidden when the prerequisites are
+        missing, so it is obvious that the feature exists and what is needed.
+        """
+        status = claude_cli.auth_status(use_cache=False)
+
+        if not status.installed:
+            self.ai_account_label.setText(t("ai_not_installed", self.ui_lang))
+        elif status.logged_in:
+            version = claude_cli.version() or ""
+            account = t("ai_logged_in", self.ui_lang,
+                        email=status.email or "-", plan=status.plan or "-")
+            self.ai_account_label.setText(
+                f"{account}\n{version}" if version else account
+            )
+        else:
+            self.ai_account_label.setText(t("ai_not_logged_in", self.ui_lang))
+
+        self.ai_install_btn.setVisible(not status.installed)
+        self.ai_login_btn.setVisible(status.installed and not status.logged_in)
+        self.ai_logout_btn.setVisible(status.installed and status.logged_in)
+
+        self.ai_enable_check.setEnabled(status.ready)
+        self.ai_model_combo.setEnabled(status.ready)
+        self.ai_timeout_spin.setEnabled(status.ready)
+        if not status.ready:
+            self.ai_enable_check.setChecked(False)
+
+    def update_ai_style_label(self):
+        path = ai_enhancer.style_profile_path()
+        if ai_enhancer.has_style_profile():
+            self.ai_style_label.setText(
+                t("ai_style_present", self.ui_lang, size=format_size(path.stat().st_size))
+            )
+        else:
+            self.ai_style_label.setText(t("ai_style_missing", self.ui_lang))
+
+    def update_ai_prompt_labels(self):
+        for mode, label in self.ai_prompt_labels.items():
+            customised = ai_enhancer.prompt_path(mode).is_file()
+            label.setText(t("ai_prompt_custom" if customised else "ai_prompt_default",
+                            self.ui_lang))
+
+    def update_ai_dict_label(self):
+        stats = dictionary_manager.stats()
+        self.ai_dict_label.setText(t("ai_dict_stats", self.ui_lang, **stats))
+
+    def collect_ai_settings(self):
+        """Read the AI tab back into the config, called from both save paths"""
+        self.config["ai_enhance_enabled"] = self.ai_enable_check.isChecked()
+        self.config["ai_model"] = self.ai_model_combo.currentData()
+        self.config["ai_timeout_seconds"] = self.ai_timeout_spin.value()
+        self.config["ai_dictionary_enabled"] = self.ai_dict_check.isChecked()
+
+        phrases = [line.strip()
+                   for line in self.ai_trigger_edit.toPlainText().splitlines()
+                   if line.strip()]
+        # An empty box would silently disable compose mode, so fall back to the
+        # built-in phrase rather than saving nothing.
+        self.config["ai_trigger_phrases"] = phrases or list(
+            ai_enhancer.DEFAULT_TRIGGER_PHRASES
+        )
+
+    # --- AI tab actions ---
+
+    def on_ai_install(self):
+        dialog = ClaudeInstallDialog(self.ui_lang, self)
+        dialog.exec()
+        claude_cli.invalidate_status_cache()
+        self.refresh_ai_status()
+
+    def on_ai_login(self):
+        dialog = ClaudeLoginDialog(self.ui_lang, self)
+        dialog.exec()
+        claude_cli.invalidate_status_cache()
+        self.refresh_ai_status()
+
+    def on_ai_logout(self):
+        claude_cli.logout()
+        self.refresh_ai_status()
+
+    @staticmethod
+    def _open_in_editor(path):
+        QDesktopServices.openUrl(QUrl.fromLocalFile(str(path)))
+
+    def on_ai_style_load(self):
+        path, _ = QFileDialog.getOpenFileName(
+            self, t("ai_file_load_title", self.ui_lang), "",
+            "Markdown / text (*.md *.txt);;All files (*)"
+        )
+        if not path:
+            return
+        try:
+            content = pathlib.Path(path).read_text(encoding="utf-8")
+            target = ai_enhancer.style_profile_path()
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_text(content, encoding="utf-8")
+        except Exception as e:
+            QMessageBox.warning(self, t("dlg_error", self.ui_lang), str(e))
+            return
+        self.update_ai_style_label()
+
+    def on_ai_style_edit(self):
+        path = ai_enhancer.style_profile_path()
+        if not path.is_file():
+            try:
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text(STYLE_PROFILE_TEMPLATE, encoding="utf-8")
+            except Exception as e:
+                QMessageBox.warning(self, t("dlg_error", self.ui_lang), str(e))
+                return
+        self._open_in_editor(path)
+        self.update_ai_style_label()
+
+    def on_ai_prompt_edit(self, mode, checked=False):
+        """
+        Open the prompt for editing, writing the built-in default first if the
+        file does not exist yet - there has to be something in the editor.
+        """
+        path = ai_enhancer.prompt_path(mode)
+        if not path.is_file():
+            try:
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text(ai_enhancer.default_prompt(mode), encoding="utf-8")
+            except Exception as e:
+                QMessageBox.warning(self, t("dlg_error", self.ui_lang), str(e))
+                return
+        self._open_in_editor(path)
+        self.update_ai_prompt_labels()
+
+    def on_ai_prompt_reset(self, mode, checked=False):
+        """
+        Delete the customised prompt so the built-in default applies again.
+
+        Deleting rather than rewriting matters: with no file present the app uses
+        whatever the current build ships, so later improvements to the prompt
+        reach this user instead of being frozen at install time.
+        """
+        path = ai_enhancer.prompt_path(mode)
+        if not path.is_file():
+            return
+
+        confirm = QMessageBox(self)
+        confirm.setWindowTitle(t("dlg_confirm", self.ui_lang))
+        confirm.setText(t("ai_prompt_reset_confirm", self.ui_lang))
+        confirm.setStandardButtons(QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+        confirm.setDefaultButton(QMessageBox.StandardButton.No)
+        if confirm.exec() != QMessageBox.StandardButton.Yes:
+            return
+
+        try:
+            path.unlink()
+        except Exception as e:
+            QMessageBox.warning(self, t("dlg_error", self.ui_lang), str(e))
+            return
+        self.update_ai_prompt_labels()
+
+    def on_ai_dict_load(self):
+        path, _ = QFileDialog.getOpenFileName(
+            self, t("ai_file_load_title", self.ui_lang), "",
+            "JSON (*.json);;All files (*)"
+        )
+        if not path:
+            return
+
+        ok, message = dictionary_manager.import_from_file(path)
+        if ok:
+            self.update_ai_dict_label()
+            QMessageBox.information(
+                self, t("dlg_saved", self.ui_lang),
+                t("ai_dict_imported", self.ui_lang, message=message)
+            )
+        else:
+            QMessageBox.warning(
+                self, t("dlg_error", self.ui_lang),
+                t("ai_dict_import_failed", self.ui_lang, error=message)
+            )
+
+    def on_ai_dict_edit(self):
+        path = dictionary_manager.get_dictionary_path()
+        if not path.is_file():
+            try:
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text(DICTIONARY_TEMPLATE, encoding="utf-8")
+            except Exception as e:
+                QMessageBox.warning(self, t("dlg_error", self.ui_lang), str(e))
+                return
+        self._open_in_editor(path)
+        self.update_ai_dict_label()
 
 
 def show_settings():

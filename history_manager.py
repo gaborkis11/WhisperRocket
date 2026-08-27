@@ -46,9 +46,19 @@ def save_history(data: Dict) -> bool:
     except IOError:
         return False
 
-def add_entry(text: str, duration_sec: float, language: str) -> Optional[str]:
+def add_entry(text: str, duration_sec: float, language: str,
+              enhanced: Optional[bool] = None,
+              raw_text: Optional[str] = None) -> Optional[str]:
     """
     Új bejegyzés hozzáadása a history-hoz
+
+    Args:
+        enhanced: True ha az AI tisztítás lefutott és elfogadott kimenetet adott,
+                  False ha nyers átirat lett. None ha a funkció nem is futott -
+                  ilyenkor a kulcs be sem kerül a bejegyzésbe, hogy a régi
+                  bejegyzések formátuma változatlan maradjon.
+        raw_text: A tisztítás előtti átirat, ha eltér a végleges szövegtől.
+                  Így a nyers változat is visszakereshető marad.
 
     Returns:
         Az új bejegyzés ID-ja, vagy None hiba esetén
@@ -65,6 +75,11 @@ def add_entry(text: str, duration_sec: float, language: str) -> Optional[str]:
         "duration_sec": round(duration_sec, 2),
         "language": language
     }
+
+    if enhanced is not None:
+        entry["enhanced"] = bool(enhanced)
+    if raw_text and raw_text.strip() and raw_text.strip() != text.strip():
+        entry["raw_text"] = raw_text.strip()
 
     # Új bejegyzés az elejére (legfrissebb elöl)
     data["entries"].insert(0, entry)

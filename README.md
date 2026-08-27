@@ -28,6 +28,7 @@ WhisperRocket is a desktop application that converts speech to text in real-time
 - **File transcription** - Transcribe audio/video files (meetings, interviews, podcasts) with drag & drop
 - **Speaker diarization** - Identify who is speaking (optional, via [pyannote-audio](https://github.com/pyannote/pyannote-audio))
 - **Export** - Save transcriptions as SRT, VTT, TXT, or JSON
+- **AI cleanup** - Optionally turn the raw transcript into a finished message in your own style, using your own Claude subscription (see [AI cleanup](#ai-cleanup-optional))
 - **History** - Browse and copy previous transcriptions from the system tray
 - **System tray** - Runs quietly in the background with color-coded status
 - **Configurable** - Adjust language, model, hotkey, popup duration, and more
@@ -188,6 +189,90 @@ export HF_TOKEN="hf_..."
 ./start.sh
 ```
 
+### AI cleanup (optional)
+
+Raw speech-to-text is faithful but messy: no punctuation, filler words, half-started
+sentences, and the occasional misheard name. AI cleanup turns the transcript into the
+message you actually meant to send — in *your* voice, not a chatbot's.
+
+It runs through **your own Claude Code CLI and your own Claude subscription**. There is
+no API key to buy, no account to create with us, and nothing is billed to anyone but you.
+
+**Off by default.** With it switched off, dictation behaves exactly as it always has.
+
+#### Two modes
+
+| Mode | When | What it does |
+|------|------|--------------|
+| **Transcript** (default) | Always | Fixes punctuation, capitalisation and spelling, deletes filler words and stutters, repairs obvious misrecognitions. Changes nothing else. |
+| **Compose** | You start dictating with a trigger phrase | Writes the message from what you described, instead of transcribing it literally. |
+
+The trigger phrase is configurable (Settings → AI → Compose mode). A phrase is used
+rather than a button so you can switch modes without touching anything.
+
+#### Your swearing is not touched
+
+This is a design requirement, not a side effect. If you swore, the same word appears in
+the output, spelled out in full. The cleanup is instructed never to soften it, **and the
+output is checked afterwards** — if the model substitutes, censors or drops a swear word,
+the response is thrown away and the plain transcript is used instead.
+
+The same check catches the other ways a model can quietly betray a transcript: swapping
+who is speaking and who is being addressed, summarising instead of tidying, inventing a
+sentence, or answering with commentary rather than the message. Every one of those was
+observed in testing before the check existed.
+
+#### Nothing is ever lost
+
+Every failure path — CLI missing, not signed in, usage limit reached, timeout, no
+network, or a response the guard rejects — falls back to the plain transcript and marks
+the tray icon orange with the reason. You always get your text.
+
+#### Setup
+
+Everything happens in **Settings → AI**; you never need a terminal.
+
+1. **Install Claude Code** — if the CLI is missing, the tab offers to run Anthropic's
+   [official installer](https://code.claude.com/docs/en/setup). It shows the exact
+   command and asks first.
+2. **Sign in** — opens Anthropic's own browser sign-in flow.
+3. **Enable AI cleanup** — and optionally pick a model (Sonnet by default).
+
+Requires a Claude Pro, Max, Team or Enterprise plan. Usage counts against that plan's
+limits, shared with everything else you do with Claude. A dictation costs roughly 700
+input and 150 output tokens.
+
+> **Credentials.** WhisperRocket never sees, stores or transports your Claude login.
+> Sign-in is delegated to `claude auth login`, which completes entirely through
+> Anthropic's own flow and stores the credential in Claude Code's own store; the app
+> only reads `claude auth status` to show whether you are signed in. There is no field
+> to paste a token into, by design — Anthropic's
+> [policy](https://code.claude.com/docs/en/legal-and-compliance) requires that
+> third-party applications not collect or intermediate Claude account credentials, and
+> permits an end user to sign in to the unmodified Claude Code binary with their own
+> subscription. That is exactly the path taken here, which is also why the CLI is
+> installed from Anthropic's own installer rather than bundled.
+
+#### Style profile
+
+A short description of how you write — sentence length, whether you greet, how you mix
+languages, how you swear. Without one the cleanup still works but sounds generic.
+
+Copy [`style_profile.example.md`](style_profile.example.md) to
+`~/.config/whisperrocket/style_profile.md`, or click **Edit** in the AI tab to have the
+template seeded for you. Keep it to aggregate traits, never real messages. It is
+gitignored and never committed.
+
+#### Custom dictionary
+
+Speech recognition reliably mangles the proper nouns *you* use. The dictionary fixes them
+in code, before the model sees the text — no tokens, no guessing, and it works with AI
+cleanup switched off entirely.
+
+`high` confidence entries are replaced automatically; `low` ones are passed to the model
+as a hint so context can decide. See
+[`dictionary.example.json`](dictionary.example.json) for the format.
+
 ## Configuration
 
 Right-click the tray icon → **Settings** to configure:
@@ -208,6 +293,11 @@ Right-click the tray icon → **Settings** to configure:
 | Settings template | `config.example.json` | Yes |
 | API tokens | `~/.config/whisperrocket/.env` (mode `0600`) | Never |
 | History | `~/.config/whisperrocket/history.json` | No |
+| Style profile | `~/.config/whisperrocket/style_profile.md` | Never |
+| Custom dictionary | `~/.config/whisperrocket/dictionary.json` | Never |
+| Edited AI prompts | `~/.config/whisperrocket/prompt_{transcript,compose}.md` | Never |
+| Style / dictionary templates | `style_profile.example.md`, `dictionary.example.json` | Yes |
+| Claude login | Managed by Claude Code itself — WhisperRocket never stores it | Never |
 
 `config.json` is generated by `install.sh` based on your detected GPU — copy
 `config.example.json` over it if you ever need to start fresh.
@@ -274,6 +364,10 @@ WhisperRocket/
 ├── file_transcription_window.py  # File transcription UI
 ├── transcription_engine.py       # Transcription backend & export
 ├── diarization_manager.py        # Speaker diarization (pyannote)
+├── ai_enhancer.py        # AI cleanup pipeline (prompt, Claude call, modes)
+├── ai_guard.py           # Rejects model output that betrays the transcript
+├── claude_cli.py         # Claude Code CLI wrapper (install, sign-in status)
+├── dictionary_manager.py # Custom dictionary for misheard proper nouns
 ├── translations.py       # Multi-language UI support (EN/HU)
 ├── config_paths.py       # Config file location (dev vs bundled)
 ├── secrets_manager.py    # API token storage (~/.config/whisperrocket/.env)
@@ -286,6 +380,8 @@ WhisperRocket/
 │   ├── AppRun            # AppImage entry point
 │   └── whisperrocket.spec # PyInstaller config
 ├── config.example.json   # Configuration template
+├── style_profile.example.md   # Style profile template for AI cleanup
+├── dictionary.example.json    # Custom dictionary template
 ├── .githooks/            # Opt-in secret-scanning pre-commit hook
 ├── start.sh              # Startup script
 ├── install.sh            # Installation script

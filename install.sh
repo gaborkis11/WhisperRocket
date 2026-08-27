@@ -301,7 +301,12 @@ if [ ! -f "$CONFIG_FILE" ]; then
     "sample_rate": 16000,
     "input_device": null,
     "output_device": null,
-    "popup_display_duration": 5
+    "popup_display_duration": 5,
+    "ai_enhance_enabled": false,
+    "ai_model": "sonnet",
+    "ai_trigger_phrases": ["fogalmazzuk meg hogy"],
+    "ai_timeout_seconds": 20,
+    "ai_dictionary_enabled": true
 }
 EOF
     log_ok "Configuration created ($DEVICE mode)"
