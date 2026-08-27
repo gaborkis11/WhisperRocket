@@ -594,6 +594,10 @@ Claude Code CLI. See [AI cleanup](#ai-cleanup-optional).
   second example box disagreed with the editor's own contents. There is now one example,
   inside the editor, in the interface language — and the seeded template's example words
   are commented out, so saving an untouched template no longer makes them your vocabulary.
+- The in-app text no longer mentions GitHub or version control. That framing was written
+  for someone who can push to this repository; to everyone else it only raises a question
+  they never had about where their files might end up. Settings now just says where your
+  setup lives and that copying that folder moves it to another machine.
 
 ### v1.0.0
 
