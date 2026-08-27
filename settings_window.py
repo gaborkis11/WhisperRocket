@@ -132,7 +132,15 @@ def load_config():
             "language": "hu",
             "sample_rate": 16000,
             "input_device": None,
-            "output_device": None
+            "output_device": None,
+            # Keep these in step with load_config() in whisper_gui.py - the two
+            # default dicts are separate and silently drifting apart is how the
+            # setup wizard once wrote to a file the app never read.
+            "ai_enhance_enabled": False,
+            "ai_model": "sonnet",
+            "ai_trigger_phrases": ["fogalmazzuk meg hogy"],
+            "ai_timeout_seconds": 20,
+            "ai_dictionary_enabled": True
         }
 
 

@@ -30,7 +30,11 @@ config.json
 build/
 build_appimage/
 dist/
+# PyInstaller drops generated specs in the project root; the one under
+# packaging/ is hand-maintained and build_appimage.sh cannot run without it, so
+# it has to ship - a fresh clone could not build an AppImage while it was ignored.
 *.spec
+!packaging/whisperrocket.spec
 
 # Development files (not for public repo)
 CLAUDE.md
