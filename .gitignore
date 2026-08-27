@@ -53,7 +53,9 @@ tasks/
 # update this list. The .example templates are re-included below - those are the
 # versions that ship.
 *style_profile*.md
-*dictionary*.json
+*dictionary*.md
+*dictionary*.json*
+*dictionary*.txt
 prompt_*.md
 *history.json
 personal/

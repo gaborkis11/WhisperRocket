@@ -270,25 +270,72 @@ copy that ends up in the project directory during development.
 Settings → AI shows the path with an **Open folder** button. To move your setup to
 another machine, copy that one folder.
 
-#### Style profile
+#### Style profile — how to fill it in
 
-A short description of how you write — sentence length, whether you greet, how you mix
-languages, how you swear. Without one the cleanup still works but sounds generic.
+Without one the cleanup still works, but it sounds like a generic assistant rather
+than like you. The profile is a short description of *how you write*, read on every
+dictation and never modified by the app.
 
 Copy [`style_profile.example.md`](style_profile.example.md) to
-`~/.config/whisperrocket/style_profile.md`, or click **Edit** in the AI tab to have the
-template seeded for you. Keep it to aggregate traits, never real messages. It is
-gitignored and never committed.
+`~/.config/whisperrocket/style_profile.md`, or click **Edit** in Settings → AI and the
+template is created for you. Then answer its questions and delete them:
 
-#### Custom dictionary
+| Section | What to write |
+|---|---|
+| Sentence length and rhythm | Short and clipped, or long and flowing? Do you use dashes, ellipses, one-line paragraphs? |
+| Greetings and sign-offs | Do you open with a greeting, or start straight into the message? Do you sign off? |
+| Language mixing | Do you mix in English or other loanwords? Which kinds — technical terms, slang, filler? |
+| Swearing | Where and how do you swear, and which words? These are kept **verbatim** — the cleanup never softens them, and the output guard rejects any response that tries. |
+| Formality | How do you address people? Does it depend on who? |
+| Anything else | How you write numbers and dates, emoji, capitalisation quirks. |
 
-Speech recognition reliably mangles the proper nouns *you* use. The dictionary fixes them
-in code, before the model sees the text — no tokens, no guessing, and it works with AI
-cleanup switched off entirely.
+**Keep it to aggregate traits.** Describe patterns, not examples — no real messages, no
+names, nothing you would not want sent to a model. The file is gitignored and never
+committed.
 
-`high` confidence entries are replaced automatically; `low` ones are passed to the model
-as a hint so context can decide. See
-[`dictionary.example.json`](dictionary.example.json) for the format.
+The template carries an `UNFILLED-TEMPLATE` marker on its second line. While that marker
+is present the app ignores the file entirely, so an untouched template is never mistaken
+for a description of you. Delete the marker line once you have written your profile.
+
+#### Your own words — how to fill it in
+
+Speech recognition does not know the names you use — your projects, your tools, people,
+in-house jargon. It does not leave them blank either: it writes down whatever sounded
+closest. Measured here, "tail scale" came back as **TeamViewer**, a real product that was
+never mentioned. A wrong-but-plausible name is worse than a garbled one, because nobody
+notices it.
+
+Open **Settings → AI → Your own words** and list them, **one per line**:
+
+```
+Tailscale
+Kubernetes
+faster-whisper
+```
+
+That is the whole format. **You do not have to write down what the recogniser gets
+wrong** — the AI works that out from how the word sounds. Measured, three runs out of
+three: given only a list like the one above, it turned "tel szkel" into Tailscale,
+"klovolt ba" into "ClawVaultba" and "faszter viszper" into faster-whisper, Hungarian
+inflection included.
+
+Lines starting with `#` are ignored, so you can keep notes.
+
+**Optional — literal corrections.** To have a specific mishearing fixed *even with AI
+cleanup switched off*, write it after a colon:
+
+```
+Kubernetes: kubernetesz, kuberneteszt
+```
+
+That one is a literal replacement done in code, so it is guaranteed — but it only matches
+what you spell out, which is why inflected forms need listing. Word boundaries are
+respected and case and accents are ignored, so `tail scale` matches while
+`tailscalexyz` does not.
+
+The file lives at `~/.config/whisperrocket/dictionary.md`; see
+[`dictionary.example.md`](dictionary.example.md). A `dictionary.json` written by an
+earlier version is converted automatically on first use.
 
 ## Configuration
 
@@ -311,9 +358,9 @@ Right-click the tray icon → **Settings** to configure:
 | API tokens | `~/.config/whisperrocket/.env` (mode `0600`) | Never |
 | History | `~/.config/whisperrocket/history.json` | No |
 | Style profile | `~/.config/whisperrocket/style_profile.md` | Never |
-| Custom dictionary | `~/.config/whisperrocket/dictionary.json` | Never |
+| Your own words | `~/.config/whisperrocket/dictionary.md` | Never |
 | Edited AI prompts | `~/.config/whisperrocket/prompt_{transcript,compose}.md` | Never |
-| Style / dictionary templates | `style_profile.example.md`, `dictionary.example.json` | Yes |
+| Style / vocabulary templates | `style_profile.example.md`, `dictionary.example.md` | Yes |
 | Claude login | Managed by Claude Code itself — WhisperRocket never stores it | Never |
 
 `config.json` is generated by `install.sh` based on your detected GPU — copy
@@ -330,7 +377,7 @@ git config core.hooksPath .githooks
 ```
 
 It blocks commits containing API-token-shaped strings, a staged `.env` file, or
-personal settings (`style_profile.md`, `dictionary.json`, `prompt_*.md`,
+personal settings (`style_profile.md`, `dictionary.md`, `prompt_*.md`,
 `config.json`, `history.json`). `.gitignore` already covers those, but `git add -f`
 bypasses it — the hook is the second line of defence. The `.example` templates are
 the versions meant to ship.
@@ -388,7 +435,7 @@ WhisperRocket/
 ├── ai_enhancer.py        # AI cleanup pipeline (prompt, Claude call, modes)
 ├── ai_guard.py           # Rejects model output that betrays the transcript
 ├── claude_cli.py         # Claude Code CLI wrapper (install, sign-in status)
-├── dictionary_manager.py # Custom dictionary for misheard proper nouns
+├── dictionary_manager.py # Personal vocabulary for misheard proper nouns
 ├── translations.py       # Multi-language UI support (EN/HU)
 ├── config_paths.py       # Config file location (dev vs bundled)
 ├── secrets_manager.py    # API token storage (~/.config/whisperrocket/.env)
@@ -402,7 +449,7 @@ WhisperRocket/
 │   └── whisperrocket.spec # PyInstaller config
 ├── config.example.json   # Configuration template
 ├── style_profile.example.md   # Style profile template for AI cleanup
-├── dictionary.example.json    # Custom dictionary template
+├── dictionary.example.md      # Personal vocabulary template
 ├── .githooks/            # Opt-in secret-scanning pre-commit hook
 ├── start.sh              # Startup script
 ├── install.sh            # Installation script
@@ -506,9 +553,10 @@ Claude Code CLI. See [AI cleanup](#ai-cleanup-optional).
 - **Nothing is ever lost.** CLI missing, not signed in, usage limit reached, timeout, no
   network, or a rejected response — every path falls back to the plain transcript and marks
   the tray icon orange with the reason.
-- **Custom dictionary** with an in-app table editor, for the proper nouns speech
-  recognition reliably mangles. Entries marked automatic are replaced in code before the
-  model sees the text; the rest are offered to it as hints. Works with AI cleanup off.
+- **Your own words** — a plain list of the names speech recognition mangles, one per
+  line. You do not say what it gets wrong; the AI resolves them from how they sound
+  (measured 15/15 on made-up project names). Optionally spell a mishearing out after a
+  colon and it is corrected in code, which also works with AI cleanup off.
 - **Style profile** — a short description of how you write, so the cleanup keeps your voice
   instead of flattening it. Template in [`style_profile.example.md`](style_profile.example.md).
 - **Editable prompts** for both modes, with a reset to the built-in default.
@@ -530,6 +578,8 @@ Claude Code CLI. See [AI cleanup](#ai-cleanup-optional).
 - An unfilled style profile template is ignored instead of being fed to the model as if it
   described the user.
 - `save_settings()` and `save_and_restart()` no longer duplicate the field list.
+- The Settings window is resizable instead of a fixed 500×620, so the AI tab can be
+  dragged taller rather than scrolled.
 
 ### v1.0.0
 

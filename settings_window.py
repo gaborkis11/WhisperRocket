@@ -404,6 +404,98 @@ class ClaudeLoginDialog(QDialog):
         super().reject()
 
 
+class VocabularyDialog(QDialog):
+    """
+    Editor for the personal vocabulary.
+
+    A plain text box rather than a table, because the file is now just a list of
+    words - one per line - and a table for that is more furniture than help. The
+    format is explained above the box instead of in a tooltip nobody hovers.
+    """
+
+    def __init__(self, ui_lang, parent=None):
+        super().__init__(parent)
+        self.ui_lang = ui_lang
+
+        self.setWindowTitle(t("ai_dict_dialog_title", ui_lang))
+        self.resize(560, 520)
+
+        layout = QVBoxLayout(self)
+        layout.setSpacing(10)
+
+        intro = QLabel(t("ai_dict_dialog_intro", ui_lang))
+        intro.setWordWrap(True)
+        layout.addWidget(intro)
+
+        example = QLabel(t("ai_dict_dialog_example", ui_lang))
+        example.setWordWrap(True)
+        example.setStyleSheet(
+            "font-family: monospace; font-size: 11px; color: #888; "
+            "background: rgba(128,128,128,0.10); padding: 8px; border-radius: 4px;"
+        )
+        layout.addWidget(example)
+
+        self.editor = QPlainTextEdit(dictionary_manager.read_text())
+        self.editor.setStyleSheet("font-family: monospace;")
+        layout.addWidget(self.editor, 1)
+
+        advanced = QLabel(t("ai_dict_dialog_advanced", ui_lang))
+        advanced.setWordWrap(True)
+        advanced.setStyleSheet("color: #888; font-size: 11px;")
+        layout.addWidget(advanced)
+
+        buttons = QHBoxLayout()
+        self.count = QLabel("")
+        self.count.setStyleSheet("color: #888; font-size: 11px;")
+        buttons.addWidget(self.count)
+        buttons.addStretch()
+
+        load_btn = QPushButton(t("ai_dict_load", ui_lang))
+        load_btn.clicked.connect(self.on_load_file)
+        buttons.addWidget(load_btn)
+
+        save_btn = QPushButton(t("btn_save", ui_lang))
+        save_btn.clicked.connect(self.on_save)
+        buttons.addWidget(save_btn)
+
+        cancel_btn = QPushButton(t("btn_cancel", ui_lang))
+        cancel_btn.clicked.connect(self.reject)
+        buttons.addWidget(cancel_btn)
+        layout.addLayout(buttons)
+
+        self.editor.textChanged.connect(self.update_count)
+        self.update_count()
+
+    def update_count(self):
+        stats = dictionary_manager.stats(
+            dictionary_manager.parse(self.editor.toPlainText())
+        )
+        self.count.setText(t("ai_dict_count", self.ui_lang, **stats))
+
+    def on_load_file(self):
+        path, _ = QFileDialog.getOpenFileName(
+            self, t("ai_file_load_title", self.ui_lang), "",
+            "Vocabulary (*.md *.txt *.json);;All files (*)"
+        )
+        if not path:
+            return
+        ok, message = dictionary_manager.import_from_file(path)
+        if ok:
+            self.editor.setPlainText(dictionary_manager.read_text())
+        else:
+            QMessageBox.warning(
+                self, t("dlg_error", self.ui_lang),
+                t("ai_dict_import_failed", self.ui_lang, error=message)
+            )
+
+    def on_save(self):
+        if not dictionary_manager.write_text(self.editor.toPlainText()):
+            QMessageBox.warning(self, t("dlg_error", self.ui_lang),
+                                t("ai_dict_write_failed", self.ui_lang))
+            return
+        self.accept()
+
+
 class SettingsWindow(QMainWindow):
     """Beállítások ablak tab-okkal"""
 
@@ -429,7 +521,10 @@ class SettingsWindow(QMainWindow):
     def init_ui(self):
         """UI inicializálása"""
         self.setWindowTitle(t("settings_title", self.ui_lang))
-        self.setFixedSize(500, 620)
+        # Resizable rather than fixed: the AI tab is long, and being able to drag
+        # the window taller beats scrolling a settings page.
+        self.resize(560, 720)
+        self.setMinimumSize(500, 460)
 
         # Központi widget
         central = QWidget()
@@ -1081,7 +1176,6 @@ class SettingsWindow(QMainWindow):
 
         save_config(self.config)
         set_autostart(self.autostart_check.isChecked())
-        self.save_dictionary_from_table()
 
     def save_ai_settings(self):
         """
@@ -1472,7 +1566,9 @@ class SettingsWindow(QMainWindow):
         hint = QLabel(t("ai_style_hint", self.ui_lang))
         hint.setWordWrap(True)
         hint.setStyleSheet("color: #888; font-size: 11px;")
+        hint.setToolTip(t("ai_style_tip", self.ui_lang))
         layout.addWidget(hint)
+        self.ai_style_label.setToolTip(t("ai_style_tip", self.ui_lang))
 
         row = QHBoxLayout()
         load_btn = QPushButton(t("ai_style_load", self.ui_lang))
@@ -1523,12 +1619,11 @@ class SettingsWindow(QMainWindow):
 
     def _build_ai_dictionary_group(self):
         """
-        Dictionary editor as a table, so nobody has to edit JSON.
+        Personal vocabulary: a checkbox, a count, and one button.
 
-        The previous version offered "Load file" and "Edit" and left the user to
-        work out which one to use and what the file should contain. Editing JSON
-        by hand is a barrier for anyone who is not a developer, and this feature
-        is only useful if people actually fill it in.
+        The editor lives in its own dialog. An earlier version put the whole
+        table here, which crowded an already long tab for something you set up
+        once and rarely touch.
         """
         group = QGroupBox(t("ai_group_dict", self.ui_lang))
         layout = QVBoxLayout(group)
@@ -1536,132 +1631,43 @@ class SettingsWindow(QMainWindow):
 
         self.ai_dict_check = QCheckBox(t("ai_dict_enable", self.ui_lang))
         self.ai_dict_check.setChecked(bool(self.config.get("ai_dictionary_enabled", True)))
+        self.ai_dict_check.setToolTip(t("ai_dict_tip", self.ui_lang))
         layout.addWidget(self.ai_dict_check)
 
         hint = QLabel(t("ai_dict_hint", self.ui_lang))
         hint.setWordWrap(True)
         hint.setStyleSheet("color: #888; font-size: 11px;")
+        hint.setToolTip(t("ai_dict_tip", self.ui_lang))
         layout.addWidget(hint)
 
-        self.ai_dict_table = QTableWidget(0, 3)
-        self.ai_dict_table.setHorizontalHeaderLabels([
-            t("ai_dict_col_correct", self.ui_lang),
-            t("ai_dict_col_heard", self.ui_lang),
-            t("ai_dict_col_auto", self.ui_lang),
-        ])
-        header = self.ai_dict_table.horizontalHeader()
-        header.setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
-        header.setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
-        header.setSectionResizeMode(2, QHeaderView.ResizeMode.ResizeToContents)
-        self.ai_dict_table.horizontalHeaderItem(1).setToolTip(t("ai_dict_heard_tip", self.ui_lang))
-        self.ai_dict_table.horizontalHeaderItem(2).setToolTip(t("ai_dict_auto_tip", self.ui_lang))
-        self.ai_dict_table.verticalHeader().setVisible(False)
-        self.ai_dict_table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
-        self.ai_dict_table.setFixedHeight(140)
-        layout.addWidget(self.ai_dict_table)
-
         row = QHBoxLayout()
-        add_btn = QPushButton(t("ai_dict_add", self.ui_lang))
-        add_btn.clicked.connect(self.on_ai_dict_add_row)
-        row.addWidget(add_btn)
-
-        remove_btn = QPushButton(t("ai_dict_remove", self.ui_lang))
-        remove_btn.clicked.connect(self.on_ai_dict_remove_row)
-        row.addWidget(remove_btn)
-
-        load_btn = QPushButton(t("ai_dict_load", self.ui_lang))
-        load_btn.clicked.connect(self.on_ai_dict_load)
-        row.addWidget(load_btn)
-        row.addStretch()
-        layout.addLayout(row)
-
         self.ai_dict_label = QLabel("")
         self.ai_dict_label.setWordWrap(True)
-        self.ai_dict_label.setStyleSheet("color: #888; font-size: 11px;")
-        layout.addWidget(self.ai_dict_label)
+        row.addWidget(self.ai_dict_label, 1)
 
-        self.load_dictionary_into_table()
+        edit_btn = QPushButton(t("ai_dict_edit_words", self.ui_lang))
+        edit_btn.clicked.connect(self.on_ai_dict_edit_words)
+        edit_btn.setToolTip(t("ai_dict_tip", self.ui_lang))
+        row.addWidget(edit_btn)
+        layout.addLayout(row)
+
+        self.update_ai_dict_label()
         return group
 
+    def update_ai_dict_label(self):
+        """How many words are live, or a nudge to add some"""
+        stats = dictionary_manager.stats()
+        if stats["total"] == 0:
+            self.ai_dict_label.setText(t("ai_dict_empty", self.ui_lang))
+        else:
+            self.ai_dict_label.setText(t("ai_dict_count", self.ui_lang, **stats))
+
+    def on_ai_dict_edit_words(self):
+        dialog = VocabularyDialog(self.ui_lang, self)
+        dialog.exec()
+        self.update_ai_dict_label()
+
     # --- dictionary table ---
-
-    def _dict_row(self, position, correct="", heard="", auto=True):
-        """Insert one row; the third column is a checkbox, not free text"""
-        self.ai_dict_table.insertRow(position)
-        self.ai_dict_table.setItem(position, 0, QTableWidgetItem(correct))
-        self.ai_dict_table.setItem(position, 1, QTableWidgetItem(heard))
-
-        flag = QTableWidgetItem()
-        flag.setFlags(Qt.ItemFlag.ItemIsUserCheckable | Qt.ItemFlag.ItemIsEnabled
-                      | Qt.ItemFlag.ItemIsSelectable)
-        flag.setCheckState(Qt.CheckState.Checked if auto else Qt.CheckState.Unchecked)
-        flag.setToolTip(t("ai_dict_auto_tip", self.ui_lang))
-        self.ai_dict_table.setItem(position, 2, flag)
-
-    def load_dictionary_into_table(self):
-        """Fill the table from the stored dictionary"""
-        data = dictionary_manager.load()
-        self.ai_dict_table.setRowCount(0)
-        for entry in data.get("entries", []):
-            if not isinstance(entry, dict):
-                continue
-            correct = str(entry.get("correct") or "")
-            heard = entry.get("heard") or []
-            heard_text = ", ".join(str(h) for h in heard) if isinstance(heard, list) else str(heard)
-            auto = str(entry.get("confidence") or "high").lower() != dictionary_manager.CONFIDENCE_LOW
-            self._dict_row(self.ai_dict_table.rowCount(), correct, heard_text, auto)
-        self.update_ai_dict_label()
-
-    def collect_dictionary_from_table(self):
-        """
-        Read the table back into the dictionary structure.
-
-        Rows missing either half are dropped rather than saved broken - an empty
-        row is what an accidental "Add" leaves behind, and it must not become an
-        entry that matches nothing.
-        """
-        entries = []
-        for row in range(self.ai_dict_table.rowCount()):
-            correct_item = self.ai_dict_table.item(row, 0)
-            heard_item = self.ai_dict_table.item(row, 1)
-            auto_item = self.ai_dict_table.item(row, 2)
-
-            correct = (correct_item.text() if correct_item else "").strip()
-            heard_raw = (heard_item.text() if heard_item else "")
-            variants = [v.strip() for v in heard_raw.split(",") if v.strip()]
-            if not correct or not variants:
-                continue
-
-            auto = auto_item is not None and auto_item.checkState() == Qt.CheckState.Checked
-            entries.append({
-                "correct": correct,
-                "heard": variants,
-                "confidence": (dictionary_manager.CONFIDENCE_HIGH if auto
-                               else dictionary_manager.CONFIDENCE_LOW),
-            })
-        return {"version": dictionary_manager.CURRENT_VERSION, "entries": entries}
-
-    def save_dictionary_from_table(self):
-        """Write the table out; called from every save path"""
-        if not hasattr(self, "ai_dict_table"):
-            return
-        dictionary_manager.save(self.collect_dictionary_from_table())
-        self.update_ai_dict_label()
-
-    def on_ai_dict_add_row(self):
-        position = self.ai_dict_table.rowCount()
-        self._dict_row(position)
-        self.ai_dict_table.setCurrentCell(position, 0)
-        self.ai_dict_table.editItem(self.ai_dict_table.item(position, 0))
-
-    def on_ai_dict_remove_row(self):
-        rows = sorted({index.row() for index in self.ai_dict_table.selectedIndexes()},
-                      reverse=True)
-        if not rows:
-            rows = [self.ai_dict_table.rowCount() - 1] if self.ai_dict_table.rowCount() else []
-        for row in rows:
-            self.ai_dict_table.removeRow(row)
-        self.update_ai_dict_label()
 
     # --- AI tab state ---
 
@@ -1717,18 +1723,6 @@ class SettingsWindow(QMainWindow):
             customised = ai_enhancer.prompt_path(mode).is_file()
             label.setText(t("ai_prompt_custom" if customised else "ai_prompt_default",
                             self.ui_lang))
-
-    def update_ai_dict_label(self):
-        """Say how many entries are live, or explain what to do when empty"""
-        data = self.collect_dictionary_from_table() if hasattr(self, "ai_dict_table") else None
-        stats = dictionary_manager.stats(data)
-        if stats["total"] == 0:
-            self.ai_dict_label.setText(t("ai_dict_empty", self.ui_lang))
-        else:
-            self.ai_dict_label.setText(
-                t("ai_dict_stats", self.ui_lang, **stats) + " · "
-                + t("ai_dict_persist", self.ui_lang)
-            )
 
     def collect_ai_settings(self):
         """Read the AI tab back into the config, called from both save paths"""
@@ -1848,28 +1842,6 @@ class SettingsWindow(QMainWindow):
             QMessageBox.warning(self, t("dlg_error", self.ui_lang), str(e))
             return
         self.update_ai_prompt_labels()
-
-    def on_ai_dict_load(self):
-        """Import a ready-made dictionary file, then show it in the table"""
-        path, _ = QFileDialog.getOpenFileName(
-            self, t("ai_file_load_title", self.ui_lang), "",
-            "JSON (*.json);;All files (*)"
-        )
-        if not path:
-            return
-
-        ok, message = dictionary_manager.import_from_file(path)
-        if ok:
-            self.load_dictionary_into_table()
-            QMessageBox.information(
-                self, t("dlg_saved", self.ui_lang),
-                t("ai_dict_imported", self.ui_lang, message=message)
-            )
-        else:
-            QMessageBox.warning(
-                self, t("dlg_error", self.ui_lang),
-                t("ai_dict_import_failed", self.ui_lang, error=message)
-            )
 
 def show_settings():
     """Beállítások ablak megjelenítése"""

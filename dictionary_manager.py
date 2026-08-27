@@ -1,28 +1,31 @@
 #!/usr/bin/env python3
 """
-WhisperRocket - Custom dictionary
+WhisperRocket - Personal vocabulary
 
-Speech recognition reliably mangles the proper nouns a particular person uses -
-names, product names, places. A model can guess some of them back from context,
-but guessing is exactly what we do not want in transcript mode.
+Speech recognition does not know the words a particular person uses - project
+names, product names, people, in-house jargon - and it does not fail quietly.
+Measured on this project: "tel szkel" came back as TeamViewer, a real product
+that was never mentioned. A wrong-but-plausible name in a message is worse than
+a garbled one, because nobody notices it.
 
-So the fix happens in code, before the model ever sees the text: a plain lookup
-table replaces known mishearings. It costs no tokens, cannot hallucinate, and
-works even with the AI enhancement switched off entirely.
+The fix is to tell the model which words exist. Measured, three runs out of
+three: given nothing but a list of correct spellings - no hint about what the
+recogniser produces instead - Sonnet resolved every mangled term, Hungarian
+inflection included ("klovolt ba" -> "ClawVaultba"). So the file is just a list
+of words, which is the least work possible for the person writing it.
 
-Entries marked "low" confidence are not replaced automatically - they are passed
-to the model as a hint instead, so it can decide from context. That is the
-"both" strategy: deterministic where we are sure, model-assisted where we aren't.
+A term may optionally spell out what it gets misheard as. Those get replaced in
+code, before the model runs, which is the only way to fix them when the AI
+cleanup is switched off entirely.
 
-File: ~/.config/whisperrocket/dictionary.json  (never committed)
+File: ~/.config/whisperrocket/dictionary.md  (never committed)
 
-    {
-      "version": 1,
-      "entries": [
-        {"correct": "Tailscale", "heard": ["tail scale"], "confidence": "high"},
-        {"correct": "Kubernetes", "heard": ["kubernetesz"], "confidence": "low"}
-      ]
-    }
+    # One word per line, spelled the way you want it written.
+    Tailscale
+    ClawVault
+
+    # With a colon, the mishearing is corrected in code as well:
+    Kubernetes: kubernetesz, kuberneteszt
 """
 import json
 import re
@@ -32,17 +35,45 @@ from typing import Dict, List, Optional, Tuple
 
 from platform_support import get_platform_handler
 
-DICTIONARY_FILENAME = "dictionary.json"
-CURRENT_VERSION = 1
+DICTIONARY_FILENAME = "dictionary.md"
+LEGACY_JSON_FILENAME = "dictionary.json"
 
-CONFIDENCE_HIGH = "high"
-CONFIDENCE_LOW = "low"
+# The whole vocabulary goes into every prompt, so it needs a ceiling. 300 terms
+# is roughly 600 tokens - a fraction of a cent per dictation - and far more than
+# anyone maintains by hand.
+MAX_VOCABULARY = 300
+
+TEMPLATE = """\
+# Your own words
+#
+# Speech recognition does not know the names you use, so it writes down
+# something that merely sounds similar. List the words here and they come out
+# spelled correctly.
+#
+# One word or phrase per line. Nothing else needed - you do NOT have to write
+# down what the recogniser gets wrong, the AI works that out from how it sounds.
+#
+# Lines starting with # are ignored, so you can keep notes.
+
+Tailscale
+Kubernetes
+
+# Optional: if you want a specific mishearing corrected even with AI cleanup
+# switched OFF, write it after a colon. Separate several with commas. This is a
+# literal, word-boundary replacement, so list inflected forms too if you need
+# them corrected.
+#
+# Tailscale: tail scale, telszkel
+"""
 
 
 def get_dictionary_path() -> Path:
-    """Path to the user's dictionary (never inside the project directory)"""
-    config_dir = get_platform_handler().get_config_dir()
-    return config_dir / DICTIONARY_FILENAME
+    """Path to the user's vocabulary (never inside the project directory)"""
+    return get_platform_handler().get_config_dir() / DICTIONARY_FILENAME
+
+
+def get_legacy_json_path() -> Path:
+    return get_platform_handler().get_config_dir() / LEGACY_JSON_FILENAME
 
 
 def _fold_char(char: str) -> str:
@@ -67,82 +98,170 @@ def fold(text: str) -> str:
     return "".join(_fold_char(c) for c in text)
 
 
-def load() -> Dict:
+def parse(text: str) -> List[Dict]:
     """
-    Read the dictionary. A missing or broken file yields an empty one - this
-    runs inside the dictation path and must never raise.
+    Parse the markdown file into terms.
+
+    Returns a list of {"correct": str, "heard": [str, ...]}; an empty heard list
+    means the term is vocabulary only, with no literal replacement.
+    """
+    terms: List[Dict] = []
+    seen = set()
+
+    for line in (text or "").splitlines():
+        line = line.strip()
+        if not line or line.startswith("#"):
+            continue
+
+        line = line.lstrip("-*").strip()
+        if not line:
+            continue
+
+        correct, _, variants_raw = line.partition(":")
+        correct = correct.strip()
+        if not correct:
+            continue
+
+        key = fold(correct)
+        if key in seen:
+            continue
+        seen.add(key)
+
+        variants = [v.strip() for v in variants_raw.split(",") if v.strip()]
+        terms.append({"correct": correct, "heard": variants})
+
+    return terms
+
+
+def render(terms: List[Dict]) -> str:
+    """Turn terms back into file text, keeping the colon form where needed"""
+    lines = []
+    for term in terms:
+        correct = str(term.get("correct") or "").strip()
+        if not correct:
+            continue
+        variants = [str(v).strip() for v in (term.get("heard") or []) if str(v).strip()]
+        lines.append(f"{correct}: {', '.join(variants)}" if variants else correct)
+    return "\n".join(lines) + ("\n" if lines else "")
+
+
+def _migrate_legacy_json() -> Optional[str]:
+    """
+    Convert a dictionary.json written by an earlier version into the markdown
+    file, once. The JSON format was harder to write by hand than it needed to
+    be, and nobody should have to redo their list because the format improved.
+    """
+    legacy = get_legacy_json_path()
+    try:
+        data = json.loads(legacy.read_text(encoding="utf-8"))
+    except Exception:
+        return None
+
+    entries = data.get("entries") if isinstance(data, dict) else None
+    if not isinstance(entries, list):
+        return None
+
+    terms = []
+    for entry in entries:
+        if not isinstance(entry, dict):
+            continue
+        correct = str(entry.get("correct") or "").strip()
+        if not correct:
+            continue
+        heard = entry.get("heard") or []
+        variants = [str(h).strip() for h in heard if str(h).strip()] \
+            if isinstance(heard, list) else []
+        # "low" confidence meant "do not replace, only hint" - which is now
+        # simply a term with no variants.
+        if str(entry.get("confidence") or "high").lower() == "low":
+            variants = []
+        terms.append({"correct": correct, "heard": variants})
+
+    if not terms:
+        return None
+
+    text = render(terms)
+    if write_text(text):
+        try:
+            legacy.rename(legacy.with_suffix(".json.migrated"))
+        except Exception:
+            pass
+        print(f"[INFO] Vocabulary migrated from {legacy.name} to {DICTIONARY_FILENAME}")
+    return text
+
+
+def read_text() -> str:
+    """
+    Raw file contents for the editor.
+
+    A missing file yields the template, so the editor always opens with an
+    explanation of the format rather than a blank page.
     """
     path = get_dictionary_path()
     try:
-        with open(path, "r", encoding="utf-8") as f:
-            data = json.load(f)
+        return path.read_text(encoding="utf-8")
     except Exception:
-        return {"version": CURRENT_VERSION, "entries": []}
+        pass
 
-    if not isinstance(data, dict) or not isinstance(data.get("entries"), list):
-        return {"version": CURRENT_VERSION, "entries": []}
-    return data
+    migrated = _migrate_legacy_json()
+    if migrated is not None:
+        return migrated
+    return TEMPLATE
 
 
-def save(data: Dict) -> bool:
-    """Write the dictionary back, creating the config directory if needed"""
+def write_text(text: str) -> bool:
+    """Write the file, creating the config directory if needed"""
     path = get_dictionary_path()
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
-        with open(path, "w", encoding="utf-8") as f:
-            json.dump(data, f, ensure_ascii=False, indent=2)
+        path.write_text(text if text.endswith("\n") else text + "\n", encoding="utf-8")
         return True
     except Exception:
         return False
 
 
-def _valid_entries(data: Optional[Dict] = None) -> List[Dict]:
-    """Entries that have both a replacement and something to match against"""
-    data = data if data is not None else load()
-    entries = []
-    for entry in data.get("entries", []):
-        if not isinstance(entry, dict):
-            continue
-        correct = str(entry.get("correct") or "").strip()
-        heard = entry.get("heard") or []
-        if not correct or not isinstance(heard, list):
-            continue
-        variants = [str(h).strip() for h in heard if str(h).strip()]
-        if not variants:
-            continue
-        entries.append({
-            "correct": correct,
-            "heard": variants,
-            "confidence": str(entry.get("confidence") or CONFIDENCE_HIGH).lower(),
-        })
-    return entries
-
-
-def _variant_pattern(variant: str, allow_suffix: bool = False) -> re.Pattern:
+def load() -> List[Dict]:
     """
-    Word-bounded pattern for one misheard variant, tolerant of extra spaces.
+    The parsed vocabulary. Never raises - this runs inside the dictation path.
 
-    allow_suffix widens the match over a short Hungarian case ending, so
-    "kubernetesz" also matches "kuberneteszt". That is right for a hint the model
-    weighs against context, and wrong for an automatic replacement - turning
-    "reszelo" into "Reszelot" because "reszel" was listed is exactly the false
-    positive this feature must not produce - so apply() leaves it off.
+    The template counts as empty: its example lines are commented out, so a user
+    who opened the editor and closed it again has no vocabulary, not two words
+    they never chose.
     """
+    path = get_dictionary_path()
+    try:
+        text = path.read_text(encoding="utf-8")
+    except Exception:
+        text = _migrate_legacy_json()
+        if text is None:
+            return []
+    try:
+        return parse(text)
+    except Exception:
+        return []
+
+
+def vocabulary(terms: Optional[List[Dict]] = None) -> List[str]:
+    """Correct spellings, for the prompt"""
+    terms = load() if terms is None else terms
+    return [t["correct"] for t in terms if t.get("correct")][:MAX_VOCABULARY]
+
+
+def _variant_pattern(variant: str) -> re.Pattern:
+    """Word-bounded pattern for one misheard variant, tolerant of extra spaces"""
     parts = [re.escape(fold(part)) for part in variant.split() if part]
     if not parts:
         return re.compile(r"(?!)")
-    body = r"\s+".join(parts)
-    tail = r"\w{0,4}" if allow_suffix else ""
-    return re.compile(r"\b" + body + tail + r"\b")
+    return re.compile(r"\b" + r"\s+".join(parts) + r"\b")
 
 
-def apply(text: str, data: Optional[Dict] = None) -> Tuple[str, int]:
+def apply(text: str, terms: Optional[List[Dict]] = None) -> Tuple[str, int]:
     """
-    Replace known mishearings with the correct spelling.
+    Replace spelled-out mishearings with the correct spelling.
 
-    Only "high" confidence entries are replaced; "low" ones go to prompt_hint().
-    Matching ignores case and accents, but the replacement keeps the spelling
-    from the dictionary, so "tail scale" becomes "Tailscale" and not "tailscale".
+    Only terms that name their variants are touched; the rest are the model's
+    job. Matching ignores case and accents but respects word boundaries, so
+    "tail scale" becomes "Tailscale" while "tailscalexyz" is left alone.
 
     Returns:
         (corrected_text, number_of_replacements)
@@ -150,23 +269,24 @@ def apply(text: str, data: Optional[Dict] = None) -> Tuple[str, int]:
     if not text or not text.strip():
         return text, 0
 
-    entries = [e for e in _valid_entries(data) if e["confidence"] != CONFIDENCE_LOW]
-    if not entries:
-        return text, 0
-
-    # Longest variants first, so "tail scale drive" wins over "tail scale"
+    terms = load() if terms is None else terms
     replacements: List[Tuple[re.Pattern, str]] = []
-    for entry in entries:
-        for variant in sorted(entry["heard"], key=len, reverse=True):
-            replacements.append((_variant_pattern(variant), entry["correct"]))
+    for term in terms:
+        correct = term.get("correct")
+        if not correct:
+            continue
+        # Longest variants first, so "tail scale drive" wins over "tail scale"
+        for variant in sorted(term.get("heard") or [], key=len, reverse=True):
+            replacements.append((_variant_pattern(variant), correct))
+
+    if not replacements:
+        return text, 0
 
     result = text
     count = 0
     for pattern, correct in replacements:
         folded = fold(result)
         spans = [m.span() for m in pattern.finditer(folded)]
-        if not spans:
-            continue
         # Right to left, so earlier spans keep their indices valid
         for start, end in reversed(spans):
             if result[start:end] == correct:
@@ -177,78 +297,67 @@ def apply(text: str, data: Optional[Dict] = None) -> Tuple[str, int]:
     return result, count
 
 
-def prompt_hint(text: str, data: Optional[Dict] = None, max_entries: int = 25) -> str:
-    """
-    Hint lines for the low-confidence entries that are actually relevant to this
-    transcript, so the model can decide from context.
-
-    Only relevant entries are included - sending the whole dictionary would cost
-    tokens on every dictation and bury the useful ones.
-    """
-    if not text or not text.strip():
-        return ""
-
-    folded_text = fold(text)
-    lines = []
-    for entry in _valid_entries(data):
-        if entry["confidence"] != CONFIDENCE_LOW:
-            continue
-        for variant in entry["heard"]:
-            if _variant_pattern(variant, allow_suffix=True).search(folded_text):
-                lines.append(f'- "{variant}" -> {entry["correct"]}')
-                break
-        if len(lines) >= max_entries:
-            break
-
-    return "\n".join(lines)
-
-
-def stats(data: Optional[Dict] = None) -> Dict[str, int]:
-    """Entry counts for the Settings UI"""
-    entries = _valid_entries(data)
+def stats(terms: Optional[List[Dict]] = None) -> Dict[str, int]:
+    """Counts for the Settings window"""
+    terms = load() if terms is None else terms
     return {
-        "total": len(entries),
-        "high": sum(1 for e in entries if e["confidence"] != CONFIDENCE_LOW),
-        "low": sum(1 for e in entries if e["confidence"] == CONFIDENCE_LOW),
+        "total": len(terms),
+        "with_variants": sum(1 for t in terms if t.get("heard")),
     }
 
 
 def import_from_file(source_path: str) -> Tuple[bool, str]:
     """
-    Validate a dictionary file the user picked and copy it into the config dir.
+    Copy a vocabulary file the user picked into the config directory.
 
-    Returns:
-        (success, message) - the message names the problem when it fails
+    Accepts the markdown format and the JSON format an earlier version used, so
+    a list generated by something else still loads.
     """
     try:
-        with open(source_path, "r", encoding="utf-8") as f:
-            data = json.load(f)
-    except json.JSONDecodeError as e:
-        return False, f"invalid JSON: {e}"
+        raw = Path(source_path).read_text(encoding="utf-8")
     except Exception as e:
         return False, str(e)
 
-    if not isinstance(data, dict) or not isinstance(data.get("entries"), list):
-        return False, "expected an object with an 'entries' list"
+    text = raw
+    if source_path.lower().endswith(".json"):
+        try:
+            data = json.loads(raw)
+        except json.JSONDecodeError as e:
+            return False, f"invalid JSON: {e}"
+        entries = data.get("entries") if isinstance(data, dict) else None
+        if not isinstance(entries, list):
+            return False, "expected an object with an 'entries' list"
+        terms = []
+        for entry in entries:
+            if not isinstance(entry, dict):
+                continue
+            correct = str(entry.get("correct") or "").strip()
+            if not correct:
+                continue
+            heard = entry.get("heard") or []
+            variants = [str(h).strip() for h in heard if str(h).strip()] \
+                if isinstance(heard, list) else []
+            if str(entry.get("confidence") or "high").lower() == "low":
+                variants = []
+            terms.append({"correct": correct, "heard": variants})
+        text = render(terms)
 
-    valid = _valid_entries(data)
-    if not valid:
-        return False, "no usable entries (each needs 'correct' and 'heard')"
+    if not parse(text):
+        return False, "no usable words found"
 
-    data.setdefault("version", CURRENT_VERSION)
-    if not save(data):
+    if not write_text(text):
         return False, "could not write to the config directory"
-    return True, f"{len(valid)} entries imported"
+    return True, f"{len(parse(text))} words imported"
 
 
 if __name__ == "__main__":
     import sys
 
     sample = sys.argv[1] if len(sys.argv) > 1 else "megy a tail scale meg a kubernetesz"
-    fixed, n = apply(sample)
-    print(f"path:     {get_dictionary_path()}")
-    print(f"stats:    {stats()}")
-    print(f"input:    {sample}")
-    print(f"output:   {fixed}   ({n} replacements)")
-    hint = prompt_hint(sample)
-    print(f"hint:     {hint or '-'}")
+    terms = load()
+    fixed, n = apply(sample, terms)
+    print(f"path:       {get_dictionary_path()}")
+    print(f"stats:      {stats(terms)}")
+    print(f"vocabulary: {', '.join(vocabulary(terms)) or '-'}")
+    print(f"input:      {sample}")
+    print(f"output:     {fixed}   ({n} literal replacements)")
