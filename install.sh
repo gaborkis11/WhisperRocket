@@ -305,7 +305,7 @@ if [ ! -f "$CONFIG_FILE" ]; then
     "ai_enhance_enabled": false,
     "ai_model": "sonnet",
     "ai_trigger_phrases": ["fogalmazzuk meg hogy"],
-    "ai_timeout_seconds": 20,
+    "ai_timeout_seconds": 60,
     "ai_dictionary_enabled": true
 }
 EOF

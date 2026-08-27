@@ -148,7 +148,7 @@ def load_config():
             "ai_enhance_enabled": False,
             "ai_model": "sonnet",
             "ai_trigger_phrases": ["fogalmazzuk meg hogy"],
-            "ai_timeout_seconds": 20,
+            "ai_timeout_seconds": 60,
             "ai_dictionary_enabled": True
         }
 

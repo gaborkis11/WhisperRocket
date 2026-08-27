@@ -50,7 +50,10 @@ PROMPT_FILENAMES = {
 }
 
 DEFAULT_TRIGGER_PHRASES: Tuple[str, ...] = ("fogalmazzuk meg hogy",)
-DEFAULT_TIMEOUT = 20
+# 60, not 20: a single call was measured at 15 seconds against a usual ~4, and a
+# timeout that trips on a slow-but-working call costs the cleanup for no reason.
+# Waiting longer only matters when something is already wrong.
+DEFAULT_TIMEOUT = 60
 DEFAULT_MODEL = claude_cli.DEFAULT_MODEL
 
 # Human-readable names for the languages WhisperRocket transcribes, so the

@@ -20,7 +20,7 @@ from PySide6.QtWidgets import (
     QDialogButtonBox, QTableWidget, QTableWidgetItem, QHeaderView
 )
 from PySide6.QtCore import Qt, QTimer, QThread, Signal, QUrl
-from PySide6.QtGui import QFont, QKeySequence, QDesktopServices
+from PySide6.QtGui import QFont, QKeySequence, QDesktopServices, QIntValidator
 
 from model_manager import (
     get_downloaded_models, get_active_model, delete_model,
@@ -139,7 +139,7 @@ def load_config():
             "ai_enhance_enabled": False,
             "ai_model": "sonnet",
             "ai_trigger_phrases": ["fogalmazzuk meg hogy"],
-            "ai_timeout_seconds": 20,
+            "ai_timeout_seconds": 60,
             "ai_dictionary_enabled": True
         }
 
@@ -1527,12 +1527,25 @@ class SettingsWindow(QMainWindow):
         )
         form.addRow(t("ai_model", self.ui_lang), self.ai_model_combo)
 
-        self.ai_timeout_spin = QSpinBox()
-        self.ai_timeout_spin.setRange(5, 120)
-        self.ai_timeout_spin.setValue(
-            int(self.config.get("ai_timeout_seconds", ai_enhancer.DEFAULT_TIMEOUT))
+        # A plain field, not a spin box: a spin box swallows the mouse wheel, so
+        # scrolling this tab with the pointer over it silently changes the value.
+        self.ai_timeout_edit = QLineEdit(
+            str(int(self.config.get("ai_timeout_seconds", ai_enhancer.DEFAULT_TIMEOUT)))
         )
-        form.addRow(t("ai_timeout", self.ui_lang), self.ai_timeout_spin)
+        self.ai_timeout_edit.setValidator(QIntValidator(5, 600, self))
+        self.ai_timeout_edit.setFixedWidth(80)
+        self.ai_timeout_edit.setToolTip(t("ai_timeout_tip", self.ui_lang))
+
+        timeout_row = QHBoxLayout()
+        timeout_row.setContentsMargins(0, 0, 0, 0)
+        timeout_row.addWidget(self.ai_timeout_edit)
+        timeout_note = QLabel(t("ai_timeout_note", self.ui_lang))
+        timeout_note.setStyleSheet("color: #888; font-size: 11px;")
+        timeout_note.setToolTip(t("ai_timeout_tip", self.ui_lang))
+        timeout_row.addWidget(timeout_note, 1)
+        timeout_widget = QWidget()
+        timeout_widget.setLayout(timeout_row)
+        form.addRow(t("ai_timeout", self.ui_lang), timeout_widget)
 
         layout.addLayout(form)
         return group
@@ -1705,7 +1718,7 @@ class SettingsWindow(QMainWindow):
         # the box ticked costs nothing.
         self.ai_enable_check.setEnabled(status.ready)
         self.ai_model_combo.setEnabled(status.ready)
-        self.ai_timeout_spin.setEnabled(status.ready)
+        self.ai_timeout_edit.setEnabled(status.ready)
 
     def update_ai_style_label(self):
         path = ai_enhancer.style_profile_path()
@@ -1728,7 +1741,15 @@ class SettingsWindow(QMainWindow):
         """Read the AI tab back into the config, called from both save paths"""
         self.config["ai_enhance_enabled"] = self.ai_enable_check.isChecked()
         self.config["ai_model"] = self.ai_model_combo.currentData()
-        self.config["ai_timeout_seconds"] = self.ai_timeout_spin.value()
+        # An empty or nonsense field must not become a 0-second timeout that
+        # fails every call - fall back to the default instead.
+        try:
+            timeout = int(self.ai_timeout_edit.text().strip())
+        except ValueError:
+            timeout = ai_enhancer.DEFAULT_TIMEOUT
+        timeout = max(5, min(600, timeout))
+        self.config["ai_timeout_seconds"] = timeout
+        self.ai_timeout_edit.setText(str(timeout))
         self.config["ai_dictionary_enabled"] = self.ai_dict_check.isChecked()
 
         phrases = [line.strip()

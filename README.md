@@ -580,6 +580,11 @@ Claude Code CLI. See [AI cleanup](#ai-cleanup-optional).
 - `save_settings()` and `save_and_restart()` no longer duplicate the field list.
 - The Settings window is resizable instead of a fixed 500×620, so the AI tab can be
   dragged taller rather than scrolled.
+- The AI timeout is a text field, not a spin box. A spin box swallows the mouse wheel,
+  so scrolling the tab with the pointer over it silently changed the value. The default
+  is now 60 seconds rather than 20: a call usually takes about 4 seconds, but one was
+  measured at 15, and a timeout that trips on a slow-but-working call costs the cleanup
+  for nothing.
 
 ### v1.0.0
 
