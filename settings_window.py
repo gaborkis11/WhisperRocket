@@ -428,15 +428,12 @@ class VocabularyDialog(QDialog):
         intro.setWordWrap(True)
         layout.addWidget(intro)
 
-        example = QLabel(t("ai_dict_dialog_example", ui_lang))
-        example.setWordWrap(True)
-        example.setStyleSheet(
-            "font-family: monospace; font-size: 11px; color: #888; "
-            "background: rgba(128,128,128,0.10); padding: 8px; border-radius: 4px;"
+        # No separate example box: it showed one list while the editor showed
+        # another, which read as a contradiction. The example lives in the
+        # editor's own commented template, so there is exactly one of them.
+        self.editor = QPlainTextEdit(
+            dictionary_manager.read_text() or t("ai_dict_template", ui_lang)
         )
-        layout.addWidget(example)
-
-        self.editor = QPlainTextEdit(dictionary_manager.read_text())
         self.editor.setStyleSheet("font-family: monospace;")
         layout.addWidget(self.editor, 1)
 
@@ -482,7 +479,9 @@ class VocabularyDialog(QDialog):
             return
         ok, message = dictionary_manager.import_from_file(path)
         if ok:
-            self.editor.setPlainText(dictionary_manager.read_text())
+            self.editor.setPlainText(
+                dictionary_manager.read_text() or t("ai_dict_template", self.ui_lang)
+            )
         else:
             QMessageBox.warning(
                 self, t("dlg_error", self.ui_lang),

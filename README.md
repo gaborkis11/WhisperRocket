@@ -309,7 +309,7 @@ Open **Settings → AI → Your own words** and list them, **one per line**:
 
 ```
 Tailscale
-Kubernetes
+WhisperRocket
 faster-whisper
 ```
 
@@ -325,11 +325,11 @@ Lines starting with `#` are ignored, so you can keep notes.
 cleanup switched off*, write it after a colon:
 
 ```
-Kubernetes: kubernetesz, kuberneteszt
+Tailscale: tail scale, télszkél
 ```
 
 That one is a literal replacement done in code, so it is guaranteed — but it only matches
-what you spell out, which is why inflected forms need listing. Word boundaries are
+exactly what you spell out, which is why inflected forms need listing. Word boundaries are
 respected and case and accents are ignored, so `tail scale` matches while
 `tailscalexyz` does not.
 
@@ -589,6 +589,11 @@ Claude Code CLI. See [AI cleanup](#ai-cleanup-optional).
   Qt lets them consume wheel events, so scrolling a settings page with the pointer
   resting on the model selector switched the model. The wheel now scrolls the page
   instead, and a setting changes only when you open its menu and pick something.
+- The vocabulary editor no longer contradicts itself. It said you need not write down
+  what the recogniser gets wrong, while showing an example that did exactly that, and a
+  second example box disagreed with the editor's own contents. There is now one example,
+  inside the editor, in the interface language — and the seeded template's example words
+  are commented out, so saving an untouched template no longer makes them your vocabulary.
 
 ### v1.0.0
 

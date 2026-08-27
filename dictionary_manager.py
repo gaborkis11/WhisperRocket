@@ -20,12 +20,12 @@ cleanup is switched off entirely.
 
 File: ~/.config/whisperrocket/dictionary.md  (never committed)
 
-    # One word per line, spelled the way you want it written.
+    # Comments are ignored. One word per line, spelled the way you want it.
     Tailscale
-    ClawVault
+    WhisperRocket
 
     # With a colon, the mishearing is corrected in code as well:
-    Kubernetes: kubernetesz, kuberneteszt
+    Tailscale: tail scale, telszkel
 """
 import json
 import re
@@ -42,30 +42,6 @@ LEGACY_JSON_FILENAME = "dictionary.json"
 # is roughly 600 tokens - a fraction of a cent per dictation - and far more than
 # anyone maintains by hand.
 MAX_VOCABULARY = 300
-
-TEMPLATE = """\
-# Your own words
-#
-# Speech recognition does not know the names you use, so it writes down
-# something that merely sounds similar. List the words here and they come out
-# spelled correctly.
-#
-# One word or phrase per line. Nothing else needed - you do NOT have to write
-# down what the recogniser gets wrong, the AI works that out from how it sounds.
-#
-# Lines starting with # are ignored, so you can keep notes.
-
-Tailscale
-Kubernetes
-
-# Optional: if you want a specific mishearing corrected even with AI cleanup
-# switched OFF, write it after a colon. Separate several with commas. This is a
-# literal, word-boundary replacement, so list inflected forms too if you need
-# them corrected.
-#
-# Tailscale: tail scale, telszkel
-"""
-
 
 def get_dictionary_path() -> Path:
     """Path to the user's vocabulary (never inside the project directory)"""
@@ -192,10 +168,12 @@ def _migrate_legacy_json() -> Optional[str]:
 
 def read_text() -> str:
     """
-    Raw file contents for the editor.
+    Raw file contents for the editor, or "" when there is no file yet.
 
-    A missing file yields the template, so the editor always opens with an
-    explanation of the format rather than a blank page.
+    Deliberately returns nothing rather than a template. The template belongs to
+    the UI, which knows the user's language - and an earlier version seeded live
+    example words here, so saving an untouched template silently made the
+    examples someone's vocabulary.
     """
     path = get_dictionary_path()
     try:
@@ -204,9 +182,7 @@ def read_text() -> str:
         pass
 
     migrated = _migrate_legacy_json()
-    if migrated is not None:
-        return migrated
-    return TEMPLATE
+    return migrated if migrated is not None else ""
 
 
 def write_text(text: str) -> bool:
@@ -353,7 +329,7 @@ def import_from_file(source_path: str) -> Tuple[bool, str]:
 if __name__ == "__main__":
     import sys
 
-    sample = sys.argv[1] if len(sys.argv) > 1 else "megy a tail scale meg a kubernetesz"
+    sample = sys.argv[1] if len(sys.argv) > 1 else "megy a tail scale meg a viszper roket"
     terms = load()
     fixed, n = apply(sample, terms)
     print(f"path:       {get_dictionary_path()}")

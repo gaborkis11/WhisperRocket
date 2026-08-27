@@ -26,7 +26,7 @@
 # Lines starting with # are ignored, so you can keep notes and group things.
 
 Tailscale
-Kubernetes
+WhisperRocket
 faster-whisper
 
 # ---------------------------------------------------------------------------
@@ -36,10 +36,9 @@ faster-whisper
 # write it after a colon. Separate several with commas.
 #
 # This one is a literal, word-boundary replacement done in code, so it is
-# guaranteed - but it only matches what you spell out. List inflected forms too
-# if you need them corrected:
+# guaranteed - but it only matches exactly what you spell out:
 #
-#     Kubernetes: kubernetesz, kuberneteszt
+#     Tailscale: tail scale, télszkél
 #
 # Word boundaries are respected and case and accents are ignored, so
 # "tail scale" matches but "tailscalexyz" does not.
