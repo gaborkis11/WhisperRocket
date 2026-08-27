@@ -49,16 +49,42 @@ PROMPT_FILENAMES = {
     "compose": "prompt_compose.md",
 }
 
-# Több alak, mert a diktálás közben az jön ki a szájából, ami épp jön - és egy
-# egyetlen frázisra szűkített lista azt jelenti, hogy a fogalmazó mód csendben
-# nem indul el. Élesben ez történt: Gábor „segíts megfogalmazni"-t mondott,
-# a lista meg csak „fogalmazzuk meg hogy"-ot ismerte.
-DEFAULT_TRIGGER_PHRASES: Tuple[str, ...] = (
-    "fogalmazzuk meg hogy",
-    "fogalmazd meg hogy",
-    "segíts megfogalmazni",
-    "jarvis segíts megfogalmazni",
-)
+# Several phrasings per language, because dictation produces whatever comes out
+# of the speaker's mouth, not what someone typed into a config file. A list
+# narrowed to one phrase means compose mode silently never starts - which is
+# exactly what happened in real use: the speaker said "segíts megfogalmazni"
+# while the list held only "fogalmazzuk meg hogy".
+#
+# Keyed by the TRANSCRIPTION language, not the interface language: the phrase has
+# to match the words the recogniser produces. Languages without an entry fall
+# back to English, and the Settings hint tells the user to add their own - a
+# guessed translation that nobody would actually say is worse than no entry.
+TRIGGER_PHRASES_BY_LANGUAGE = {
+    "hu": (
+        "fogalmazzuk meg hogy",
+        "fogalmazd meg hogy",
+        "segíts megfogalmazni",
+        "jarvis segíts megfogalmazni",
+    ),
+    "en": (
+        "help me write",
+        "help me phrase",
+        "write a message saying",
+        "draft a message saying",
+    ),
+}
+DEFAULT_TRIGGER_LANGUAGE = "en"
+
+# Kept for callers that do not know the language; prefer trigger_phrases_for().
+DEFAULT_TRIGGER_PHRASES: Tuple[str, ...] = TRIGGER_PHRASES_BY_LANGUAGE["hu"]
+
+
+def trigger_phrases_for(language: str) -> Tuple[str, ...]:
+    """Built-in compose triggers for a transcription language"""
+    return TRIGGER_PHRASES_BY_LANGUAGE.get(
+        (language or "").lower(),
+        TRIGGER_PHRASES_BY_LANGUAGE[DEFAULT_TRIGGER_LANGUAGE],
+    )
 # 120, raised from 60 after real use. The typical call is 6-8 seconds, but the
 # tail is long and API-side: the same 93-word input that timed out at 60s ran in
 # 8.1s minutes later. A timeout that trips on a slow-but-working call throws away
@@ -293,7 +319,9 @@ def detect_mode(text: str, phrases) -> Tuple[str, str]:
         return "transcript", text
 
     folded = dictionary_manager.fold(text)
-    for phrase in (phrases or ()):
+    # Longest first, so "write a message saying" wins over "help me write" when
+    # both match - the more specific phrase leaves a cleaner message behind.
+    for phrase in sorted((phrases or ()), key=lambda p: len(str(p)), reverse=True):
         words = dictionary_manager.fold(str(phrase)).split()
         if not words:
             continue
@@ -451,7 +479,8 @@ def _enhance(raw_text: str, config: Dict, started: float) -> EnhanceResult:
         text, hits = dictionary_manager.apply(text, terms)
         vocabulary = dictionary_manager.vocabulary(terms)
 
-    phrases = config.get("ai_trigger_phrases") or DEFAULT_TRIGGER_PHRASES
+    phrases = (config.get("ai_trigger_phrases")
+               or trigger_phrases_for(config.get("language", "")))
     mode, payload = detect_mode(text, phrases)
 
     # In compose mode the trigger phrase is instruction, not message, so it must

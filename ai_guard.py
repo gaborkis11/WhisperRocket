@@ -63,15 +63,19 @@ FILLER_WORDS: Set[str] = {
     "nemtudom", "hogyhogy", "ott", "meg", "mar", "csak", "azert", "persze",
 }
 
-# Only matched at the very start of the response, and kept deliberately tight:
-# "nem tudom, mit csinaljak" is legitimate dictated content, so a loose list
-# would reject good output.
+# Only phrases that can ONLY be a model talking about its own task. An earlier
+# version also listed "i cannot", "i'm sorry" and "sajnalom, de" - which are
+# ordinary ways to open a message. Found in testing: "help me write a message
+# saying I cannot make it tomorrow" produced a perfectly good composed message
+# starting "I cannot make it...", and the guard threw it away.
+#
+# Genuine refusals are caught by the length and retention checks instead: a
+# response that declines the task shares almost no content with the transcript.
 _META_PREFIXES: Sequence[str] = (
-    "sajnalom, de", "sajnalom de", "nem all modomban", "nem tudok segiteni",
-    "i'm sorry", "im sorry", "i am sorry", "i cannot", "i can't", "i can not",
     "as an ai", "mint egy ai", "mint mesterseges intelligencia",
-    "itt van a", "ime a", "ime:", "a tisztitott szoveg", "a megtisztitott",
-    "here is the", "here's the",
+    "nem all modomban", "a tisztitott szoveg", "a megtisztitott",
+    "ime a", "ime:", "itt van a tisztitott", "here is the cleaned",
+    "here is the corrected", "here's the cleaned", "here's the corrected",
 )
 
 # Leading label lines the model sometimes prepends, e.g. "Tisztított szöveg:"
@@ -81,10 +85,12 @@ _QUOTE_PAIRS = (('"', '"'), ("'", "'"), ("„", "”"), ("“", "”"),
                 ("«", "»"), ("‘", "’"))
 
 # Per-mode tolerances. Transcript mode must not reword, so it is strict.
-# Compose mode is supposed to reformulate, so only profanity is policed.
+# Compose mode is supposed to reformulate, so its retention floor is only there
+# to catch a response that has nothing to do with the transcript at all - a
+# refusal shares almost no content words, a genuine rewrite shares plenty.
 _THRESHOLDS = {
     "transcript": {"min_ratio": 0.5, "max_ratio": 1.6, "min_retention": 0.6},
-    "compose": {"min_ratio": 0.25, "max_ratio": 3.5, "min_retention": 0.0},
+    "compose": {"min_ratio": 0.25, "max_ratio": 3.5, "min_retention": 0.15},
 }
 
 

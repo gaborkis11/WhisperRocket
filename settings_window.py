@@ -1566,12 +1566,32 @@ class SettingsWindow(QMainWindow):
         hint.setStyleSheet("color: #888; font-size: 11px;")
         layout.addWidget(hint)
 
-        phrases = self.config.get("ai_trigger_phrases") or ai_enhancer.DEFAULT_TRIGGER_PHRASES
+        phrases = (self.config.get("ai_trigger_phrases")
+                   or ai_enhancer.trigger_phrases_for(self.config.get("language", "")))
         self.ai_trigger_edit = QPlainTextEdit("\n".join(phrases))
         self.ai_trigger_edit.setFixedHeight(64)
         layout.addWidget(self.ai_trigger_edit)
 
+        row = QHBoxLayout()
+        row.addStretch()
+        reset_btn = QPushButton(t("ai_trigger_reset", self.ui_lang))
+        reset_btn.setToolTip(t("ai_trigger_reset_tip", self.ui_lang))
+        reset_btn.clicked.connect(self.on_ai_trigger_reset)
+        row.addWidget(reset_btn)
+        layout.addLayout(row)
+
         return group
+
+    def on_ai_trigger_reset(self):
+        """
+        Fill in the built-in triggers for the transcription language currently
+        selected on the first tab - not the saved one, so switching language and
+        pressing this does what the user expects.
+        """
+        language = self.language_combo.currentData() or self.config.get("language", "")
+        self.ai_trigger_edit.setPlainText(
+            "\n".join(ai_enhancer.trigger_phrases_for(language))
+        )
 
     def _build_ai_style_group(self):
         group = QGroupBox(t("ai_group_style", self.ui_lang))
@@ -1764,7 +1784,9 @@ class SettingsWindow(QMainWindow):
         # An empty box would silently disable compose mode, so fall back to the
         # built-in phrase rather than saving nothing.
         self.config["ai_trigger_phrases"] = phrases or list(
-            ai_enhancer.DEFAULT_TRIGGER_PHRASES
+            ai_enhancer.trigger_phrases_for(
+                self.language_combo.currentData() or self.config.get("language", "")
+            )
         )
 
     # --- AI tab actions ---
