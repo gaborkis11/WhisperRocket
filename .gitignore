@@ -41,13 +41,25 @@ CLAUDE.md
 tasks/
 .claude/
 
-# AI enhancement - user-specific, never committed.
-# These live in ~/.config/whisperrocket/ ; this is a safety net in case a copy
-# ends up in the project directory during development.
-style_profile.md
-dictionary.json
-prompt_transcript.md
-prompt_compose.md
+# Personal settings - never committed.
+#
+# These normally live in ~/.config/whisperrocket/, which is outside this
+# repository, so git cannot see them at all. That is the real protection; the
+# rules below are the second line of defence for a copy that ends up in the
+# project directory during development.
+#
+# Deliberately pattern-based rather than a list of filenames: a personal file
+# added by a later feature is covered without anyone having to remember to
+# update this list. The .example templates are re-included below - those are the
+# versions that ship.
+*style_profile*.md
+*dictionary*.json
+prompt_*.md
+*history.json
+personal/
+private/
+!*.example.md
+!*.example.json
 
 # Runtime state files
 .download_state.json

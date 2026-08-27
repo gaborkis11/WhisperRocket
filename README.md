@@ -253,6 +253,23 @@ input and 150 output tokens.
 > subscription. That is exactly the path taken here, which is also why the CLI is
 > installed from Anthropic's own installer rather than bundled.
 
+#### Where your personal settings live
+
+Everything personal — style profile, custom dictionary, edited prompts, history and
+your settings — lives in one folder **outside this repository**:
+
+```
+~/.config/whisperrocket/
+```
+
+That location is the privacy design, not a convention. Git cannot see those files even
+in principle, because they are not inside the working tree. `.gitignore` and the
+[pre-commit hook](#files-and-secrets) are the second and third lines of defence, for a
+copy that ends up in the project directory during development.
+
+Settings → AI shows the path with an **Open folder** button. To move your setup to
+another machine, copy that one folder.
+
 #### Style profile
 
 A short description of how you write — sentence length, whether you greet, how you mix

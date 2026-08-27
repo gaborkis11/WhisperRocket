@@ -1309,6 +1309,7 @@ class SettingsWindow(QMainWindow):
         intro.setStyleSheet("color: #888; font-size: 11px;")
         layout.addWidget(intro)
 
+        layout.addWidget(self._build_ai_files_group())
         layout.addWidget(self._build_ai_account_group())
         layout.addWidget(self._build_ai_cleanup_group())
         layout.addWidget(self._build_ai_compose_group())
@@ -1324,6 +1325,36 @@ class SettingsWindow(QMainWindow):
 
         self.refresh_ai_status()
         return scroll
+
+    def _build_ai_files_group(self):
+        """
+        Where the personal files live, and a button to open it.
+
+        Shown because the location is the whole privacy design: these files sit
+        outside the repository, so git cannot see them even in principle. It also
+        answers "how do I move my setup to another machine" - copy this folder.
+        """
+        group = QGroupBox(t("ai_group_files", self.ui_lang))
+        layout = QVBoxLayout(group)
+        layout.setSpacing(8)
+
+        row = QHBoxLayout()
+        path_field = QLineEdit(str(ai_enhancer.user_dir()))
+        path_field.setReadOnly(True)
+        path_field.setStyleSheet("font-family: monospace; font-size: 11px;")
+        row.addWidget(path_field)
+
+        open_btn = QPushButton(t("ai_open_folder", self.ui_lang))
+        open_btn.clicked.connect(self.on_ai_open_folder)
+        row.addWidget(open_btn)
+        layout.addLayout(row)
+
+        hint = QLabel(t("ai_files_hint", self.ui_lang))
+        hint.setWordWrap(True)
+        hint.setStyleSheet("color: #888; font-size: 11px;")
+        layout.addWidget(hint)
+
+        return group
 
     def _build_ai_account_group(self):
         group = QGroupBox(t("ai_group_account", self.ui_lang))
@@ -1586,6 +1617,15 @@ class SettingsWindow(QMainWindow):
     @staticmethod
     def _open_in_editor(path):
         QDesktopServices.openUrl(QUrl.fromLocalFile(str(path)))
+
+    def on_ai_open_folder(self):
+        folder = ai_enhancer.user_dir()
+        try:
+            folder.mkdir(parents=True, exist_ok=True)
+        except Exception as e:
+            QMessageBox.warning(self, t("dlg_error", self.ui_lang), str(e))
+            return
+        self._open_in_editor(folder)
 
     def on_ai_style_load(self):
         path, _ = QFileDialog.getOpenFileName(

@@ -190,6 +190,9 @@ TRANSLATIONS = {
         # AI enhancement
         "tab_ai": "AI",
         "ai_group_account": "Claude account",
+        "ai_group_files": "Your personal files",
+        "ai_files_hint": "Your style profile, dictionary, edited prompts, history and settings live in this folder - outside the project directory, so they can never reach GitHub. Copy the folder to move your setup to another machine.",
+        "ai_open_folder": "Open folder",
         "ai_intro": "The AI cleanup runs through your own Claude Code CLI and your own Claude subscription. WhisperRocket never stores your login.",
         "ai_not_installed": "Claude Code CLI is not installed",
         "ai_cli_version": "Claude Code {version}",
@@ -438,6 +441,9 @@ TRANSLATIONS = {
         # AI tisztítás
         "tab_ai": "AI",
         "ai_group_account": "Claude fiók",
+        "ai_group_files": "A személyes fájljaid",
+        "ai_files_hint": "A stílusprofil, a szótár, a szerkesztett promptok, a history és a beállítások ebben a mappában vannak - a projektmappán KÍVÜL, így soha nem juthatnak fel a GitHubra. Másik gépre átvitelhez elég ezt a mappát átmásolni.",
+        "ai_open_folder": "Mappa megnyitása",
         "ai_intro": "Az AI tisztítás a saját Claude Code CLI-den és a saját Claude előfizetéseden fut. A WhisperRocket nem tárolja a bejelentkezésed.",
         "ai_not_installed": "A Claude Code CLI nincs telepítve",
         "ai_cli_version": "Claude Code {version}",
