@@ -207,8 +207,15 @@ no API key to buy, no account to create with us, and nothing is billed to anyone
 | **Transcript** (default) | Always | Fixes punctuation, capitalisation and spelling, deletes filler words and stutters, repairs obvious misrecognitions. Changes nothing else. |
 | **Compose** | You start dictating with a trigger phrase | Writes the message from what you described, instead of transcribing it literally. |
 
-The trigger phrase is configurable (Settings → AI → Compose mode). A phrase is used
-rather than a button so you can switch modes without touching anything.
+The trigger phrases are configurable (Settings → AI → Compose mode), with a set of
+defaults per dictation language — Hungarian and English have their own; other languages
+fall back to English, so write your own in that case. A button fills in the defaults for
+the language currently selected.
+
+**Add the wording you actually say out loud.** In real use the speaker said "segíts
+megfogalmazni" while the list held only "fogalmazzuk meg hogy", and compose mode silently
+never started. A phrase is used rather than a button so you can switch modes without
+touching anything.
 
 #### Your swearing is not touched
 
@@ -602,6 +609,14 @@ Claude Code CLI. See [AI cleanup](#ai-cleanup-optional).
   "segíts megfogalmazni" while the list held only "fogalmazzuk meg hogy", so the mode
   silently never started. Dictation produces whatever phrasing comes out of your mouth, and
   one phrase is not enough.
+- Compose triggers have per-language defaults, with a Settings button that fills in the set
+  for the dictation language currently selected. The longest matching phrase wins, so a more
+  specific trigger leaves a cleaner message behind.
+- The output guard no longer rejects a message that opens the way a person would. It treated
+  "I cannot", "I'm sorry" and "Sajnálom, de" as refusals, so a perfectly good composed
+  message starting "I cannot make it tomorrow" was thrown away. Only unambiguous
+  self-reference counts as a refusal now; real refusals are caught by the length and content
+  checks, which a declined request fails anyway.
 - The AI timeout defaults to 120 seconds, and the call runs at low effort. A cleanup is
   mechanical, so deep reasoning buys nothing: measured on a real 93-word dictation, 8.1s at
   the default effort against 7.2s at low, identical output. The tail is what matters — the
