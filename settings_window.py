@@ -1070,8 +1070,14 @@ class SettingsWindow(QMainWindow):
         else:
             super().keyPressEvent(event)
 
-    def save_settings(self):
-        """Beállítások mentése"""
+    def collect_and_save(self):
+        """
+        Read every tab back into the config and write it out.
+
+        One place, called by all three save paths. Previously each path repeated
+        the same field list, so a tab whose Save button forgot one of them would
+        silently drop the user's change.
+        """
         self.config["language"] = self.language_combo.currentData()
         self.config["ui_language"] = self.ui_lang_combo.currentData()
         self.config["hotkey"] = self.hotkey_edit.text()
@@ -1087,6 +1093,24 @@ class SettingsWindow(QMainWindow):
 
         save_config(self.config)
         set_autostart(self.autostart_check.isChecked())
+
+    def save_ai_settings(self):
+        """
+        Save from the AI tab without closing the window.
+
+        The AI tab had no Save button at all - the only one lived at the bottom
+        of the first tab - so settings changed here were lost unless the user
+        knew to switch tabs before saving. Staying open also matters because
+        these settings are worth trying and adjusting, and they apply to the
+        next dictation without a restart.
+        """
+        self.collect_and_save()
+        self.ai_save_status.setText(t("ai_saved", self.ui_lang))
+        QTimer.singleShot(4000, lambda: self.ai_save_status.setText(""))
+
+    def save_settings(self):
+        """Beállítások mentése"""
+        self.collect_and_save()
 
         QMessageBox.information(
             self,
@@ -1097,21 +1121,7 @@ class SettingsWindow(QMainWindow):
 
     def save_and_restart(self):
         """Beállítások mentése és alkalmazás újraindítása"""
-        self.config["language"] = self.language_combo.currentData()
-        self.config["ui_language"] = self.ui_lang_combo.currentData()
-        self.config["hotkey"] = self.hotkey_edit.text()
-        self.config["model"] = self.model_combo.currentData()
-        self.config["device"] = self.device_combo.currentData()
-        self.config["popup_display_duration"] = self.popup_duration_spin.value()
-        self.collect_ai_settings()
-
-        if self.config["device"] in ("cuda", "mlx"):
-            self.config["compute_type"] = "float16"
-        else:
-            self.config["compute_type"] = "int8"
-
-        save_config(self.config)
-        set_autostart(self.autostart_check.isChecked())
+        self.collect_and_save()
 
         # Restart flag írása - a fő app ezt fogja észlelni és újraindul
         RESTART_FLAG_FILE = '/tmp/whisperrocket_restart'
@@ -1317,6 +1327,7 @@ class SettingsWindow(QMainWindow):
         layout.addWidget(self._build_ai_prompts_group())
         layout.addWidget(self._build_ai_dictionary_group())
         layout.addStretch()
+        layout.addLayout(self._build_ai_save_row())
 
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
@@ -1325,6 +1336,31 @@ class SettingsWindow(QMainWindow):
 
         self.refresh_ai_status()
         return scroll
+
+    def _build_ai_save_row(self):
+        """Save button for this tab, so nothing here depends on the first tab"""
+        row = QHBoxLayout()
+
+        hint = QLabel(t("ai_save_hint", self.ui_lang))
+        hint.setWordWrap(True)
+        hint.setStyleSheet("color: #888; font-size: 11px;")
+        row.addWidget(hint, 1)
+
+        self.ai_save_status = QLabel("")
+        self.ai_save_status.setStyleSheet("color: #4CAF50; font-size: 11px;")
+        row.addWidget(self.ai_save_status)
+
+        save_btn = QPushButton(t("btn_save", self.ui_lang))
+        save_btn.setFixedWidth(100)
+        save_btn.clicked.connect(self.save_ai_settings)
+        row.addWidget(save_btn)
+
+        close_btn = QPushButton(t("btn_cancel", self.ui_lang))
+        close_btn.setFixedWidth(100)
+        close_btn.clicked.connect(self.close)
+        row.addWidget(close_btn)
+
+        return row
 
     def _build_ai_files_group(self):
         """
@@ -1553,11 +1589,16 @@ class SettingsWindow(QMainWindow):
         self.ai_login_btn.setVisible(status.installed and not status.logged_in)
         self.ai_logout_btn.setVisible(status.installed and status.logged_in)
 
+        # Grey the controls out when the prerequisites are missing, but never
+        # change what the user chose. This probe spawns `claude auth status`, and
+        # right after a reboot - before the network is up - it can report "not
+        # ready" for a machine that is perfectly signed in. Unchecking the box on
+        # that basis, then persisting it on the next save, would quietly wipe the
+        # setting. The cleanup already falls back safely on its own, so leaving
+        # the box ticked costs nothing.
         self.ai_enable_check.setEnabled(status.ready)
         self.ai_model_combo.setEnabled(status.ready)
         self.ai_timeout_spin.setEnabled(status.ready)
-        if not status.ready:
-            self.ai_enable_check.setChecked(False)
 
     def update_ai_style_label(self):
         path = ai_enhancer.style_profile_path()
