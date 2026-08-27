@@ -8,6 +8,7 @@ import os
 import shutil
 import json
 
+import config_paths
 from platform_support import get_platform_handler
 
 # Platform handler és cache útvonal
@@ -193,7 +194,7 @@ def get_downloaded_models(device=None):
 
 def get_active_model():
     """Visszaadja az aktív (konfigurált) modell nevét"""
-    config_path = os.path.join(os.path.dirname(__file__), 'config.json')
+    config_path = config_paths.get_config_path()
     try:
         with open(config_path, 'r') as f:
             config = json.load(f)
@@ -304,7 +305,7 @@ def get_current_device():
         return "cuda"
 
     # Egyéb esetben config-ból
-    config_path = os.path.join(os.path.dirname(__file__), 'config.json')
+    config_path = config_paths.get_config_path()
     try:
         with open(config_path, 'r') as f:
             config = json.load(f)

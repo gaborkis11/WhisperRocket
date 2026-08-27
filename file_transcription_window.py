@@ -489,6 +489,11 @@ class FileTranscriptionWindow(QMainWindow):
             token_field.setText(existing)
         layout.addWidget(token_field)
 
+        hint3 = QLabel(t("ft_diarization_step3_hint", self.ui_lang))
+        hint3.setWordWrap(True)
+        hint3.setStyleSheet("color: #888; font-size: 11px; margin-left: 10px;")
+        layout.addWidget(hint3)
+
         # Buttons
         btn_row = QHBoxLayout()
         btn_row.addStretch()

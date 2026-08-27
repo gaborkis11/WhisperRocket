@@ -16,6 +16,7 @@ from PySide6.QtWidgets import (
 )
 from PySide6.QtGui import QFont, QCursor
 
+import config_paths
 from translations import t
 from download_manager import get_download_manager
 from platform_support import get_platform_handler
@@ -44,10 +45,8 @@ DEFAULT_MODEL = "small"
 
 
 def get_config_path():
-    """Get user config file path"""
-    config_dir = os.path.join(os.path.expanduser("~"), ".config", "whisperrocket")
-    os.makedirs(config_dir, exist_ok=True)
-    return os.path.join(config_dir, "config.json")
+    """Get the config file path the running app reads (see config_paths)"""
+    return config_paths.get_config_path()
 
 
 def get_ui_language():
@@ -448,10 +447,9 @@ class SetupWizard(QDialog):
 
     def save_config(self):
         """Save selected model and device to config"""
-        # Use user config directory (writable) instead of app directory (read-only in AppImage)
-        config_dir = os.path.join(os.path.expanduser("~"), ".config", "whisperrocket")
-        os.makedirs(config_dir, exist_ok=True)
-        config_path = os.path.join(config_dir, "config.json")
+        # config_paths keeps this writable: project dir in dev mode, user config
+        # dir when bundled (the AppImage's own directory is read-only)
+        config_path = get_config_path()
 
         try:
             with open(config_path, 'r') as f:

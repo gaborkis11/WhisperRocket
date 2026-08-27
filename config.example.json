@@ -1,5 +1,5 @@
 {
-  "hotkey": "alt+w",
+  "hotkey": "ctrl+shift+s",
   "model": "large-v3",
   "device": "cuda",
   "compute_type": "float16",
@@ -8,6 +8,6 @@
   "sample_rate": 16000,
   "input_device": null,
   "output_device": null,
-  "popup_display_duration": 7,
-  "setup_complete": true
+  "popup_display_duration": 5,
+  "setup_complete": false
 }

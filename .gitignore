@@ -18,6 +18,11 @@ __pycache__/
 # User config (generated during install)
 config.json
 
+# Secrets - tokens live in ~/.config/whisperrocket/.env, never in the repo
+.env
+.env.*
+*.env
+
 # macOS
 .DS_Store
 

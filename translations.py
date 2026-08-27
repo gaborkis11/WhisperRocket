@@ -183,6 +183,7 @@ TRANSLATIONS = {
         "ft_diarization_step2b_btn": "Accept license: segmentation-3.0 →",
         "ft_diarization_step2c_btn": "Accept license: speaker-diarization-community-1 →",
         "ft_diarization_step3": "4. Paste your token here:",
+        "ft_diarization_step3_hint": "Saved to ~/.config/whisperrocket/.env (readable only by you). It is never written into config.json, so it cannot end up in git. An exported HF_TOKEN environment variable takes precedence.",
         "ft_diarization_save": "Save",
         "ft_diarization_token_saved": "Token saved!",
     },
@@ -364,6 +365,7 @@ TRANSLATIONS = {
         "ft_diarization_step2b_btn": "Licenc: segmentation-3.0 →",
         "ft_diarization_step2c_btn": "Licenc: speaker-diarization-community-1 →",
         "ft_diarization_step3": "4. Illeszd be a tokent ide:",
+        "ft_diarization_step3_hint": "Ide mentődik: ~/.config/whisperrocket/.env (csak te olvashatod). A config.json-ba soha nem kerül bele, így git-be sem juthat. A shellben exportált HF_TOKEN környezeti változó elsőbbséget élvez.",
         "ft_diarization_save": "Mentés",
         "ft_diarization_token_saved": "Token elmentve!",
     }

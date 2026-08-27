@@ -1,0 +1,80 @@
+#!/usr/bin/env bash
+#
+# WhisperRocket pre-commit hook - refuses to commit credentials.
+#
+# Enable once per clone:
+#   git config core.hooksPath .githooks
+#
+# Tokens belong in ~/.config/whisperrocket/.env (see secrets_manager.py),
+# never in a tracked file.
+
+set -uo pipefail
+
+RED=$'\033[0;31m'; YELLOW=$'\033[1;33m'; RESET=$'\033[0m'
+failed=0
+
+report() {
+    if [ "$failed" -eq 0 ]; then
+        printf '%s\n' "${RED}✖ Commit blocked: possible credential in staged changes${RESET}" >&2
+    fi
+    failed=1
+    printf '  %s\n' "$1" >&2
+}
+
+staged_files=$(git diff --cached --name-only --diff-filter=ACM)
+[ -z "$staged_files" ] && exit 0
+
+# 1. Never commit a secrets file, whatever it is named
+while IFS= read -r file; do
+    case "$(basename "$file")" in
+        .env|.env.*|*.env)
+            report "$file — secrets file (keep it in ~/.config/whisperrocket/)"
+            ;;
+    esac
+done <<< "$staged_files"
+
+# 2. Scan added lines for credential shapes.
+#    Patterns are deliberately length-bound so documenting them stays safe.
+# Parallel arrays - a pattern may contain ':' (e.g. [[:space:]]), so the label
+# cannot be packed into the same string.
+PATTERNS=(
+    'hf_[A-Za-z0-9]{30,}'
+    'sk-[A-Za-z0-9_-]{20,}'
+    'ghp_[A-Za-z0-9]{30,}'
+    'github_pat_[A-Za-z0-9_]{30,}'
+    'AKIA[0-9A-Z]{16}'
+    '"hf_token"[[:space:]]*:[[:space:]]*"[^"]+"'
+)
+LABELS=(
+    'HuggingFace token'
+    'OpenAI/Anthropic-style API key'
+    'GitHub personal access token'
+    'GitHub fine-grained token'
+    'AWS access key id'
+    'hf_token value in JSON'
+)
+
+while IFS= read -r file; do
+    # Skip binary files and this hook itself
+    [ "$file" = ".githooks/pre-commit" ] && continue
+    git diff --cached --numstat -- "$file" | grep -q '^-' && continue
+
+    added=$(git diff --cached -U0 --diff-filter=ACM -- "$file" \
+            | grep '^+' | grep -v '^+++' || true)
+    [ -z "$added" ] && continue
+
+    for i in "${!PATTERNS[@]}"; do
+        if printf '%s' "$added" | grep -Eq -- "${PATTERNS[$i]}"; then
+            report "$file — looks like a ${LABELS[$i]}"
+        fi
+    done
+done <<< "$staged_files"
+
+if [ "$failed" -ne 0 ]; then
+    printf '\n%s\n' "${YELLOW}Move the value to ~/.config/whisperrocket/.env (mode 0600) and" >&2
+    printf '%s\n' "read it via secrets_manager.get_secret(), then stage again." >&2
+    printf '%s\n\n' "If this is a false positive: git commit --no-verify${RESET}" >&2
+    exit 1
+fi
+
+exit 0

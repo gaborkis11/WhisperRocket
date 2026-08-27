@@ -8,12 +8,15 @@ import os
 import json
 from typing import Dict, List, Optional, Tuple
 
+import config_paths
+import secrets_manager
 from transcription_engine import TranscriptionSegment
 
+# Env var names HuggingFace itself honours; the first one is what we write
+HF_TOKEN_ENV_VARS = ("HF_TOKEN", "HUGGING_FACE_HUB_TOKEN")
 
-def _get_config_path() -> str:
-    """Get config.json path"""
-    return os.path.join(os.path.dirname(os.path.abspath(__file__)), "config.json")
+# Key an older version used inside config.json - migrated away on sight
+_LEGACY_CONFIG_KEY = "hf_token"
 
 
 def is_available() -> bool:
@@ -25,24 +28,57 @@ def is_available() -> bool:
         return False
 
 
-def get_token() -> Optional[str]:
-    """Get HuggingFace token from config, env vars, or HfFolder"""
-    # 1. Check config.json
-    try:
-        with open(_get_config_path(), 'r') as f:
-            config = json.load(f)
-            token = config.get("hf_token")
-            if token:
-                return token
-    except Exception:
-        pass
+def _migrate_legacy_config_token() -> Optional[str]:
+    """
+    Move a token left in config.json by an older version into the secrets file.
 
-    # 2. Check environment variables
-    token = os.environ.get("HF_TOKEN") or os.environ.get("HUGGING_FACE_HUB_TOKEN")
+    config.json sits in the project directory for source installs, so a token
+    there is one `git add` away from being published. Relocate it once, then
+    strip it out so it cannot be committed.
+    """
+    config_path = config_paths.get_config_path()
+    try:
+        with open(config_path, 'r', encoding='utf-8') as f:
+            config = json.load(f)
+    except Exception:
+        return None
+
+    token = config.get(_LEGACY_CONFIG_KEY)
+    if not token:
+        return None
+
+    try:
+        secrets_manager.set_secret(HF_TOKEN_ENV_VARS[0], token)
+        config.pop(_LEGACY_CONFIG_KEY, None)
+        with open(config_path, 'w', encoding='utf-8') as f:
+            json.dump(config, f, indent=2, ensure_ascii=False)
+        print(f"[INFO] HuggingFace token moved out of config.json into "
+              f"{secrets_manager.get_env_path()}")
+    except Exception as e:
+        print(f"[WARN] Could not migrate HuggingFace token out of config.json: {e}")
+
+    return token
+
+
+def get_token() -> Optional[str]:
+    """
+    Get the HuggingFace token.
+
+    Order: real env var -> ~/.config/whisperrocket/.env -> legacy config.json
+    (migrated out) -> token stored by `huggingface-cli login`.
+    """
+    # 1. Environment / secrets file
+    for var in HF_TOKEN_ENV_VARS:
+        token = secrets_manager.get_secret(var)
+        if token:
+            return token
+
+    # 2. Legacy location - migrate it out of the repo on the way
+    token = _migrate_legacy_config_token()
     if token:
         return token
 
-    # 3. Check HuggingFace CLI stored token
+    # 3. HuggingFace CLI stored token
     try:
         from huggingface_hub import HfFolder
         token = HfFolder.get_token()
@@ -60,18 +96,14 @@ def has_token() -> bool:
 
 
 def save_token(token: str):
-    """Save HuggingFace token to config.json"""
-    config_path = _get_config_path()
-    try:
-        with open(config_path, 'r') as f:
-            config = json.load(f)
-    except Exception:
-        config = {}
+    """Save the HuggingFace token to ~/.config/whisperrocket/.env (mode 0600)"""
+    secrets_manager.set_secret(HF_TOKEN_ENV_VARS[0], token)
 
-    config["hf_token"] = token
 
-    with open(config_path, 'w') as f:
-        json.dump(config, f, indent=2, ensure_ascii=False)
+def clear_token():
+    """Remove the stored HuggingFace token"""
+    for var in HF_TOKEN_ENV_VARS:
+        secrets_manager.delete_secret(var)
 
 
 class DiarizationManager:
