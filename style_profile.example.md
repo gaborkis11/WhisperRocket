@@ -1,4 +1,6 @@
 # Style profile (example / template)
+<!-- UNFILLED-TEMPLATE: delete this line once you have written your profile.
+     While it is here, WhisperRocket ignores this file. -->
 
 Copy this to `~/.config/whisperrocket/style_profile.md` and fill it in, or just
 click **Edit** in Settings → AI → Style profile and WhisperRocket seeds the same

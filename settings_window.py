@@ -166,6 +166,8 @@ def set_autostart(enabled):
 # profile: a filled-in example would get shipped back to the model as if it
 # described the user.
 STYLE_PROFILE_TEMPLATE = """# Style profile
+<!-- UNFILLED-TEMPLATE: delete this line once you have written your profile.
+     While it is here, WhisperRocket ignores this file. -->
 
 Describe how you write, so the cleanup keeps your voice instead of flattening it.
 Aggregate traits only - no real messages, no names, nothing you would not want in
@@ -1532,6 +1534,8 @@ class SettingsWindow(QMainWindow):
             self.ai_style_label.setText(
                 t("ai_style_present", self.ui_lang, size=format_size(path.stat().st_size))
             )
+        elif ai_enhancer.style_profile_is_unfilled_template():
+            self.ai_style_label.setText(t("ai_style_template", self.ui_lang))
         else:
             self.ai_style_label.setText(t("ai_style_missing", self.ui_lang))
 

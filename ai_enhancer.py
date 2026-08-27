@@ -180,10 +180,35 @@ def prompt_path(mode: str) -> Path:
     return user_dir() / PROMPT_FILENAMES.get(mode, PROMPT_FILENAMES["transcript"])
 
 
+# Fingerprints of the unfilled template. Clicking "Edit" in Settings seeds the
+# template so there is something in the editor, which means the file exists long
+# before it says anything true about the user. Feeding those prompts to the model
+# as if they were a style profile is worse than having no profile at all, so a
+# file still carrying any of these is treated as absent.
+_TEMPLATE_MARKERS = (
+    "UNFILLED-TEMPLATE",
+    "Delete the questions and leave your answers",
+    "Short and clipped, or long and flowing",
+)
+
+
+def is_style_profile_template(text: str) -> bool:
+    """True while the file is still the untouched template"""
+    return any(marker in text for marker in _TEMPLATE_MARKERS)
+
+
 def has_style_profile() -> bool:
-    path = style_profile_path()
+    """True only when a real, filled-in profile is present"""
+    return bool(read_style_profile())
+
+
+def style_profile_is_unfilled_template() -> bool:
+    """The file exists but has not been filled in yet - Settings says so"""
     try:
-        return path.is_file() and path.stat().st_size > 0
+        path = style_profile_path()
+        if not path.is_file():
+            return False
+        return is_style_profile_template(path.read_text(encoding="utf-8"))
     except Exception:
         return False
 
@@ -196,9 +221,10 @@ def read_style_profile() -> str:
     runs without one, which is worse output but still correct output.
     """
     try:
-        return style_profile_path().read_text(encoding="utf-8").strip()
+        text = style_profile_path().read_text(encoding="utf-8").strip()
     except Exception:
         return ""
+    return "" if is_style_profile_template(text) else text
 
 
 def default_prompt(mode: str) -> str:
