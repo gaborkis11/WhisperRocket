@@ -45,6 +45,13 @@ hiddenimports = [
     'claude_cli',
     'dictionary_manager',
     'qt_helpers',
+    # Phone dictation, lazily imported for the same reason and needing the same
+    # treatment: without these the tray app still runs, so a missing module would
+    # not announce itself - the Phone tab would simply refuse to start the
+    # endpoint, in a build nobody had reason to suspect.
+    'phone_endpoint',
+    'tailscale_support',
+    'secrets_manager',
 ]
 
 # Exclude CUDA libraries (downloaded at runtime)

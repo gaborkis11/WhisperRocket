@@ -14,7 +14,7 @@ from PySide6.QtGui import QPixmap, QFont
 
 
 # Verzió
-APP_VERSION = "1.1"
+APP_VERSION = "1.2"
 
 # Projekt mappa meghatározása
 PROJECT_DIR = os.path.dirname(os.path.abspath(__file__))

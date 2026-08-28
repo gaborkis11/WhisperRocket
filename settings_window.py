@@ -35,6 +35,9 @@ from qt_helpers import block_wheel_changes
 import ai_enhancer
 import claude_cli
 import dictionary_manager
+import phone_endpoint
+import secrets_manager
+import tailscale_support
 
 # Platform handler
 platform_handler = get_platform_handler()
@@ -142,7 +145,10 @@ def load_config():
             "ai_trigger_phrases": ["fogalmazzuk meg hogy", "fogalmazd meg hogy",
                                    "segíts megfogalmazni", "jarvis segíts megfogalmazni"],
             "ai_timeout_seconds": 120,
-            "ai_dictionary_enabled": True
+            "ai_dictionary_enabled": True,
+            "phone_endpoint_enabled": False,
+            "phone_endpoint_port": 8771,
+            "phone_endpoint_budget_seconds": 20
         }
 
 
@@ -497,14 +503,53 @@ class VocabularyDialog(QDialog):
         self.accept()
 
 
+class _PhoneProbe(QThread):
+    """
+    Asks the phone endpoint whether it is up, off the UI thread.
+
+    Worth a thread rather than an inline request: a filtered port does not
+    refuse, it hangs, and a Settings window frozen for ten seconds looks like a
+    crash.
+    """
+    finished_with = Signal(bool, str)
+
+    def __init__(self, url, token):
+        super().__init__()
+        self.url = url
+        self.token = token
+
+    def run(self):
+        import urllib.error
+        import urllib.request
+
+        request = urllib.request.Request(self.url)
+        request.add_header("Authorization", f"Bearer {self.token}")
+        try:
+            with urllib.request.urlopen(request, timeout=10) as response:
+                self.finished_with.emit(True, response.read().decode("utf-8").strip())
+        except urllib.error.HTTPError as error:
+            body = error.read().decode("utf-8", "replace").strip()
+            self.finished_with.emit(False, f"{error.code} {body}")
+        except Exception as error:
+            self.finished_with.emit(False, str(error))
+
+
 class SettingsWindow(QMainWindow):
     """Beállítások ablak tab-okkal"""
 
-    def __init__(self):
+    def __init__(self, apply_phone_endpoint=None):
+        """
+        apply_phone_endpoint: callback into the running app that starts or stops
+        the phone endpoint to match the saved settings. Passed in by whisper_gui
+        rather than imported, because importing whisper_gui from here would load
+        a second copy of it. When it is None - this window opened standalone -
+        the Phone tab still shows its settings but cannot start anything.
+        """
         super().__init__()
         self.config = load_config()
         self.ui_lang = self.config.get("ui_language", "en")
         self.download_manager = get_download_manager()
+        self.apply_phone_endpoint = apply_phone_endpoint
         self.init_ui()
 
         # Progress frissítő timer
@@ -548,6 +593,7 @@ class SettingsWindow(QMainWindow):
         self.tabs.addTab(self.create_settings_tab(), t("tab_settings", self.ui_lang))
         self.tabs.addTab(self.create_models_tab(), t("tab_models", self.ui_lang))
         self.tabs.addTab(self.create_ai_tab(), t("tab_ai", self.ui_lang))
+        self.tabs.addTab(self.create_phone_tab(), t("tab_phone", self.ui_lang))
         layout.addWidget(self.tabs)
 
         # A wheel over a dropdown or a number field must not change it - see
@@ -1174,6 +1220,7 @@ class SettingsWindow(QMainWindow):
         self.config["device"] = self.device_combo.currentData()
         self.config["popup_display_duration"] = self.popup_duration_spin.value()
         self.collect_ai_settings()
+        self.collect_phone_settings()
 
         if self.config["device"] in ("cuda", "mlx"):
             self.config["compute_type"] = "float16"
@@ -1219,6 +1266,358 @@ class SettingsWindow(QMainWindow):
 
         # Settings ablak bezárása
         self.close()
+
+    # --- Phone tab -------------------------------------------------------
+    #
+    # Deliberately sparse on screen: the minimum next to each field and the
+    # explanation in a tooltip, so a setting you already understand stays out
+    # of the way and one you do not can be hovered.
+
+    def create_phone_tab(self):
+        """Phone dictation: the switch, what to type into the Shortcut, tuning"""
+        inner = QWidget()
+        layout = QVBoxLayout(inner)
+        layout.setSpacing(12)
+        layout.setContentsMargins(4, 4, 4, 4)
+
+        intro = QLabel(t("phone_intro", self.ui_lang))
+        intro.setWordWrap(True)
+        intro.setStyleSheet("color: #888; font-size: 11px;")
+        layout.addWidget(intro)
+
+        layout.addWidget(self._build_phone_switch_group())
+        layout.addWidget(self._build_phone_connection_group())
+        layout.addWidget(self._build_phone_tuning_group())
+        layout.addStretch()
+        layout.addLayout(self._build_phone_save_row())
+
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.Shape.NoFrame)
+        scroll.setWidget(inner)
+
+        self.refresh_phone_status()
+        return scroll
+
+    def _build_phone_switch_group(self):
+        group = QGroupBox(t("phone_group_switch", self.ui_lang))
+        layout = QVBoxLayout(group)
+        layout.setSpacing(8)
+
+        self.phone_enable_check = QCheckBox(t("phone_enable", self.ui_lang))
+        self.phone_enable_check.setChecked(bool(self.config.get("phone_endpoint_enabled")))
+        self.phone_enable_check.setToolTip(t("phone_enable_tip", self.ui_lang))
+        layout.addWidget(self.phone_enable_check)
+
+        row = QHBoxLayout()
+        label = QLabel(t("phone_status", self.ui_lang) + ":")
+        label.setToolTip(t("phone_status_tip", self.ui_lang))
+        row.addWidget(label)
+
+        self.phone_status_label = QLabel("")
+        self.phone_status_label.setToolTip(t("phone_status_tip", self.ui_lang))
+        row.addWidget(self.phone_status_label)
+        row.addStretch()
+        layout.addLayout(row)
+
+        return group
+
+    def _build_phone_connection_group(self):
+        group = QGroupBox(t("phone_group_connection", self.ui_lang))
+        layout = QVBoxLayout(group)
+        layout.setSpacing(8)
+
+        form = QFormLayout()
+        form.setSpacing(8)
+
+        address_row = QHBoxLayout()
+        address_row.setContentsMargins(0, 0, 0, 0)
+        self.phone_address_field = QLineEdit("")
+        self.phone_address_field.setReadOnly(True)
+        self.phone_address_field.setStyleSheet("font-family: monospace; font-size: 11px;")
+        self.phone_address_field.setToolTip(t("phone_address_tip", self.ui_lang))
+        address_row.addWidget(self.phone_address_field)
+
+        address_copy = QPushButton(t("phone_copy", self.ui_lang))
+        address_copy.setFixedWidth(90)
+        address_copy.setToolTip(t("phone_address_tip", self.ui_lang))
+        address_copy.clicked.connect(
+            partial(self.on_phone_copy, lambda: self.phone_address_field.text(), address_copy)
+        )
+        address_row.addWidget(address_copy)
+
+        address_widget = QWidget()
+        address_widget.setLayout(address_row)
+        form.addRow(t("phone_address", self.ui_lang), address_widget)
+
+        key_row = QHBoxLayout()
+        key_row.setContentsMargins(0, 0, 0, 0)
+        self.phone_key_field = QLineEdit("")
+        self.phone_key_field.setReadOnly(True)
+        self.phone_key_field.setEchoMode(QLineEdit.EchoMode.Password)
+        self.phone_key_field.setStyleSheet("font-family: monospace; font-size: 11px;")
+        self.phone_key_field.setToolTip(t("phone_key_tip", self.ui_lang))
+        key_row.addWidget(self.phone_key_field)
+
+        self.phone_key_reveal = QPushButton(t("phone_show", self.ui_lang))
+        self.phone_key_reveal.setFixedWidth(90)
+        self.phone_key_reveal.setToolTip(t("phone_key_tip", self.ui_lang))
+        self.phone_key_reveal.clicked.connect(self.on_phone_toggle_key)
+        key_row.addWidget(self.phone_key_reveal)
+
+        key_copy = QPushButton(t("phone_copy", self.ui_lang))
+        key_copy.setFixedWidth(90)
+        key_copy.setToolTip(t("phone_key_tip", self.ui_lang))
+        key_copy.clicked.connect(
+            partial(self.on_phone_copy, self.phone_key, key_copy)
+        )
+        key_row.addWidget(key_copy)
+
+        new_key = QPushButton(t("phone_new_key", self.ui_lang))
+        new_key.setFixedWidth(90)
+        new_key.setToolTip(t("phone_key_tip", self.ui_lang))
+        new_key.clicked.connect(self.on_phone_new_key)
+        key_row.addWidget(new_key)
+
+        key_widget = QWidget()
+        key_widget.setLayout(key_row)
+        form.addRow(t("phone_key", self.ui_lang), key_widget)
+
+        layout.addLayout(form)
+
+        hint = QLabel(t("phone_setup_hint", self.ui_lang))
+        hint.setWordWrap(True)
+        hint.setStyleSheet("color: #888; font-size: 11px;")
+        layout.addWidget(hint)
+
+        return group
+
+    def _build_phone_tuning_group(self):
+        group = QGroupBox(t("phone_group_tuning", self.ui_lang))
+        layout = QVBoxLayout(group)
+        layout.setSpacing(8)
+
+        form = QFormLayout()
+        form.setSpacing(8)
+
+        # Plain fields rather than spin boxes, for the reason the AI tab already
+        # records: a spin box changes value when the pointer scrolls over it.
+        self.phone_port_edit = QLineEdit(
+            str(int(self.config.get("phone_endpoint_port", phone_endpoint.DEFAULT_PORT)))
+        )
+        self.phone_port_edit.setValidator(QIntValidator(1024, 65535, self))
+        self.phone_port_edit.setFixedWidth(80)
+        self.phone_port_edit.setToolTip(t("phone_port_tip", self.ui_lang))
+        self.phone_port_edit.textChanged.connect(lambda _: self.refresh_phone_address())
+        form.addRow(t("phone_port", self.ui_lang), self.phone_port_edit)
+
+        self.phone_budget_edit = QLineEdit(
+            str(int(self.config.get("phone_endpoint_budget_seconds", 20)))
+        )
+        self.phone_budget_edit.setValidator(QIntValidator(5, 300, self))
+        self.phone_budget_edit.setFixedWidth(80)
+        self.phone_budget_edit.setToolTip(t("phone_budget_tip", self.ui_lang))
+        form.addRow(t("phone_budget", self.ui_lang), self.phone_budget_edit)
+
+        layout.addLayout(form)
+
+        row = QHBoxLayout()
+        self.phone_test_btn = QPushButton(t("phone_test", self.ui_lang))
+        self.phone_test_btn.setToolTip(t("phone_test_tip", self.ui_lang))
+        self.phone_test_btn.clicked.connect(self.on_phone_test)
+        row.addWidget(self.phone_test_btn)
+
+        measure = QLabel(t("phone_measure", self.ui_lang))
+        measure.setStyleSheet("color: #888; font-size: 11px;")
+        measure.setToolTip(t("phone_measure_tip", self.ui_lang))
+        row.addWidget(measure)
+        row.addStretch()
+        layout.addLayout(row)
+
+        self.phone_test_result = QLabel("")
+        self.phone_test_result.setWordWrap(True)
+        self.phone_test_result.setStyleSheet("color: #888; font-size: 11px;")
+        layout.addWidget(self.phone_test_result)
+
+        return group
+
+    def _build_phone_save_row(self):
+        row = QHBoxLayout()
+        row.addStretch()
+
+        self.phone_save_status = QLabel("")
+        self.phone_save_status.setStyleSheet("color: #4CAF50; font-size: 11px;")
+        row.addWidget(self.phone_save_status)
+
+        save_btn = QPushButton(t("btn_save", self.ui_lang))
+        save_btn.setFixedWidth(100)
+        save_btn.clicked.connect(self.save_phone_settings)
+        row.addWidget(save_btn)
+
+        close_btn = QPushButton(t("btn_cancel", self.ui_lang))
+        close_btn.setFixedWidth(100)
+        close_btn.clicked.connect(self.close)
+        row.addWidget(close_btn)
+
+        return row
+
+    # --- Phone tab behaviour ---------------------------------------------
+
+    def phone_key(self):
+        """The stored access key, generating one the first time it is needed"""
+        token = secrets_manager.get_secret(phone_endpoint.TOKEN_ENV_NAME)
+        if not token:
+            token = phone_endpoint.generate_token()
+            secrets_manager.set_secret(phone_endpoint.TOKEN_ENV_NAME, token)
+        return token
+
+    def phone_port(self):
+        try:
+            return int(self.phone_port_edit.text())
+        except (ValueError, AttributeError):
+            return phone_endpoint.DEFAULT_PORT
+
+    def refresh_phone_address(self):
+        """Show the address the phone should send to, or why there is not one"""
+        state = tailscale_support.get_state()
+        if state.usable:
+            self.phone_address_field.setText(
+                f"http://{state.ipv4}:{self.phone_port()}{phone_endpoint.DICTATE_PATH}"
+            )
+        else:
+            self.phone_address_field.setText(
+                t(f"phone_status_{state.reason}", self.ui_lang)
+            )
+
+    def refresh_phone_status(self):
+        """
+        Report what is actually true, not what the settings ask for.
+
+        The running state is established by connecting to the port rather than
+        by trusting a flag: the endpoint can fail to start for reasons the
+        checkbox knows nothing about - Tailscale down, the port taken - and a
+        status line that says "Running" while nothing listens is worse than none.
+        """
+        import socket
+
+        self.refresh_phone_address()
+        self.phone_key_field.setText(self.phone_key())
+
+        if not self.phone_enable_check.isChecked():
+            self._set_phone_status("phone_status_disabled", "#888")
+            return
+
+        state = tailscale_support.get_state()
+        if not state.usable:
+            self._set_phone_status(f"phone_status_{state.reason}", "#F57C00")
+            return
+
+        try:
+            with socket.create_connection((state.ipv4, self.phone_port()), timeout=0.5):
+                self._set_phone_status("phone_status_running", "#4CAF50")
+                return
+        except OSError:
+            pass
+
+        self._set_phone_status("phone_status_stopped", "#F57C00")
+
+    def _set_phone_status(self, key, colour):
+        self.phone_status_label.setText(t(key, self.ui_lang))
+        self.phone_status_label.setStyleSheet(f"color: {colour}; font-weight: bold;")
+
+    def on_phone_toggle_key(self):
+        hidden = self.phone_key_field.echoMode() == QLineEdit.EchoMode.Password
+        self.phone_key_field.setEchoMode(
+            QLineEdit.EchoMode.Normal if hidden else QLineEdit.EchoMode.Password
+        )
+        self.phone_key_reveal.setText(
+            t("phone_hide" if hidden else "phone_show", self.ui_lang)
+        )
+
+    def on_phone_copy(self, value_source, button):
+        QApplication.clipboard().setText(value_source())
+        original = button.text()
+        button.setText(t("phone_copied", self.ui_lang))
+        QTimer.singleShot(2000, lambda: button.setText(original))
+
+    def on_phone_new_key(self):
+        answer = QMessageBox.question(
+            self,
+            t("phone_new_key_title", self.ui_lang),
+            t("phone_new_key_body", self.ui_lang),
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No,
+        )
+        if answer != QMessageBox.StandardButton.Yes:
+            return
+
+        secrets_manager.set_secret(
+            phone_endpoint.TOKEN_ENV_NAME, phone_endpoint.generate_token()
+        )
+        self.phone_key_field.setText(self.phone_key())
+
+        # Restart the endpoint so the old key stops working immediately rather
+        # than at the next app start.
+        if self.apply_phone_endpoint:
+            self.apply_phone_endpoint()
+        self.refresh_phone_status()
+
+    def on_phone_test(self):
+        """Ask the endpoint whether it is up, without freezing the window"""
+        state = tailscale_support.get_state()
+        if not state.usable:
+            self.phone_test_result.setText(
+                t("phone_test_failed", self.ui_lang).format(
+                    error=t(f"phone_status_{state.reason}", self.ui_lang)
+                )
+            )
+            return
+
+        url = f"http://{state.ipv4}:{self.phone_port()}{phone_endpoint.HEALTH_PATH}"
+        self.phone_test_btn.setEnabled(False)
+        self.phone_test_result.setText("…")
+
+        self.phone_probe = _PhoneProbe(url, self.phone_key())
+        self.phone_probe.finished_with.connect(self.on_phone_test_result)
+        self.phone_probe.start()
+
+    def on_phone_test_result(self, ok, message):
+        self.phone_test_btn.setEnabled(True)
+        key = "phone_test_ok" if ok else "phone_test_failed"
+        self.phone_test_result.setText(
+            t(key, self.ui_lang).format(message=message, error=message)
+        )
+        self.refresh_phone_status()
+
+    def collect_phone_settings(self):
+        """Read the Phone tab back into the config"""
+        if not hasattr(self, "phone_enable_check"):
+            return
+
+        self.config["phone_endpoint_enabled"] = self.phone_enable_check.isChecked()
+        self.config["phone_endpoint_port"] = self.phone_port()
+
+        try:
+            self.config["phone_endpoint_budget_seconds"] = int(self.phone_budget_edit.text())
+        except ValueError:
+            self.config["phone_endpoint_budget_seconds"] = 20
+
+    def save_phone_settings(self):
+        """
+        Save from the Phone tab and apply it straight away.
+
+        Starting or stopping the endpoint here rather than at the next restart:
+        this is a setting people switch on to try it, and asking for a restart
+        in between would make it look broken.
+        """
+        self.collect_and_save()
+
+        if self.apply_phone_endpoint:
+            self.apply_phone_endpoint()
+
+        self.refresh_phone_status()
+        self.phone_save_status.setText(t("phone_saved", self.ui_lang))
+        QTimer.singleShot(4000, lambda: self.phone_save_status.setText(""))
 
     def create_model_warning_section(self):
         """Model warning banner létrehozása"""

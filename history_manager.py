@@ -48,7 +48,8 @@ def save_history(data: Dict) -> bool:
 
 def add_entry(text: str, duration_sec: float, language: str,
               enhanced: Optional[bool] = None,
-              raw_text: Optional[str] = None) -> Optional[str]:
+              raw_text: Optional[str] = None,
+              source: Optional[str] = None) -> Optional[str]:
     """
     Új bejegyzés hozzáadása a history-hoz
 
@@ -59,6 +60,9 @@ def add_entry(text: str, duration_sec: float, language: str,
                   bejegyzések formátuma változatlan maradjon.
         raw_text: A tisztítás előtti átirat, ha eltér a végleges szövegtől.
                   Így a nyers változat is visszakereshető marad.
+        source: Honnan érkezett - "phone" a telefonos végpontról. A billentyű-
+                kombinációval diktált bejegyzésnél None, és ilyenkor a kulcs be
+                sem kerül, hogy a korábbi bejegyzések formátuma ne változzon.
 
     Returns:
         Az új bejegyzés ID-ja, vagy None hiba esetén
@@ -80,6 +84,8 @@ def add_entry(text: str, duration_sec: float, language: str,
         entry["enhanced"] = bool(enhanced)
     if raw_text and raw_text.strip() and raw_text.strip() != text.strip():
         entry["raw_text"] = raw_text.strip()
+    if source:
+        entry["source"] = source
 
     # Új bejegyzés az elejére (legfrissebb elöl)
     data["entries"].insert(0, entry)

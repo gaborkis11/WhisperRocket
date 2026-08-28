@@ -29,6 +29,7 @@ WhisperRocket is a desktop application that converts speech to text in real-time
 - **Speaker diarization** - Identify who is speaking (optional, via [pyannote-audio](https://github.com/pyannote/pyannote-audio))
 - **Export** - Save transcriptions as SRT, VTT, TXT, or JSON
 - **AI cleanup** - Optionally turn the raw transcript into a finished message in your own style, using your own Claude subscription (see [AI cleanup](#ai-cleanup-optional))
+- **Dictation from your phone** - Optional. Record on your phone over [Tailscale](https://tailscale.com), let this machine transcribe and tidy it up, and get the text back on the phone's clipboard (see [Dictation from your phone](#dictation-from-your-phone))
 - **History** - Browse and copy previous transcriptions from the system tray
 - **System tray** - Runs quietly in the background with color-coded status
 - **Configurable** - Adjust language, model, hotkey, popup duration, and more
@@ -344,6 +345,212 @@ The file lives at `~/.config/whisperrocket/dictionary.md`; see
 [`dictionary.example.md`](dictionary.example.md). A `dictionary.json` written by an
 earlier version is converted automatically on first use.
 
+## Dictation from your phone
+
+Press a button on your phone, speak, tap to stop. A few seconds later the finished
+text is on your phone's clipboard, ready to paste into any app.
+
+The phone does no speech recognition of its own - it just sends the recording to
+your computer, which does the work with the same model and the same personal
+settings you use at the desk. The result is identical in quality to dictating at
+the keyboard, and it still never leaves your own machines.
+
+Typical round trip on a warm model: **3 to 5 seconds** for a message of a few
+sentences.
+
+<p align="center">
+  <img src="assets/screenshots/phone_tab.png" width="620" alt="Phone settings tab">
+</p>
+
+### What you need
+
+- **WhisperRocket running** on the computer, with a model already downloaded
+- **[Tailscale](https://tailscale.com) on both devices**, signed in to the same
+  account. This is required, not optional - the feature will not start without it
+- Any phone that can make an HTTP request. **iPhone and Android both work**
+
+Tailscale is free for personal use and takes about two minutes to set up.
+
+### Why Tailscale, and why it is safe
+
+Tailscale gives your computer an address in the `100.64.0.0/10` range. That range
+is **not routable from the public internet** - a packet from outside cannot reach
+it even in principle. The endpoint binds to that address and to nothing else.
+
+What this means in practice:
+
+- Nothing is exposed to the internet, and **no ports are opened on your router**
+- The endpoint is **not reachable from your home or office network** either -
+  only from devices you have added to your own Tailscale network
+- An **access key** is checked on top of that, for devices already inside it
+
+You do not need to keep the address secret. Knowing it gains an outsider nothing,
+because there is no route to it.
+
+### Step 1 - Set up Tailscale
+
+1. Install Tailscale on the computer from [tailscale.com/download](https://tailscale.com/download) and sign in
+2. Install the Tailscale app on your phone (App Store or Google Play) and sign in
+   **with the same account**
+3. Open the Tailscale app on the phone and check the computer appears in the list
+
+That is all - no configuration, no port forwarding.
+
+### Step 2 - Turn the endpoint on
+
+1. Right-click the tray icon → **Settings** → **Phone** tab
+2. Tick **Enable phone dictation**, then press **Save**
+3. **Status** must say *Running*. If it does not, it names the obstacle
+4. Press **Copy** next to **Address**, and **Copy** next to **Access key**
+
+You need both on the phone. The easiest way to get them there is to send them to
+yourself in any messaging app, then paste on the phone.
+
+Every field has a tooltip explaining what it does - hover if something is unclear.
+
+### Step 3a - iPhone and iPad
+
+Build this in the **Shortcuts** app. You can build it on a Mac instead and let
+iCloud sync it to the phone, which is easier because you can paste with a keyboard.
+
+| # | Action | Settings |
+|---|--------|----------|
+| 1 | **Record Audio** | Start Recording: `Immediately` · Finish Recording: **`On Tap`** |
+| 2 | **Get Contents of URL** | see below |
+| 3 | **Copy to Clipboard** | input: `Contents of URL` |
+| 4 | **Show Notification** | input: `Contents of URL` - so you see the result and know it arrived |
+
+For step 2, open **Show More** and set:
+
+- **URL**: the address you copied, e.g. `http://100.x.x.x:8771/dictate`
+- **Method**: `POST`
+- **Headers**: `Authorization` → `Bearer YOUR-ACCESS-KEY`
+- **Request Body**: `File`, and pass in the recording from step 1
+  (the `Recorded Audio` variable)
+
+Then assign it to the Action button: **Settings → Action Button → Shortcut →**
+pick your shortcut. On phones without an Action button, add it to the Home Screen
+or the Control Centre instead.
+
+**Two things that trip people up:**
+
+- The headers table shows the value on **one line**, so a long access key looks
+  cut off. It is not - that is only the display.
+- **Finish Recording must be `On Tap`.** With a fixed duration it cuts you off
+  mid-sentence. The Shortcuts app has no "stop recording" action, so tapping the
+  screen is the only way to end a recording - a press-to-start, press-to-stop
+  toggle is not possible with Shortcuts alone.
+
+### Step 3b - Android
+
+Android has no built-in Shortcuts app, so you need an automation app. Two that
+work:
+
+**[Tasker](https://tasker.joaoapps.com/)** (paid, the most capable):
+
+1. Create a task with the **Record Audio** action
+2. Add an **HTTP Request** action:
+   - **Method**: `POST`
+   - **URL**: the address you copied
+   - **Headers**: `Authorization: Bearer YOUR-ACCESS-KEY`
+   - **File To Send**: the recording from step 1
+3. Add **Set Clipboard** with the response
+4. Attach the task to a widget, a shortcut, or a gesture
+
+Tasker wraps the file in `multipart/form-data`. The endpoint accepts that as well
+as a raw body, so it works either way.
+
+**[HTTP Shortcuts](https://github.com/Waboodoo/HTTP-Shortcuts)** (free, open
+source) can send the request and place a shortcut on the home screen, but it does
+not record audio itself, so you need a recorder app alongside it.
+
+**Choose a good recording format.** This matters more on Android than anywhere
+else, and it is worth one minute of setup:
+
+| Format | Result |
+|---|---|
+| **AAC / M4A**, or **Ogg / Opus** | Accurate transcript, cleanup works |
+| **AMR-NB** (8 kHz, some recorders' default) | Words come out wrong |
+
+Measured on the same sentence: at AMR-NB the model heard "Asszus" instead of
+"Basszus" and "tábor" instead of "Gábor". The cleanup then tried to correct the
+swear word, and the output check threw the result away for putting a word in the
+speaker's mouth that the transcript did not contain - which is the check doing its
+job. With AAC or Opus the same sentence came out perfectly. If your recorder
+offers a format or quality setting, pick AAC/M4A.
+
+### Response budget
+
+The endpoint always answers, and it answers in time. Whatever is left of the
+budget after transcription is given to the AI cleanup; if the cleanup does not
+finish within it, the plain transcript is sent instead. **You never lose a
+recording to a slow model** - at worst you get the same text without the tidying.
+
+Set the budget below the point where your phone gives up waiting. Apple does not
+document that limit, and reports vary between 25 and 60 seconds.
+
+**Measured on an iPhone: it waits 60 seconds, and gives up between 60 and 70.**
+A budget of **45-50 seconds** is a good starting point.
+
+To check your own device, build a throwaway shortcut that opens the health address
+with a delay, and raise the number until it fails:
+
+```
+http://100.x.x.x:8771/health?delay=30
+```
+
+The machine waits that many seconds before answering, so 30 → 50 → 60 → 70 finds
+the cutoff. Keep the `Authorization` header - the health check needs it too. Then
+set the budget about ten seconds below what you measured.
+
+The budget covers the computer's work; the time spent uploading the recording is
+added on top of it from the phone's point of view. On a weak mobile signal with a
+long recording, that upload is worth leaving room for.
+
+### Compose mode works from the phone too
+
+If you have [AI cleanup](#ai-cleanup-optional) switched on, starting your
+recording with the compose trigger phrase works exactly as it does at the desk -
+the phrase is recognised in the transcript, so nothing extra is needed on the
+phone. Say *"write a message saying..."* and you get a finished message rather
+than a literal transcript.
+
+### What the endpoint can and cannot do
+
+It accepts a recording and returns text. That is the whole of it.
+
+The network-facing code in `phone_endpoint.py` imports nothing from the rest of
+the app, so it has no way to read your settings, your history, your dictionary or
+your style profile, and it cannot write to disk beyond the temporary copy of the
+recording, which is deleted as soon as it has been transcribed.
+
+Requests are handled one at a time, oversized uploads are refused before they are
+read, unknown addresses return 404, and a filename sent by the client is never
+used. The access key is compared in constant time, and it is stored in
+`~/.config/whisperrocket/.env` with `0600` permissions - never in `config.json`,
+and never in the repository.
+
+### If something is wrong
+
+Errors come back as short spoken sentences rather than status codes, so your
+phone can read them aloud while you are driving.
+
+| What you see | What it means |
+|---|---|
+| Status: *Tailscale is not running* | Start Tailscale on the computer and sign in |
+| Status: *The port is in use* | Change the port in Settings, and update the phone |
+| *Wrong access key* | The key was regenerated - copy the current one |
+| *The model is still loading* | Wait a few seconds after starting the app |
+| *The computer is busy* | Another dictation is in progress |
+| *I did not hear any speech* | The recording was silent - check microphone permission |
+| *Unknown address* | The URL is missing `/dictate` at the end |
+| The request times out | Lower the response budget, or measure the real limit as above |
+| Nothing reaches the computer at all | The phone is not on the tailnet. Open the Tailscale app and check it is connected |
+
+**If your phone uses another VPN**, it may conflict with Tailscale and the
+computer will be unreachable - most phones can only hold one VPN tunnel at a time.
+This is the most common cause of "it worked at home but not on mobile data".
+
 ## Configuration
 
 Right-click the tray icon → **Settings** to configure:
@@ -446,6 +653,8 @@ WhisperRocket/
 ├── translations.py       # Multi-language UI support (EN/HU)
 ├── config_paths.py       # Config file location (dev vs bundled)
 ├── secrets_manager.py    # API token storage (~/.config/whisperrocket/.env)
+├── phone_endpoint.py     # HTTP endpoint for phone dictation (standard library only)
+├── tailscale_support.py  # Tailscale state and address detection
 ├── platform_support/     # Platform abstraction layer
 │   ├── base.py           # Abstract interface
 │   ├── linux.py          # Linux-specific implementation
@@ -542,6 +751,34 @@ The uninstaller offers three options:
 - **Custom**: Choose what to remove
 
 ## Changelog
+
+### v1.2.0
+
+**Dictation from your phone** — optional, off by default. Record on your phone, and the
+finished text comes back to its clipboard. See
+[Dictation from your phone](#dictation-from-your-phone).
+
+- **Tailscale only.** The endpoint binds to your Tailscale address and refuses to start
+  without it. That address is not routable from the public internet, so the feature is
+  reachable from your own devices and from nowhere else — no router ports, nothing exposed.
+  An access key is checked on top, for devices already inside your own network.
+- **It always answers, and it answers in time.** Whatever is left of the response budget
+  after transcription is what the AI cleanup gets; if it does not finish, the plain
+  transcript is sent instead. A slow model costs you the tidying, never the recording.
+- **The network-facing code cannot reach anything else.** `phone_endpoint.py` imports
+  nothing from the rest of the app, so it has no path to your settings, history, dictionary
+  or style profile. The recording is deleted as soon as it has been transcribed.
+- **Compose mode works from the phone too** — the opening phrase is recognised in the
+  transcript, so nothing extra is needed on the phone.
+- Errors come back as short spoken sentences rather than status codes, so the Shortcut can
+  read them out while you are driving.
+- A `?delay=` helper on the health check measures how long your phone is willing to wait,
+  which Apple does not document. Measured on an iPhone: 60 seconds, giving up between 60
+  and 70.
+- A phone that hangs up before the answer arrives is reported as one line rather than a
+  traceback, so the log stays readable exactly when something did go wrong.
+- **Android works too.** The endpoint accepts `multipart/form-data` as well as a raw body,
+  which is what Tasker and most Android automation apps send.
 
 ### v1.1.0
 
