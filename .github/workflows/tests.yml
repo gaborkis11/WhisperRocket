@@ -1,0 +1,31 @@
+# Runs on every push and pull request. Deliberately lightweight: the test suite
+# is standard-library only, so CI needs no GPU, no model and no Qt - it proves
+# the security-critical endpoint and the translation parity in under a minute.
+name: Tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Syntax check every Python file
+        run: python -m compileall -q $(git ls-files '*.py')
+
+      - name: Phone endpoint (security-critical, 73 checks)
+        run: python tests/test_phone_endpoint.py
+
+      - name: Import guarantee of the network-facing module
+        run: python tests/test_stdlib_guarantee.py
+
+      - name: Translation parity (EN/HU)
+        run: python tests/test_translations.py

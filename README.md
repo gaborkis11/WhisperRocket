@@ -2,7 +2,16 @@
 
 **Silent speech-to-text — Local, fast, private**
 
+[![Tests](https://github.com/gaborkis11/WhisperRocket/actions/workflows/tests.yml/badge.svg)](https://github.com/gaborkis11/WhisperRocket/actions/workflows/tests.yml)
+[![Latest release](https://img.shields.io/github/v/release/gaborkis11/WhisperRocket)](https://github.com/gaborkis11/WhisperRocket/releases/latest)
+
 WhisperRocket is a desktop application that converts speech to text in real-time using the Whisper AI model. It runs entirely locally on your machine - no cloud services, no API keys, complete privacy.
+
+| Platform | Status |
+|---|---|
+| **Linux** | ✅ Current — every feature, actively developed |
+| **macOS** | ⏸️ Last released build is [v1.0.0](https://github.com/gaborkis11/WhisperRocket/releases/tag/v1.0.0) — the port is catching up with the Linux version |
+| **Your phone** | 📱 iPhone and Android can dictate through your Linux machine — see [Dictation from your phone](#dictation-from-your-phone) |
 
 ## Screenshots
 
@@ -36,7 +45,7 @@ WhisperRocket is a desktop application that converts speech to text in real-time
 
 ## Requirements
 
-- **OS**: Linux (Ubuntu, Fedora, Arch, openSUSE, and derivatives)
+- **OS**: Linux (Ubuntu, Fedora, Arch, openSUSE, and derivatives). On macOS the last released build is v1.0.0 - newer features have not been ported yet
 - **Python**: 3.10+
 - **GPU**: NVIDIA GPU with CUDA support (recommended) or CPU mode
 - **RAM**: 8GB+ (16GB recommended for large-v3 model)
@@ -631,6 +640,9 @@ To use it:
 
 ## Project Structure
 
+<details>
+<summary><b>Show the file layout</b></summary>
+
 ```
 WhisperRocket/
 ├── whisper_gui.py        # Main application
@@ -675,7 +687,12 @@ WhisperRocket/
 └── assets/               # Icons and sounds
 ```
 
+</details>
+
 ## Supported Distributions
+
+<details>
+<summary><b>Distribution list and tested platforms</b></summary>
 
 The installer has been tested on:
 - Ubuntu 22.04+ / Linux Mint / Pop!_OS
@@ -693,7 +710,12 @@ The installer has been tested on:
 | GNOME | Wayland | ⚠️ Experimental |
 | KDE Plasma | Wayland | ⚠️ Experimental |
 
+</details>
+
 ## Troubleshooting
+
+<details>
+<summary><b>Common issues and fixes</b></summary>
 
 ### No audio input
 - Check your microphone permissions
@@ -722,7 +744,12 @@ sudo usermod -a -G input $USER
 ```
 Then log out and back in.
 
+</details>
+
 ## Uninstall
+
+<details>
+<summary><b>AppImage and source uninstall steps</b></summary>
 
 ### AppImage
 Run the uninstaller:
@@ -749,6 +776,8 @@ The uninstaller offers three options:
 - **Quick uninstall**: Removes launcher and venv (keeps config and models)
 - **Full uninstall**: Removes everything including downloaded models
 - **Custom**: Choose what to remove
+
+</details>
 
 ## Changelog
 
@@ -779,6 +808,9 @@ finished text comes back to its clipboard. See
   traceback, so the log stays readable exactly when something did go wrong.
 - **Android works too.** The endpoint accepts `multipart/form-data` as well as a raw body,
   which is what Tasker and most Android automation apps send.
+
+<details>
+<summary><b>Older releases — v1.1.0, v1.0.0</b></summary>
 
 ### v1.1.0
 
@@ -864,6 +896,8 @@ Claude Code CLI. See [AI cleanup](#ai-cleanup-optional).
 
 First stable release — see the
 [release notes](https://github.com/gaborkis11/WhisperRocket/releases/tag/v1.0.0).
+
+</details>
 
 ## License
 
