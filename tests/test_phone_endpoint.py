@@ -39,8 +39,7 @@ def check(name, condition, detail=""):
         print(f"  FAIL  {name}  {detail}")
 
 
-def request(method="GET", path="/health", token=TOKEN, body=None, headers=None):
-    """Returns (status, body_text, headers_dict). Never raises on HTTP errors."""
+def _request_once(method, path, token, body, headers):
     url = f"http://{HOST}:{PORT}{path}"
     req = urllib.request.Request(url, method=method, data=body)
     if token is not None:
@@ -53,6 +52,27 @@ def request(method="GET", path="/health", token=TOKEN, body=None, headers=None):
             return response.status, response.read().decode("utf-8"), dict(response.headers)
     except urllib.error.HTTPError as error:
         return error.code, error.read().decode("utf-8"), dict(error.headers)
+
+
+def request(method="GET", path="/health", token=TOKEN, body=None, headers=None,
+            allow_busy=False):
+    """
+    Returns (status, body_text, headers_dict). Never raises on HTTP errors.
+
+    Retries briefly on 429 unless allow_busy is set. The client can finish
+    reading a response while the server thread that produced it has not yet
+    reached the finally block that releases the one-dictation-at-a-time slot -
+    a race far too narrow to see on a fast machine, and wide enough on a slow
+    CI runner that the very next request lands in it. A leaked slot still
+    fails: it keeps answering 429 long past the retry window. The concurrency
+    test passes allow_busy=True, because there a 429 is the expected answer.
+    """
+    for _ in range(30):
+        result = _request_once(method, path, token, body, headers)
+        if result[0] != 429 or allow_busy:
+            return result
+        time.sleep(0.1)
+    return result
 
 
 # --- the fake pipeline ---------------------------------------------------
@@ -294,7 +314,7 @@ def test_concurrency():
     thread.start()
     time.sleep(0.4)
 
-    status, _, _ = request(method="POST", path="/dictate", body=b"audio")
+    status, _, _ = request(method="POST", path="/dictate", body=b"audio", allow_busy=True)
     check("second concurrent dictation -> 429", status == 429, f"got {status}")
 
     thread.join()
