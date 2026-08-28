@@ -414,11 +414,26 @@ finish within it, the plain transcript is sent instead. You therefore never lose
 a recording to a slow model - at worst you get the same text without the tidying.
 
 Set the budget below the point where your phone gives up waiting. Apple does not
-document that limit and reports vary between 25 and 60 seconds, so measure it:
-append `?delay=30` to the address with `/health` instead of `/dictate` and open it
-from a throwaway Shortcut. The machine will wait that many seconds before
-answering. Try 20, 30, 40, 50, 60 - where it stops working is your phone's limit.
-Then set the budget about ten seconds below it.
+document that limit, and reports vary between 25 and 60 seconds.
+
+**Measured on an iPhone: it waits 60 seconds, and gives up somewhere between 60
+and 70.** A budget of 45-50 is therefore a sensible starting point, and is what
+the endpoint is tuned for.
+
+To check your own device, build a throwaway Shortcut that opens the health
+address with a delay, and raise the number until it fails:
+
+```
+http://100.x.x.x:8771/health?delay=30
+```
+
+The machine waits that many seconds before answering, so 30 → 50 → 60 → 70 finds
+the cutoff. Keep the `Authorization` header - the health check needs it too. Then
+set the budget about ten seconds below what you measured.
+
+Note that the budget covers this machine's work; the time spent uploading the
+recording is added on top of it from the phone's point of view. On a weak
+cellular signal with a long recording, that upload is worth leaving room for.
 
 ### What the endpoint can and cannot do
 
@@ -669,7 +684,10 @@ finished text comes back to its clipboard. See
 - Errors come back as short spoken sentences rather than status codes, so the Shortcut can
   read them out while you are driving.
 - A `?delay=` helper on the health check measures how long your phone is willing to wait,
-  which Apple does not document.
+  which Apple does not document. Measured on an iPhone: 60 seconds, giving up between 60
+  and 70.
+- A phone that hangs up before the answer arrives is reported as one line rather than a
+  traceback, so the log stays readable exactly when something did go wrong.
 
 ### v1.1.0
 

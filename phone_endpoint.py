@@ -34,6 +34,7 @@ a driver cannot interpret.
 """
 import hmac
 import secrets
+import sys
 import threading
 import time
 from dataclasses import dataclass
@@ -114,6 +115,27 @@ class _Server(ThreadingHTTPServer):
     """Threading server that carries a reference back to its endpoint"""
     daemon_threads = True
     endpoint = None       # set by PhoneEndpoint.start()
+
+    def handle_error(self, request, client_address):
+        """
+        Report a client that hung up as one line rather than a traceback.
+
+        This is not an edge case: the phone gives up after about a minute, so
+        every dictation that outlasts its patience ends with the write failing
+        here. Measured on an iPhone, the cutoff is between 60 and 70 seconds.
+
+        The default handler dumps a full traceback, which looks like the server
+        crashed when nothing is wrong with it - and it would appear exactly when
+        the user is in the car wondering why there was no answer. Anything other
+        than a dropped connection still gets the traceback, because that would be
+        a real fault.
+        """
+        error = sys.exc_info()[1]
+        if isinstance(error, (BrokenPipeError, ConnectionResetError)):
+            host = client_address[0] if client_address else "?"
+            print(f"[PHONE] {host} gave up waiting before the answer was sent")
+            return
+        super().handle_error(request, client_address)
 
 
 class _Handler(BaseHTTPRequestHandler):
