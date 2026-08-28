@@ -150,7 +150,12 @@ def load_config():
             "ai_trigger_phrases": ["fogalmazzuk meg hogy", "fogalmazd meg hogy",
                                    "segíts megfogalmazni", "jarvis segíts megfogalmazni"],
             "ai_timeout_seconds": 120,
-            "ai_dictionary_enabled": True
+            "ai_dictionary_enabled": True,
+            # Phone endpoint - off by default. It opens a network port, so it
+            # has to be something the user switches on deliberately.
+            "phone_endpoint_enabled": False,
+            "phone_endpoint_port": 8771,
+            "phone_endpoint_budget_seconds": 20
         }
 
 # Globális változók
@@ -177,6 +182,13 @@ file_transcription_window_instance = None  # File transcription ablak
 history_viewers = []  # Aktív history viewer ablakok
 model_lock = threading.Lock()  # Lock for concurrent model access
 
+# True while the local hotkey path is transcribing. The phone endpoint reads it
+# to decide whether it may touch the tray icon: a dictation arriving from the
+# phone must never overwrite the state of the one you are doing at the desk.
+local_busy = False
+
+phone_endpoint_instance = None  # phone_endpoint.PhoneEndpoint while it is running
+
 # Hang lejátszás (platform-független)
 def play_sound(sound_file):
     """Hangfájl lejátszása háttérszálban (platform-specifikus implementáció)"""
@@ -193,6 +205,10 @@ def create_icon(color='blue'):
         'orange': QColor(249, 115, 22),
         'green': QColor(34, 197, 94),
         'gray': QColor(107, 114, 128),
+        # Phone dictation. Its own colour rather than the yellow the local path
+        # uses, so a glance at the tray tells you whether the machine is working
+        # on your own dictation or on one that arrived from the phone.
+        'purple': QColor(168, 85, 247),
     }
     bg_color = color_map.get(color, QColor(59, 130, 246))
 
@@ -244,6 +260,13 @@ def quit_app():
     global stream, qt_app, keyboard_listener
     print("[INFO] Exiting...")
 
+    # Close the network port before anything else, so quitting never leaves a
+    # dictation endpoint listening behind a dead app.
+    try:
+        stop_phone_endpoint()
+    except Exception:
+        pass
+
     # Stop keyboard listener
     try:
         if keyboard_listener:
@@ -274,7 +297,12 @@ def open_settings():
     global settings_window_instance
     from settings_window import SettingsWindow
     if settings_window_instance is None or not settings_window_instance.isVisible():
-        settings_window_instance = SettingsWindow()
+        # Handed in rather than imported the other way round: settings_window
+        # importing this module would load a second copy of it (this one runs as
+        # __main__), and the app would end up with two of every global.
+        settings_window_instance = SettingsWindow(
+            apply_phone_endpoint=apply_phone_endpoint_settings,
+        )
         settings_window_instance.show()
     else:
         settings_window_instance.raise_()
@@ -436,6 +464,35 @@ AI_REASON_KEYS = {
 }
 
 
+def run_whisper(file_path):
+    """
+    Transcribe one audio file with the loaded model.
+
+    Shared by the hotkey path and the phone endpoint. It was inline in
+    process_audio first; pulling it out means the two paths cannot drift apart -
+    a beam size or a language fixed in one of them would otherwise silently not
+    apply to the other.
+
+    Takes model_lock, so callers must not already hold it.
+    """
+    with model_lock:
+        if whisper_backend == "mlx":
+            import mlx_whisper
+            result = mlx_whisper.transcribe(
+                file_path,
+                path_or_hf_repo=f"mlx-community/whisper-{model['model_name']}-mlx",
+                language=config["language"],
+            )
+            return result.get("text", "").strip()
+
+        segments, _info = model.transcribe(
+            file_path,
+            language=config["language"],
+            beam_size=5,
+        )
+        return " ".join(segment.text.strip() for segment in segments)
+
+
 def ai_reason_label(reason: str) -> str:
     """Human-readable label for why the AI cleanup did not deliver"""
     if reason.startswith("guard:"):
@@ -443,15 +500,20 @@ def ai_reason_label(reason: str) -> str:
     return t(AI_REASON_KEYS.get(reason, "ai_reason_other"), ui_lang)
 
 
+# Settings that take effect on the next dictation rather than the next restart.
+# Everything else - model, device, hotkey - genuinely needs a restart and keeps
+# coming from the `config` loaded at startup.
+LIVE_CONFIG_PREFIXES = ("ai_", "phone_endpoint_")
+
+
 def current_ai_config():
     """
-    Config for the AI path, with the ai_* keys re-read from disk.
+    Config with the live keys re-read from disk.
 
     The module-level `config` is loaded once at startup, so without this a user
     who ticks "Clean up dictation with AI" in Settings and saves would see no
     change until the app restarted - and there is no reason to restart for a
-    prompt or a trigger phrase. Only the ai_* keys are refreshed; model, device
-    and hotkey genuinely need a restart and keep coming from `config`.
+    prompt, a trigger phrase or the phone endpoint's response budget.
     """
     settings = dict(config)
     try:
@@ -461,23 +523,33 @@ def current_ai_config():
         return settings
 
     for key, value in stored.items():
-        if key.startswith("ai_"):
+        if key.startswith(LIVE_CONFIG_PREFIXES):
             settings[key] = value
     return settings
 
 
-def apply_ai_enhancement(raw_text):
+def apply_ai_enhancement(raw_text, timeout_override=None):
     """
     Custom-dictionary fix plus AI cleanup, or None when neither is switched on.
 
     Imported lazily and wrapped in a catch-all on purpose: plain dictation is
     this app's original feature and predates the AI path, so a missing or broken
     ai_enhancer must cost the tidying and never the transcript.
+
+    timeout_override shortens the wait for this one call. The phone endpoint uses
+    it to keep the whole request inside the window the iPhone is willing to wait:
+    whatever is left of the budget after Whisper becomes the AI's timeout, and if
+    the model does not make it, enhance() falls back to the raw transcript
+    exactly as it does on the desktop - and the stuck Claude process is killed
+    rather than left running against the account's limit.
     """
     ai_config = current_ai_config()
     if not (ai_config.get("ai_enhance_enabled")
             or ai_config.get("ai_dictionary_enabled", True)):
         return None
+
+    if timeout_override is not None:
+        ai_config["ai_timeout_seconds"] = timeout_override
 
     try:
         from ai_enhancer import enhance
@@ -499,8 +571,14 @@ def apply_ai_enhancement(raw_text):
 
 # Feldolgozás
 def process_audio(audio_copy):
+    global local_busy
+
     print("\n" + "="*60)
     print("[PROCESSING] Starting...")
+
+    # Claimed for the whole run so a phone dictation arriving mid-way cannot
+    # repaint the tray out from under the one happening at the desk.
+    local_busy = True
 
     try:
         # Audio concatenation
@@ -515,26 +593,8 @@ def process_audio(audio_copy):
         print("[INFO] Whisper processing...")
         start_time = time.time()
 
-        with model_lock:
-            if whisper_backend == "mlx":
-                # MLX backend
-                import mlx_whisper
-                result = mlx_whisper.transcribe(
-                    temp_file.name,
-                    path_or_hf_repo=f"mlx-community/whisper-{model['model_name']}-mlx",
-                    language=config["language"]
-                )
-                text = result.get("text", "").strip()
-            else:
-                # Faster-whisper backend
-                segments, info = model.transcribe(
-                    temp_file.name,
-                    language=config["language"],
-                    beam_size=5
-                )
-                # Szöveg összegyűjtés
-                text = " ".join([segment.text.strip() for segment in segments])
-        
+        text = run_whisper(temp_file.name)
+
         elapsed = time.time() - start_time
 
         # AI enhancement. The processing popup started in stop_recording() is
@@ -604,6 +664,215 @@ def process_audio(audio_copy):
         time.sleep(2)
         hide_popup()
         update_icon('blue', t("tray_ready", ui_lang))
+
+    finally:
+        local_busy = False
+
+
+# --- Phone endpoint -------------------------------------------------------
+#
+# The HTTP server itself lives in phone_endpoint.py and deliberately imports
+# nothing from this app. Everything it needs to reach - the warm model, the AI
+# cleanup, the history, the tray - is handed to it as the callbacks below, which
+# is what keeps the network-facing code unable to touch anything else.
+
+
+def phone_model_ready() -> bool:
+    """Whether a recording could be transcribed right now"""
+    return model is not None
+
+
+def phone_tray(color, title_key, suffix=""):
+    """
+    Tray feedback for a phone dictation, skipped while the desk is busy.
+
+    Gábor asked for a light touch here: enough to see at a glance that a request
+    came in, never enough to hide what the local path is doing.
+    """
+    if local_busy or recording:
+        return
+    title = t(title_key, ui_lang)
+    update_icon(color, f"{title}{suffix}")
+
+
+def dictate_from_phone(audio_bytes):
+    """
+    One recording from the phone, all the way to finished text.
+
+    Runs on the endpoint's worker thread. Returns a DictationOutcome; it does not
+    raise, because the endpoint turns any failure into a spoken error and this
+    path should decide for itself which failure the user hears.
+    """
+    from phone_endpoint import DictationOutcome
+
+    if not phone_model_ready():
+        return DictationOutcome(error="not_ready")
+
+    settings = current_ai_config()
+    budget = float(settings.get("phone_endpoint_budget_seconds", 20))
+
+    started = time.time()
+    temp_path = None
+
+    try:
+        # The filename never comes from the request - the endpoint hands over
+        # bytes and nothing else, so there is no name to be tricked by.
+        handle, temp_path = tempfile.mkstemp(suffix=".m4a", prefix="whisperrocket-phone-")
+        with os.fdopen(handle, "wb") as audio_file:
+            audio_file.write(audio_bytes)
+
+        phone_tray('purple', "tray_phone_working")
+
+        text = run_whisper(temp_path)
+        whisper_elapsed = time.time() - started
+        print(f"[PHONE] Whisper {whisper_elapsed:.2f}s, {len(audio_bytes)} bytes")
+
+        if not text.strip():
+            phone_tray('blue', "tray_ready")
+            return DictationOutcome(error="no_speech")
+
+        # Whatever is left of the budget is what the AI gets. Below five seconds
+        # there is no point spawning the call at all - it could not finish, and
+        # the raw transcript is the same answer either way, minus the wait.
+        remaining = budget - whisper_elapsed
+        ai_result = apply_ai_enhancement(text, timeout_override=int(remaining)) \
+            if remaining >= 5 else None
+
+        if ai_result is None and remaining < 5:
+            print(f"[PHONE] {remaining:.1f}s left of the budget - sending the plain transcript")
+
+        if ai_result is not None:
+            text = ai_result.text
+
+        mode = ai_result.mode if (ai_result and ai_result.enhanced) else "transcript"
+        enhanced = bool(ai_result and ai_result.enhanced)
+
+        if text.strip():
+            history_manager.add_entry(
+                text, time.time() - started, config["language"],
+                enhanced=(ai_result.enhanced if ai_result else None),
+                raw_text=(ai_result.raw_text if ai_result else None),
+                source="phone",
+            )
+            from PySide6.QtCore import QTimer
+            QTimer.singleShot(0, refresh_history_menu)
+
+        total = time.time() - started
+        print(f"[PHONE] {mode} mode, {total:.2f}s total, enhanced={enhanced}")
+
+        phone_tray('green' if enhanced else 'orange', "tray_phone_done")
+        threading.Timer(3.0, lambda: phone_tray('blue', "tray_ready")).start()
+
+        return DictationOutcome(text=text, mode=mode, enhanced=enhanced)
+
+    except Exception as error:
+        print(f"[PHONE] failed: {error}")
+        phone_tray('blue', "tray_ready")
+        return DictationOutcome(error="failed")
+
+    finally:
+        # The recording is deleted whatever happened - the briefing asks for the
+        # audio to leave no trace once it has been processed.
+        if temp_path and os.path.exists(temp_path):
+            try:
+                os.unlink(temp_path)
+            except Exception:
+                pass
+
+
+def phone_endpoint_messages():
+    """The user-visible strings, translated, keyed as phone_endpoint expects"""
+    return {
+        "bad_request": t("phone_err_bad_request", ui_lang),
+        "bad_token": t("phone_err_bad_token", ui_lang),
+        "not_found": t("phone_err_not_found", ui_lang),
+        "too_large": t("phone_err_too_large", ui_lang),
+        "no_speech": t("phone_err_no_speech", ui_lang),
+        "busy": t("phone_err_busy", ui_lang),
+        "not_ready": t("phone_err_not_ready", ui_lang),
+        "failed": t("phone_err_failed", ui_lang),
+        "health_ok": t("phone_health_ok", ui_lang),
+    }
+
+
+def stop_phone_endpoint():
+    """Shut the endpoint down if it is running"""
+    global phone_endpoint_instance
+    if phone_endpoint_instance is not None:
+        phone_endpoint_instance.stop()
+        phone_endpoint_instance = None
+
+
+def apply_phone_endpoint_settings():
+    """
+    Start, stop or restart the endpoint to match the saved settings.
+
+    Called at startup and again whenever the Settings window saves, so switching
+    the feature on takes effect immediately - restarting the app to open a port
+    would be a poor trade for a setting the user is likely to be experimenting
+    with.
+
+    Returns (running, reason) where reason names the obstacle when it is not.
+    """
+    global phone_endpoint_instance
+
+    settings = current_ai_config()
+    if not settings.get("phone_endpoint_enabled"):
+        stop_phone_endpoint()
+        return False, "disabled"
+
+    import phone_endpoint
+    import secrets_manager
+    import tailscale_support
+
+    state = tailscale_support.get_state()
+    if not state.usable:
+        # Refusing to start is the whole point: without Tailscale the only
+        # addresses left are the LAN and the wildcard, and this endpoint is not
+        # meant to be reachable on either.
+        stop_phone_endpoint()
+        print(f"[PHONE] not starting - Tailscale is {state.reason}")
+        return False, state.reason
+
+    token = secrets_manager.get_secret(phone_endpoint.TOKEN_ENV_NAME)
+    if not token:
+        token = phone_endpoint.generate_token()
+        secrets_manager.set_secret(phone_endpoint.TOKEN_ENV_NAME, token)
+        print("[PHONE] generated a new access key")
+
+    port = int(settings.get("phone_endpoint_port", phone_endpoint.DEFAULT_PORT))
+
+    # Restart when anything about the socket or the token changed; leave a
+    # correctly running server alone.
+    if phone_endpoint_instance is not None:
+        unchanged = (phone_endpoint_instance.host == state.ipv4
+                     and phone_endpoint_instance.port == port
+                     and phone_endpoint_instance.token == token)
+        if unchanged:
+            return True, "ok"
+        stop_phone_endpoint()
+
+    endpoint = phone_endpoint.PhoneEndpoint(
+        host=state.ipv4,
+        port=port,
+        token=token,
+        dictate=dictate_from_phone,
+        ready_check=phone_model_ready,
+        messages=phone_endpoint_messages(),
+    )
+
+    try:
+        endpoint.start()
+    except OSError as error:
+        print(f"[PHONE] could not open the port: {error}")
+        return False, "port_busy"
+    except Exception as error:
+        print(f"[PHONE] could not start: {error}")
+        return False, "unknown"
+
+    phone_endpoint_instance = endpoint
+    return True, "ok"
+
 
 # Popup kezelés (Signal-alapú thread-safe kommunikáció)
 def show_popup():
@@ -947,6 +1216,11 @@ def main():
 
     # Modell betöltés háttérben
     threading.Thread(target=load_model, daemon=True).start()
+
+    # Started without waiting for the model: the endpoint answers /health with
+    # "still loading" until it is ready, which is a better answer for the phone
+    # than a refused connection.
+    apply_phone_endpoint_settings()
 
     print("="*60)
     print("  WHISPER SPEECH-TO-TEXT")

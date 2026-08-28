@@ -29,6 +29,7 @@ WhisperRocket is a desktop application that converts speech to text in real-time
 - **Speaker diarization** - Identify who is speaking (optional, via [pyannote-audio](https://github.com/pyannote/pyannote-audio))
 - **Export** - Save transcriptions as SRT, VTT, TXT, or JSON
 - **AI cleanup** - Optionally turn the raw transcript into a finished message in your own style, using your own Claude subscription (see [AI cleanup](#ai-cleanup-optional))
+- **Dictation from your phone** - Optional. Record on your phone over [Tailscale](https://tailscale.com), let this machine transcribe and tidy it up, and get the text back on the phone's clipboard (see [Dictation from your phone](#dictation-from-your-phone))
 - **History** - Browse and copy previous transcriptions from the system tray
 - **System tray** - Runs quietly in the background with color-coded status
 - **Configurable** - Adjust language, model, hotkey, popup duration, and more
@@ -344,6 +345,108 @@ The file lives at `~/.config/whisperrocket/dictionary.md`; see
 [`dictionary.example.md`](dictionary.example.md). A `dictionary.json` written by an
 earlier version is converted automatically on first use.
 
+## Dictation from your phone
+
+Record on your phone, have this machine transcribe and tidy it up, and get the
+finished text back on your phone's clipboard. Useful when you are away from the
+keyboard - the phone does no recognition of its own, so the result is the same
+quality as dictating at the desk.
+
+### What you need
+
+**[Tailscale](https://tailscale.com) on both devices, signed in to the same
+account.** This is required, not optional, and the feature will not start
+without it.
+
+The reason is worth understanding. Tailscale gives this machine an address in
+the `100.64.0.0/10` range, which is not routable from the public internet - a
+packet from outside cannot reach it even in principle. The endpoint binds to
+that address and to nothing else, so it is reachable from your own devices and
+from nowhere else: not from your home network, not from a café's wifi, not from
+the internet. Nothing is exposed, and no ports are opened on your router.
+
+An access key is checked on top of that, for devices already inside your own
+network.
+
+### Setting it up
+
+1. Tray icon → **Settings** → **Phone** tab
+2. Tick **Enable phone dictation** and press **Save**
+3. The **Status** line should say *Running*. If it does not, it names the
+   obstacle - Tailscale not running, or the port already in use
+4. Copy the **Address** and the **Access key** - you need both on the phone
+
+Every field has a tooltip explaining what it does; hover if something is unclear.
+
+### The Shortcut on iPhone
+
+Create a Shortcut with these actions:
+
+| # | Action | Settings |
+|---|--------|----------|
+| 1 | **Record Audio** | Stop after: **On Tap** |
+| 2 | **Get Contents of URL** | See below |
+| 3 | **Copy to Clipboard** | The output of step 2 |
+| 4 | **Show Notification** | Optional, confirms it arrived |
+
+For step 2, expand **Show More** and set:
+
+- **URL**: the address from the Settings window, e.g. `http://100.x.x.x:8771/dictate`
+- **Method**: `POST`
+- **Headers**: `Authorization` → `Bearer YOUR-ACCESS-KEY`
+- **Request Body**: `File`, and pass in the recording from step 1
+
+Assign the Shortcut to the Action button (Settings → Action Button → Shortcut) and
+you can dictate without unlocking the phone. Note that the recording is stopped by
+tapping the screen: the Shortcuts app has no action for stopping a recording on a
+second button press, so a press-to-start, press-to-stop toggle is not possible
+with Shortcuts alone.
+
+To have errors read out loud while driving, add an **If** after step 2 and put
+**Speak Text** in the error branch - the endpoint answers failures with a short
+spoken sentence rather than an error code.
+
+### Response budget
+
+The endpoint always answers, and it answers in time. Whatever is left of the
+budget after transcription is given to the AI cleanup; if the cleanup does not
+finish within it, the plain transcript is sent instead. You therefore never lose
+a recording to a slow model - at worst you get the same text without the tidying.
+
+Set the budget below the point where your phone gives up waiting. Apple does not
+document that limit and reports vary between 25 and 60 seconds, so measure it:
+append `?delay=30` to the address with `/health` instead of `/dictate` and open it
+from a throwaway Shortcut. The machine will wait that many seconds before
+answering. Try 20, 30, 40, 50, 60 - where it stops working is your phone's limit.
+Then set the budget about ten seconds below it.
+
+### What the endpoint can and cannot do
+
+It accepts a recording and returns text. That is the whole of it. The
+network-facing code in `phone_endpoint.py` imports nothing from the rest of the
+app, so it has no way to read your settings, your history, your dictionary or
+your style profile, and it cannot write to disk beyond the temporary copy of the
+recording, which is deleted as soon as it has been transcribed.
+
+Requests are handled one at a time, oversized uploads are refused before they are
+read, and unknown addresses return 404. The access key is compared in constant
+time, and it is stored in `~/.config/whisperrocket/.env` with `0600` permissions -
+never in `config.json`, and never in the repository.
+
+### If something is wrong
+
+| Symptom | Cause |
+|---|---|
+| Status says *Tailscale is not running* | Start Tailscale and sign in |
+| Status says *The port is in use* | Change the port in Settings, and update the Shortcut |
+| Phone says *Wrong access key* | The key was regenerated - copy the current one |
+| Phone says *The model is still loading* | Wait a few seconds after starting the app |
+| Phone says *The computer is busy* | Another dictation is in progress |
+| The Shortcut times out | Lower the response budget, or measure the real limit as above |
+
+If your phone uses another VPN, it may conflict with Tailscale and the machine
+will be unreachable - only one VPN can usually hold the tunnel at a time.
+
 ## Configuration
 
 Right-click the tray icon → **Settings** to configure:
@@ -446,6 +549,8 @@ WhisperRocket/
 ├── translations.py       # Multi-language UI support (EN/HU)
 ├── config_paths.py       # Config file location (dev vs bundled)
 ├── secrets_manager.py    # API token storage (~/.config/whisperrocket/.env)
+├── phone_endpoint.py     # HTTP endpoint for phone dictation (standard library only)
+├── tailscale_support.py  # Tailscale state and address detection
 ├── platform_support/     # Platform abstraction layer
 │   ├── base.py           # Abstract interface
 │   ├── linux.py          # Linux-specific implementation
@@ -542,6 +647,29 @@ The uninstaller offers three options:
 - **Custom**: Choose what to remove
 
 ## Changelog
+
+### Unreleased
+
+**Dictation from your phone** — optional, off by default. Record on your phone, and the
+finished text comes back to its clipboard. See
+[Dictation from your phone](#dictation-from-your-phone).
+
+- **Tailscale only.** The endpoint binds to your Tailscale address and refuses to start
+  without it. That address is not routable from the public internet, so the feature is
+  reachable from your own devices and from nowhere else — no router ports, nothing exposed.
+  An access key is checked on top, for devices already inside your own network.
+- **It always answers, and it answers in time.** Whatever is left of the response budget
+  after transcription is what the AI cleanup gets; if it does not finish, the plain
+  transcript is sent instead. A slow model costs you the tidying, never the recording.
+- **The network-facing code cannot reach anything else.** `phone_endpoint.py` imports
+  nothing from the rest of the app, so it has no path to your settings, history, dictionary
+  or style profile. The recording is deleted as soon as it has been transcribed.
+- **Compose mode works from the phone too** — the opening phrase is recognised in the
+  transcript, so nothing extra is needed on the phone.
+- Errors come back as short spoken sentences rather than status codes, so the Shortcut can
+  read them out while you are driving.
+- A `?delay=` helper on the health check measures how long your phone is willing to wait,
+  which Apple does not document.
 
 ### v1.1.0
 
