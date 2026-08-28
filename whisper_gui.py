@@ -686,8 +686,8 @@ def phone_tray(color, title_key, suffix=""):
     """
     Tray feedback for a phone dictation, skipped while the desk is busy.
 
-    Gábor asked for a light touch here: enough to see at a glance that a request
-    came in, never enough to hide what the local path is doing.
+    A light touch on purpose: enough to see at a glance that a request came in,
+    never enough to hide what the local path is doing.
     """
     if local_busy or recording:
         return

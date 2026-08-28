@@ -1269,9 +1269,9 @@ class SettingsWindow(QMainWindow):
 
     # --- Phone tab -------------------------------------------------------
     #
-    # Deliberately sparse on screen. Gábor asked for the minimum next to each
-    # field and the explanation in a tooltip, so a setting you already
-    # understand stays out of the way and one you do not can be hovered.
+    # Deliberately sparse on screen: the minimum next to each field and the
+    # explanation in a tooltip, so a setting you already understand stays out
+    # of the way and one you do not can be hovered.
 
     def create_phone_tab(self):
         """Phone dictation: the switch, what to type into the Shortcut, tuning"""

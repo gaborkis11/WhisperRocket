@@ -98,6 +98,47 @@ def generate_token() -> str:
     return secrets.token_urlsafe(32)
 
 
+def extract_multipart_file(body: bytes, content_type: str) -> bytes:
+    """
+    Pull the uploaded file out of a multipart/form-data body.
+
+    Needed for Android: iOS Shortcuts sends the recording as the raw body, but
+    Tasker - the automation app most Android users reach for - always wraps a
+    file in multipart/form-data. Without this the endpoint would simply be
+    unusable from the most common Android setup.
+
+    Deliberately a bounded byte scan rather than a real parser. It splits on the
+    boundary, skips each part's headers and returns the first payload it finds.
+    It never reads the filename the client supplied, never recurses into nested
+    parts, and cannot allocate more than the already size-capped body. Returns
+    the body unchanged when it does not look like multipart, so an odd
+    Content-Type degrades to the raw-body behaviour rather than failing.
+    """
+    marker = "boundary="
+    position = content_type.find(marker)
+    if position < 0:
+        return body
+
+    boundary = content_type[position + len(marker):].split(";")[0].strip().strip('"')
+    if not boundary:
+        return body
+
+    delimiter = b"--" + boundary.encode("utf-8", "replace")
+    for section in body.split(delimiter):
+        # Each part is "\r\n<headers>\r\n\r\n<payload>\r\n"; the preamble and the
+        # closing "--" carry no header block and fall out here.
+        header_end = section.find(b"\r\n\r\n")
+        if header_end < 0:
+            continue
+        payload = section[header_end + 4:]
+        if payload.endswith(b"\r\n"):
+            payload = payload[:-2]
+        if payload:
+            return payload
+
+    return body
+
+
 def clamp_delay(raw) -> int:
     """
     Seconds the measurement helper should sleep, clamped to a sane range.
@@ -246,6 +287,12 @@ class _Handler(BaseHTTPRequestHandler):
             audio = self.rfile.read(length)
             if len(audio) != length:
                 return self._respond(400, self._message("bad_request"))
+
+            content_type = self.headers.get("Content-Type", "") or ""
+            if content_type.lower().startswith("multipart/"):
+                audio = extract_multipart_file(audio, content_type)
+                if not audio:
+                    return self._respond(400, self._message("bad_request"))
 
             try:
                 outcome = self._endpoint.dictate(audio)
