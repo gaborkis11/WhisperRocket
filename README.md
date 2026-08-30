@@ -106,6 +106,23 @@ Or launch "WhisperRocket" from your application menu.
 
 > **Note for NVIDIA users**: After installation, open a new terminal or run `source ~/.bashrc` before starting the application.
 
+### Updating
+
+WhisperRocket checks for new releases **once a day at startup** (from v1.2.2)
+and shows what changed — in your language — when one is available; you decide
+whether to install it. Privacy: the check is a single version query to GitHub,
+nothing about you is sent, and the **Settings** checkbox "Check for updates at
+startup" turns it off entirely. The About window has a manual
+**Check for updates** button either way.
+
+- **AppImage**: choose "Update now" and it downloads the new version, swaps
+  the file in place and restarts itself. (Versions ≤ 1.2.1 predate this —
+  download the new AppImage from [Releases](https://github.com/gaborkis11/WhisperRocket/releases)
+  once, your settings and models are kept.) The AppImage also carries zsync
+  update info for [AppImageUpdate](https://github.com/AppImageCommunity/AppImageUpdate) users.
+- **Source install**: the dialog hands you the exact command —
+  `git -C <your-clone> pull` — then restart the app.
+
 ## GPU Support
 
 | GPU Type | Mode | Performance |
@@ -821,6 +838,23 @@ The uninstaller offers three options:
 </details>
 
 ## Changelog
+
+### v1.2.2
+
+**The app now keeps itself up to date.**
+
+- Once a day at startup, WhisperRocket quietly checks GitHub for a newer
+  release (a single version query — nothing about you is sent). A dialog
+  shows **what changed, in your language (English/Hungarian)**, covering
+  every version you skipped, and you decide: update now or later. Turn the
+  automatic check off in Settings, or from the dialog itself.
+- **The AppImage updates itself**: download with progress, safe in-place
+  swap (the old file is kept on any failure), automatic restart.
+- Source installs get the exact `git pull` command to copy.
+- A **Check for updates** button in the About window does the same on demand.
+- The AppImage now embeds zsync update information, so
+  [AppImageUpdate](https://github.com/AppImageCommunity/AppImageUpdate) can
+  delta-update it too.
 
 ### v1.2.1
 
