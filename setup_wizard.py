@@ -13,7 +13,7 @@ from PySide6.QtCore import Qt, QTimer, Signal
 from PySide6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QRadioButton, QButtonGroup, QProgressBar, QFrame, QApplication,
-    QStackedLayout, QWidget
+    QStackedLayout, QWidget, QComboBox
 )
 from PySide6.QtGui import QFont, QCursor
 
@@ -129,16 +129,74 @@ class SetupWizard(QDialog):
             Qt.CustomizeWindowHint
         )
 
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(0, 8, 0, 0)
+        outer.setSpacing(0)
+
+        # Language selector - lives outside the pages so it survives rebuilds;
+        # switching it re-renders the wizard in the chosen language and saves
+        # the choice to the config (Settings can change it again later)
+        lang_row = QHBoxLayout()
+        lang_row.setContentsMargins(0, 0, 16, 0)
+        lang_row.addStretch()
+        self.lang_combo = QComboBox()
+        self.lang_combo.addItem("English", "en")
+        self.lang_combo.addItem("Magyar", "hu")
+        self.lang_combo.setCurrentIndex(1 if self.lang == "hu" else 0)
+        self.lang_combo.setFixedWidth(110)
+        lang_row.addWidget(self.lang_combo)
+        outer.addLayout(lang_row)
+
         # Two pages: system check first (when relevant), then model selection
-        self.stack = QStackedLayout(self)
+        self.stack = QStackedLayout()
+        outer.addLayout(self.stack)
+        self._build_pages()
+        self.stack.setCurrentWidget(
+            self.page_check if self.show_check_page else self.page_model)
+
+    def _build_pages(self):
+        """(Re)build both pages in the current language."""
+        while self.stack.count():
+            widget = self.stack.takeAt(0).widget()
+            if widget is not None:
+                widget.setParent(None)
+                widget.deleteLater()
         self.page_check = QWidget()
         self._build_check_page(self.page_check)
         self.page_model = QWidget()
         self._build_model_page(self.page_model)
         self.stack.addWidget(self.page_check)
         self.stack.addWidget(self.page_model)
-        self.stack.setCurrentWidget(
-            self.page_check if self.show_check_page else self.page_model)
+        self._connect_widgets()
+
+    def change_language(self, index):
+        """Re-render the wizard in the selected language and persist it"""
+        lang = self.lang_combo.itemData(index)
+        if lang == self.lang:
+            return
+        self.lang = lang
+        self._persist_language(lang)
+        self.setWindowTitle(t("wizard_title", self.lang))
+        current = self.stack.currentIndex()
+        self._build_pages()
+        self.stack.setCurrentIndex(current)
+
+    def _persist_language(self, lang):
+        """Save the explicit first-run language choice: UI language and the
+        dictation language both follow it (Settings can split them later)."""
+        config_path = get_config_path()
+        try:
+            with open(config_path, 'r') as f:
+                config = json.load(f)
+        except Exception:
+            config = {}
+        config["ui_language"] = lang
+        config["language"] = lang
+        try:
+            with open(config_path, 'w') as f:
+                json.dump(config, f, indent=2)
+        except Exception as e:
+            print(f"[WARNING] Could not save language choice: {e}")
 
     def _build_check_page(self, page):
         """System-check page: one row per check, copyable fix commands,
@@ -319,7 +377,9 @@ class SetupWizard(QDialog):
             self.model_radios[model_id] = radio
             model_layout.addWidget(radio)
 
-            if model_id == DEFAULT_MODEL:
+            # selected_model (not DEFAULT_MODEL): a language-switch rebuild
+            # must keep whatever the user already picked
+            if model_id == self.selected_model:
                 radio.setChecked(True)
 
         layout.addWidget(model_frame)
@@ -410,13 +470,18 @@ class SetupWizard(QDialog):
         self.cpu_fallback_btn.setVisible(False)
         layout.addWidget(self.cpu_fallback_btn)
 
-    def setup_connections(self):
-        """Connect signals"""
+    def _connect_widgets(self):
+        """Connect widget signals - called after every page (re)build, the
+        widgets are new objects each time"""
         self.download_btn.clicked.connect(self.start_download)
         self.cpu_fallback_btn.clicked.connect(self.continue_with_cpu)
         self.recheck_btn.clicked.connect(self.recheck_system)
         self.continue_btn.clicked.connect(self.continue_to_model_page)
         self.button_group.buttonClicked.connect(self.on_model_selected)
+
+    def setup_connections(self):
+        """Connect signals that live for the whole dialog (once only)"""
+        self.lang_combo.currentIndexChanged.connect(self.change_language)
         self.cuda_progress_signal.connect(self.on_cuda_progress)
 
         # Progress update timer
@@ -486,6 +551,9 @@ class SetupWizard(QDialog):
         self.download_btn.setText(t("wizard_downloading", self.lang))
         self.cpu_fallback_btn.setVisible(False)
         self.progress_label.setStyleSheet("color: #aaa; font-size: 12px;")
+        # Language switch rebuilds the pages - not safe while a download is
+        # updating the progress widgets
+        self.lang_combo.setEnabled(False)
 
         # Disable model selection
         for radio in self.model_radios.values():
@@ -542,6 +610,7 @@ class SetupWizard(QDialog):
             self.download_btn.setEnabled(True)
             self.download_btn.setText(t("cuda_retry", self.lang))
             self.cpu_fallback_btn.setVisible(True)
+            self.lang_combo.setEnabled(True)
 
     def continue_with_cpu(self):
         """User explicitly chose CPU mode after a failed CUDA download"""
@@ -582,6 +651,7 @@ class SetupWizard(QDialog):
             self.download_manager.clear_error()
             self.download_btn.setEnabled(True)
             self.download_btn.setText(t("wizard_download_start", self.lang))
+            self.lang_combo.setEnabled(True)
             for radio in self.model_radios.values():
                 radio.setEnabled(True)
             return

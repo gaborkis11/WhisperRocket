@@ -108,6 +108,44 @@ def main():
         wizard2 = setup_wizard.SetupWizard()
         check("x11 all-ok starts on model page",
               wizard2.stack.currentWidget() is wizard2.page_model)
+
+        # --- Language: default English + in-wizard switcher ---
+        os.environ["WR_FORCE_SESSION"] = "wayland"
+        fake_state["results"] = FRESH_OMARCHY
+
+        real_get_ui_language = setup_wizard.get_ui_language
+        real_persist = setup_wizard.SetupWizard._persist_language
+        persisted = []
+        setup_wizard.get_ui_language = lambda: "en"  # fresh machine, no config
+        setup_wizard.SetupWizard._persist_language = \
+            lambda self, lang: persisted.append(lang)
+        try:
+            wizard3 = setup_wizard.SetupWizard()
+            check("fresh install defaults to English",
+                  wizard3.lang == "en" and wizard3.lang_combo.currentData() == "en")
+            check("check page renders English by default",
+                  wizard3.continue_btn.text() == setup_wizard.t(
+                      "wizard_syscheck_continue_anyway", "en"))
+
+            wizard3.lang_combo.setCurrentIndex(1)  # switch to Magyar
+            check("language switch re-renders in Hungarian",
+                  wizard3.lang == "hu" and wizard3.continue_btn.text() ==
+                  setup_wizard.t("wizard_syscheck_continue_anyway", "hu"))
+            check("language choice is persisted", persisted == ["hu"])
+            check("language switch stays on the current page",
+                  wizard3.stack.currentWidget() is wizard3.page_check)
+
+            # Model selection survives a language switch
+            wizard3.continue_btn.click()
+            wizard3.model_radios["medium"].click()
+            wizard3.lang_combo.setCurrentIndex(0)  # back to English
+            check("selected model survives language switch",
+                  wizard3.selected_model == "medium"
+                  and wizard3.model_radios["medium"].isChecked()
+                  and wizard3.stack.currentWidget() is wizard3.page_model)
+        finally:
+            setup_wizard.get_ui_language = real_get_ui_language
+            setup_wizard.SetupWizard._persist_language = real_persist
     finally:
         system_check.run_all = real_run_all
         os.environ["WR_FORCE_SESSION"] = "wayland"
