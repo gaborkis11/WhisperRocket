@@ -45,6 +45,10 @@ hiddenimports = [
     'claude_cli',
     'dictionary_manager',
     'qt_helpers',
+    # Update check: about_window and update_checker are both reached through
+    # lazy imports only - same insurance as above.
+    'about_window',
+    'update_checker',
     # Phone dictation, lazily imported for the same reason and needing the same
     # treatment: without these the tray app still runs, so a missing module would
     # not announce itself - the Phone tab would simply refuse to start the
