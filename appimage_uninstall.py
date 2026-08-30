@@ -120,6 +120,71 @@ def confirm_full_uninstall():
         return False
 
 
+def component_paths(home=None):
+    """The user-data directories WhisperRocket creates (path per component).
+    ``home`` is injectable for tests."""
+    home = Path(home) if home else Path.home()
+    return {
+        "config": home / ".config" / "whisperrocket",
+        "models": home / ".cache" / "huggingface" / "hub" / "whisperrocket_models",
+        "cuda": home / ".local" / "share" / "whisperrocket",
+    }
+
+
+def remove_components(config=True, models=True, cuda=True, home=None):
+    """Non-interactive removal of the selected user-data components.
+    Returns the list of paths actually removed. Used by the in-app
+    uninstall; run_uninstall() keeps the interactive terminal flow."""
+    paths = component_paths(home)
+    selected = {"config": config, "models": models, "cuda": cuda}
+    removed = []
+    for key, path in paths.items():
+        if selected[key] and path.exists():
+            shutil.rmtree(path, ignore_errors=True)
+            removed.append(str(path))
+    return removed
+
+
+def remove_desktop_entries(home=None):
+    """Remove launcher/autostart integration: .desktop files, the Hyprland
+    exec-once block (same markers as platform_support/hypr_autostart.py)
+    and the restart flag. Returns the list of things removed."""
+    home = Path(home) if home else Path.home()
+    removed = []
+    for path in (home / ".local" / "share" / "applications" / "whisperrocket.desktop",
+                 home / ".config" / "autostart" / "whisperrocket.desktop",
+                 Path("/tmp/whisperrocket_restart")):
+        try:
+            if path.exists():
+                path.unlink()
+                removed.append(str(path))
+        except OSError:
+            pass
+
+    hypr_conf = home / ".config" / "hypr" / "hyprland.conf"
+    begin = "# >>> WhisperRocket autostart >>>"
+    end = "# <<< WhisperRocket autostart <<<"
+    try:
+        if hypr_conf.exists() and begin in hypr_conf.read_text():
+            lines = []
+            inside = False
+            for line in hypr_conf.read_text().splitlines(keepends=True):
+                stripped = line.strip()
+                if stripped == begin:
+                    inside = True
+                    continue
+                if stripped == end:
+                    inside = False
+                    continue
+                if not inside:
+                    lines.append(line)
+            hypr_conf.write_text("".join(lines))
+            removed.append(f"{hypr_conf} (autostart block)")
+    except OSError:
+        pass
+    return removed
+
+
 def remove_directory(path, name):
     """Remove a directory and report status."""
     try:
