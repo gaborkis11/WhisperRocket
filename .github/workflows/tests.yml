@@ -38,3 +38,6 @@ jobs:
 
       - name: Hyprland autostart block management
         run: python tests/test_hypr_autostart.py
+
+      - name: Setup wizard UI smoke (self-skips without PySide6)
+        run: python tests/test_setup_wizard_ui.py
