@@ -5,7 +5,8 @@ WhisperRocket - Small Qt behaviour fixes shared between windows
 from PySide6.QtCore import QObject, QEvent, Qt
 from PySide6.QtWidgets import (QApplication, QComboBox, QAbstractSpinBox,
                                QScrollArea, QDialog, QVBoxLayout, QHBoxLayout,
-                               QLabel, QLineEdit, QPushButton, QCheckBox)
+                               QLabel, QLineEdit, QPushButton, QCheckBox,
+                               QTextEdit)
 
 
 class NoWheelFilter(QObject):
@@ -114,6 +115,84 @@ def show_health_dialog(results, lang, parent=None, show_suppress=True):
 
     dlg.exec()
     return bool(suppress_check and suppress_check.isChecked())
+
+
+def show_update_dialog(info, lang, parent=None):
+    """New-version dialog: localized cumulative release notes, the user
+    decides. Returns (choice, disable_auto) where choice is "update" or
+    "later" and disable_auto is True when the user asked to stop automatic
+    checks. ``info`` is an update_checker.UpdateInfo."""
+    from translations import t
+
+    dlg = QDialog(parent)
+    dlg.setWindowTitle(t("update_available_title", lang, version=info.latest))
+    dlg.setMinimumWidth(520)
+    layout = QVBoxLayout(dlg)
+    layout.setSpacing(10)
+
+    title = QLabel(f'<b>{t("update_available_title", lang, version=info.latest)}</b>')
+    title.setWordWrap(True)
+    layout.addWidget(title)
+
+    notes = QTextEdit()
+    notes.setReadOnly(True)
+    notes.setPlainText(info.notes_text or "")
+    notes.setMinimumHeight(180)
+    layout.addWidget(notes)
+
+    disable_check = QCheckBox(t("update_disable_auto", lang))
+    layout.addWidget(disable_check)
+
+    btn_row = QHBoxLayout()
+    btn_row.addStretch()
+    later_btn = QPushButton(t("update_later_btn", lang))
+    later_btn.clicked.connect(dlg.reject)
+    btn_row.addWidget(later_btn)
+    update_btn = QPushButton(t("update_now_btn", lang))
+    update_btn.setDefault(True)
+    update_btn.setStyleSheet("QPushButton { background-color: #0A84FF; color: white; "
+                             "border: none; border-radius: 8px; padding: 8px 18px; "
+                             "font-weight: 600; } "
+                             "QPushButton:hover { background-color: #0071E3; }")
+    update_btn.clicked.connect(dlg.accept)
+    btn_row.addWidget(update_btn)
+    layout.addLayout(btn_row)
+
+    accepted = dlg.exec() == QDialog.Accepted
+    return ("update" if accepted else "later"), disable_check.isChecked()
+
+
+def show_source_update_hint(info, lang, parent=None):
+    """Source installs cannot self-update - hand the user the exact git
+    command and a link to the release notes."""
+    import os
+    import webbrowser
+    from translations import t
+
+    repo_dir = os.path.dirname(os.path.abspath(__file__))
+
+    dlg = QDialog(parent)
+    dlg.setWindowTitle(t("update_available_title", lang, version=info.latest))
+    dlg.setMinimumWidth(520)
+    layout = QVBoxLayout(dlg)
+    layout.setSpacing(10)
+
+    hint = QLabel(t("update_source_hint", lang))
+    hint.setWordWrap(True)
+    layout.addWidget(hint)
+    layout.addLayout(make_copy_row(f"git -C {repo_dir} pull"))
+
+    btn_row = QHBoxLayout()
+    release_btn = QPushButton(t("update_view_release", lang))
+    release_btn.clicked.connect(lambda: webbrowser.open(info.release_url))
+    btn_row.addWidget(release_btn)
+    btn_row.addStretch()
+    ok_btn = QPushButton("OK")
+    ok_btn.setDefault(True)
+    ok_btn.clicked.connect(dlg.accept)
+    btn_row.addWidget(ok_btn)
+    layout.addLayout(btn_row)
+    dlg.exec()
 
 
 def block_wheel_changes(root):

@@ -47,3 +47,6 @@ jobs:
 
       - name: Bilingual changelog guard (updates.json)
         run: python tests/test_updates_json.py
+
+      - name: Update dialog UI smoke (self-skips without PySide6)
+        run: python tests/test_update_dialog_ui.py

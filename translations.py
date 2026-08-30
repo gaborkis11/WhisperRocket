@@ -161,6 +161,24 @@ TRANSLATIONS = {
         "wizard_syscheck_warn_note": "Some items are not ready - the hotkey or auto-paste may not work until you fix them (a group change needs logging out and back in).",
         "wizard_syscheck_all_ok": "Everything is ready!",
 
+        # Updates
+        "update_available_title": "New version available: v{version}",
+        "update_balloon_msg": "See what's new and decide whether to update.",
+        "update_now_btn": "Update now",
+        "update_later_btn": "Later",
+        "update_cancel_btn": "Cancel",
+        "update_disable_auto": "Don't check automatically",
+        "update_check_setting": "Check for updates at startup",
+        "update_source_hint": "This is a source install - update it with the command below, then restart the app:",
+        "update_view_release": "Release notes",
+        "update_downloading": "Downloading update... {percent}%",
+        "update_restarting": "Update installed - restarting...",
+        "update_dl_failed": "Update failed: {error}. The current version is untouched.",
+        "update_check_btn": "Check for updates",
+        "update_checking": "Checking...",
+        "update_uptodate": "You are up to date!",
+        "update_failed": "Could not check for updates - are you online?",
+
         # File Transcription
         "tray_file_transcription": "File Transcription",
         "ft_title": "File Transcription",
@@ -512,6 +530,24 @@ TRANSLATIONS = {
         "wizard_syscheck_continue_anyway": "Folytatás mindenképp",
         "wizard_syscheck_warn_note": "Néhány elem nem áll készen - a gyorsbillentyű vagy az automatikus beillesztés addig nem működik (csoportváltozáshoz ki- és bejelentkezés kell).",
         "wizard_syscheck_all_ok": "Minden készen áll!",
+
+        # Updates
+        "update_available_title": "Új verzió érhető el: v{version}",
+        "update_balloon_msg": "Nézd meg az újdonságokat, és döntsd el, frissítesz-e.",
+        "update_now_btn": "Frissítés most",
+        "update_later_btn": "Később",
+        "update_cancel_btn": "Mégse",
+        "update_disable_auto": "Ne keressen automatikusan",
+        "update_check_setting": "Frissítés keresése induláskor",
+        "update_source_hint": "Ez forrásból telepített változat - frissítsd az alábbi paranccsal, majd indítsd újra az appot:",
+        "update_view_release": "Újdonságok",
+        "update_downloading": "Frissítés letöltése... {percent}%",
+        "update_restarting": "Frissítés telepítve - újraindulás...",
+        "update_dl_failed": "A frissítés nem sikerült: {error}. A jelenlegi verzió érintetlen maradt.",
+        "update_check_btn": "Frissítés keresése",
+        "update_checking": "Keresés...",
+        "update_uptodate": "A legfrissebb verziót használod!",
+        "update_failed": "Nem sikerült ellenőrizni - van internetkapcsolat?",
 
         # File Transcription
         "tray_file_transcription": "Fájl átírása",

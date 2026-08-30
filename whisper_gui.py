@@ -23,7 +23,7 @@ from pynput import keyboard
 from platform_support.keyboard_listener import create_keyboard_listener, get_session_type
 import numpy as np
 from PySide6.QtWidgets import QApplication, QSystemTrayIcon, QMenu
-from PySide6.QtCore import QTimer, Slot, Signal, QObject, Qt
+from PySide6.QtCore import QTimer, Slot, Signal, QObject, Qt, QThread
 from PySide6.QtGui import QIcon, QPixmap, QPainter, QColor, QBrush, QPen, QAction
 
 # Platform absztrakció
@@ -92,6 +92,46 @@ class TrayIconUpdater(QObject):
         if tray_icon:
             tray_icon.showMessage(title, message,
                                   QSystemTrayIcon.MessageIcon.Warning, 5000)
+
+
+class UpdateProbe(QThread):
+    """Runs the update check off the main thread (a filtered network can
+    hang for seconds - same reason as settings_window._PhoneProbe)."""
+    finished_with = Signal(object)  # UpdateInfo
+
+    def __init__(self, current_version, lang, parent=None):
+        super().__init__(parent)
+        self._version = current_version
+        self._lang = lang
+
+    def run(self):
+        import update_checker
+        self.finished_with.emit(
+            update_checker.check_for_update(self._version, self._lang))
+
+
+class UpdateDownloader(QThread):
+    """Streams the new AppImage and swaps it in place (update_checker does
+    the atomic replace; this class only carries it off the main thread)."""
+    progress = Signal(int, int)          # done, total bytes
+    finished_with = Signal(object)       # error string or None
+
+    def __init__(self, info, target_path, parent=None):
+        super().__init__(parent)
+        self._info = info
+        self._target = target_path
+        self._cancelled = False
+
+    def cancel(self):
+        self._cancelled = True
+
+    def run(self):
+        import update_checker
+        error = update_checker.download_and_replace(
+            self._info.asset_url, self._info.asset_size, self._target,
+            lambda done, total: self.progress.emit(done, total),
+            lambda: self._cancelled)
+        self.finished_with.emit(error)
 
 
 from translations import t, TRANSLATIONS
@@ -169,6 +209,125 @@ def load_config():
             "phone_endpoint_port": 8771,
             "phone_endpoint_budget_seconds": 20
         }
+
+_update_probe = None  # keep the QThread referenced while it runs
+
+
+def start_update_probe():
+    """Kick off the once-a-day background version check (tray must exist)."""
+    global _update_probe
+    from about_window import APP_VERSION
+    _update_probe = UpdateProbe(APP_VERSION, ui_lang)
+    _update_probe.finished_with.connect(on_update_check_result)
+    _update_probe.start()
+
+
+def on_update_check_result(info):
+    """Main-thread handler: notify, show localized notes, act on the choice."""
+    if info.error:
+        print(f"[UPDATE] check failed: {info.error}")
+        return
+    if not info.is_newer:
+        print(f"[UPDATE] up to date (latest: {info.latest})")
+        return
+    if tray_icon_updater:
+        tray_icon_updater.notify_requested.emit(
+            t("update_available_title", ui_lang, version=info.latest),
+            t("update_balloon_msg", ui_lang))
+    from qt_helpers import show_update_dialog
+    choice, disable_auto = show_update_dialog(info, ui_lang)
+    if disable_auto:
+        save_config_value("update_check_enabled", False)
+    if choice == "update":
+        perform_update(info)
+
+
+def perform_update(info):
+    """AppImage: self-update in place. Source install: hand over git pull."""
+    if "APPIMAGE" in os.environ and info.asset_url:
+        run_appimage_self_update(info)
+    else:
+        from qt_helpers import show_source_update_hint
+        show_source_update_hint(info, ui_lang)
+
+
+def run_appimage_self_update(info):
+    from PySide6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QLabel,
+                                   QProgressBar, QPushButton)
+
+    appimage_path = os.environ.get("APPIMAGE", "")
+    if not appimage_path or not os.access(os.path.dirname(appimage_path), os.W_OK):
+        _show_update_error(t("update_dl_failed", ui_lang,
+                             error="target not writable"), info)
+        return
+
+    dlg = QDialog()
+    dlg.setWindowTitle("WhisperRocket")
+    dlg.setMinimumWidth(420)
+    layout = QVBoxLayout(dlg)
+    label = QLabel(t("update_downloading", ui_lang, percent=0))
+    label.setWordWrap(True)
+    layout.addWidget(label)
+    bar = QProgressBar()
+    bar.setRange(0, 100)
+    layout.addWidget(bar)
+    btn_row = QHBoxLayout()
+    btn_row.addStretch()
+    cancel_btn = QPushButton(t("update_cancel_btn", ui_lang))
+    btn_row.addWidget(cancel_btn)
+    layout.addLayout(btn_row)
+
+    downloader = UpdateDownloader(info, appimage_path)
+    dlg._downloader = downloader  # keep referenced for the dialog's lifetime
+    cancel_btn.clicked.connect(downloader.cancel)
+
+    def on_progress(done, total):
+        if total:
+            percent = int(done * 100 / total)
+            bar.setValue(percent)
+            label.setText(t("update_downloading", ui_lang, percent=percent))
+
+    def on_finished(error):
+        if error is None:
+            bar.setValue(100)
+            label.setText(t("update_restarting", ui_lang))
+            cancel_btn.setEnabled(False)
+            # The mounted squashfs keeps the old inode alive; exec'ing the
+            # replaced file starts the new version in place.
+            QTimer.singleShot(1200,
+                              lambda: os.execv(appimage_path, [appimage_path]))
+        else:
+            dlg.accept()
+            _show_update_error(t("update_dl_failed", ui_lang, error=error), info)
+
+    downloader.progress.connect(on_progress)
+    downloader.finished_with.connect(on_finished)
+    downloader.start()
+    dlg.exec()
+
+
+def _show_update_error(message, info):
+    from PySide6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QLabel,
+                                   QPushButton)
+    import webbrowser
+    dlg = QDialog()
+    dlg.setWindowTitle("WhisperRocket")
+    dlg.setMinimumWidth(420)
+    layout = QVBoxLayout(dlg)
+    label = QLabel(message)
+    label.setWordWrap(True)
+    layout.addWidget(label)
+    btn_row = QHBoxLayout()
+    release_btn = QPushButton(t("update_view_release", ui_lang))
+    release_btn.clicked.connect(lambda: webbrowser.open(info.release_url))
+    btn_row.addWidget(release_btn)
+    btn_row.addStretch()
+    ok_btn = QPushButton("OK")
+    ok_btn.clicked.connect(dlg.accept)
+    btn_row.addWidget(ok_btn)
+    layout.addLayout(btn_row)
+    dlg.exec()
+
 
 def save_config_value(key, value):
     """Persist a single config key without touching the rest of the file."""
@@ -1275,6 +1434,16 @@ def main():
 
     tray_icon.setContextMenu(tray_menu)
     tray_icon.show()
+
+    # Automatic update check: at most once per day, only while the setting is
+    # on (Settings > "Check for updates at startup"). One version query to
+    # GitHub, nothing about the user is sent. Result arrives via Signal on the
+    # main thread; failures are logged, never shown - a startup check must not
+    # nag about the network.
+    import update_checker
+    if update_checker.should_auto_check(config):
+        save_config_value("update_last_check", int(time.time()))
+        start_update_probe()
 
     # Modell betöltés háttérben
     threading.Thread(target=load_model, daemon=True).start()
