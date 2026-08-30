@@ -1,0 +1,54 @@
+{
+  "versions": [
+    {
+      "version": "1.2.2",
+      "date": "2026-08-30",
+      "notes": {
+        "en": [
+          "The app now notices new versions: a once-a-day check at startup (can be turned off in Settings) and a Check for updates button in the About window",
+          "Update notes are shown in your language (English/Hungarian), including every version you skipped",
+          "The AppImage can update itself: download, safe in-place swap, automatic restart",
+          "Nothing is sent about you - the check is a single version query to GitHub"
+        ],
+        "hu": [
+          "Az app mostantól észreveszi az új verziókat: napi egyszeri ellenőrzés induláskor (a Beállításokban kikapcsolható), és Frissítés keresése gomb a Névjegy ablakban",
+          "A frissítési jegyzetek a te nyelveden jelennek meg (angol/magyar), a kihagyott verziókkal együtt",
+          "Az AppImage magát frissíti: letöltés, biztonságos helyben-csere, automatikus újraindulás",
+          "Semmilyen adat nem megy ki rólad - az ellenőrzés egyetlen verziólekérdezés a GitHubtól"
+        ]
+      }
+    },
+    {
+      "version": "1.2.1",
+      "date": "2026-08-30",
+      "notes": {
+        "en": [
+          "Omarchy / Hyprland (Wayland) is now a tested, fully working platform",
+          "Installer recognizes Arch derivatives, installs wtype/wl-clipboard and the GTK overlay runtime, and prints a system checklist",
+          "First-run wizard opens with a system-check page and defaults to English with a language selector",
+          "Autostart works on Hyprland; setup problems show up in dialogs instead of hidden logs"
+        ],
+        "hu": [
+          "Az Omarchy / Hyprland (Wayland) mostantól tesztelt, teljes értékű platform",
+          "A telepítő felismeri az Arch-származékokat, telepíti a wtype/wl-clipboard és GTK overlay csomagokat, és a végén ellenőrzőlistát ír ki",
+          "Az első indítás varázslója rendszer-ellenőrző oldallal nyit, alapból angolul, nyelvválasztóval",
+          "Az autostart Hyprlanden is működik; a beállítási hibák dialógusban jelennek meg, nem rejtett logokban"
+        ]
+      }
+    },
+    {
+      "version": "1.2.0",
+      "date": "2026-08-28",
+      "notes": {
+        "en": [
+          "Dictation from your phone over Tailscale: record on the phone, the text arrives on its clipboard",
+          "The endpoint is unreachable from the public internet and always answers within the time budget"
+        ],
+        "hu": [
+          "Diktálás telefonról Tailscale-en át: a telefonon rögzítesz, a szöveg a vágólapjára érkezik",
+          "A végpont a nyílt internetről elérhetetlen, és mindig időben válaszol"
+        ]
+      }
+    }
+  ]
+}

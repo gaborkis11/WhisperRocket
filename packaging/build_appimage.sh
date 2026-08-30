@@ -93,9 +93,25 @@ fi
 
 echo -e "${GREEN}[8/8]${NC} Creating AppImage..."
 
-# Create AppImage
+# Create AppImage with embedded update information so AppImageUpdate (and
+# the in-app self-updater's zsync-aware cousins) can find new releases. The
+# .zsync file it produces must be uploaded to the GitHub release next to the
+# AppImage. If appimagetool cannot embed it (no zsyncmake), fall back to a
+# plain build - never leave the release broken.
 mkdir -p "$DIST_DIR"
-ARCH=x86_64 "$APPIMAGETOOL" "$APPDIR" "$DIST_DIR/WhisperRocket-x86_64.AppImage"
+UPDATE_INFO="gh-releases-zsync|gaborkis11|WhisperRocket|latest|WhisperRocket-x86_64.AppImage.zsync"
+cd "$DIST_DIR"  # appimagetool writes the .zsync into the current directory
+if ARCH=x86_64 "$APPIMAGETOOL" -u "$UPDATE_INFO" "$APPDIR" "$DIST_DIR/WhisperRocket-x86_64.AppImage"; then
+    if [ -f "$DIST_DIR/WhisperRocket-x86_64.AppImage.zsync" ]; then
+        echo -e "${GREEN}Update info embedded; .zsync generated - upload BOTH files to the release${NC}"
+    else
+        echo -e "${YELLOW}WARNING: update info embedded but no .zsync produced${NC}"
+    fi
+else
+    echo -e "${YELLOW}WARNING: appimagetool failed with -u (zsyncmake missing?); building WITHOUT update info${NC}"
+    ARCH=x86_64 "$APPIMAGETOOL" "$APPDIR" "$DIST_DIR/WhisperRocket-x86_64.AppImage"
+fi
+cd "$PROJECT_DIR"
 
 echo ""
 echo -e "${GREEN}=========================================${NC}"

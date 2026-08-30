@@ -41,3 +41,15 @@ jobs:
 
       - name: Setup wizard UI smoke (self-skips without PySide6)
         run: python tests/test_setup_wizard_ui.py
+
+      - name: Update checker (release check, notes, replace)
+        run: python tests/test_update_checker.py
+
+      - name: Bilingual changelog guard (updates.json)
+        run: python tests/test_updates_json.py
+
+      - name: Update dialog UI smoke (self-skips without PySide6)
+        run: python tests/test_update_dialog_ui.py
+
+      - name: About window update UI smoke (self-skips without PySide6)
+        run: python tests/test_about_update_ui.py

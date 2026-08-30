@@ -728,6 +728,12 @@ class SettingsWindow(QMainWindow):
         self.autostart_check.setChecked(is_autostart_enabled())
         layout.addWidget(self.autostart_check)
 
+        # Automatic update check (once a day at startup; About button always works)
+        self.update_check_check = QCheckBox(t("update_check_setting", self.ui_lang))
+        self.update_check_check.setChecked(
+            self.config.get("update_check_enabled", True))
+        layout.addWidget(self.update_check_check)
+
         # Info label
         info_label = QLabel(t("info_restart", self.ui_lang))
         info_label.setStyleSheet("color: gray; font-size: 11px;")
@@ -1219,6 +1225,7 @@ class SettingsWindow(QMainWindow):
         self.config["model"] = self.model_combo.currentData()
         self.config["device"] = self.device_combo.currentData()
         self.config["popup_display_duration"] = self.popup_duration_spin.value()
+        self.config["update_check_enabled"] = self.update_check_check.isChecked()
         self.collect_ai_settings()
         self.collect_phone_settings()
 
