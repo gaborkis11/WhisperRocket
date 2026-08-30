@@ -29,3 +29,6 @@ jobs:
 
       - name: Translation parity (EN/HU)
         run: python tests/test_translations.py
+
+      - name: Installer distro detection (install_lib.sh)
+        run: python tests/test_install_lib.py
