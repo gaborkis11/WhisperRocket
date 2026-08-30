@@ -135,6 +135,17 @@ TRANSLATIONS = {
         "cuda_download_failed": "CUDA download failed. The app will use CPU mode.",
         "cuda_download_progress": "Downloading {name}...",
 
+        # System check (installer checklist, wizard page, health dialog)
+        "syscheck_session": "Display server",
+        "syscheck_input_group": "Hotkey permission (input group)",
+        "syscheck_input_group_relogin": "Hotkey permission (log out and back in)",
+        "syscheck_evdev": "Keyboard device access",
+        "syscheck_paste_tool": "Auto-paste tool",
+        "syscheck_clipboard_tool": "Clipboard tool",
+        "syscheck_overlay": "Recording overlay (focus-free)",
+        "syscheck_gpu": "GPU acceleration",
+        "syscheck_audio": "Sound feedback",
+
         # File Transcription
         "tray_file_transcription": "File Transcription",
         "ft_title": "File Transcription",
@@ -460,6 +471,17 @@ TRANSLATIONS = {
         "cuda_installed": "CUDA könyvtárak telepítve",
         "cuda_download_failed": "CUDA letöltés sikertelen. Az alkalmazás CPU módban fog működni.",
         "cuda_download_progress": "{name} letöltése...",
+
+        # System check (installer checklist, wizard page, health dialog)
+        "syscheck_session": "Kijelzőszerver",
+        "syscheck_input_group": "Gyorsbillentyű jogosultság (input csoport)",
+        "syscheck_input_group_relogin": "Gyorsbillentyű jogosultság (ki- és bejelentkezés kell)",
+        "syscheck_evdev": "Billentyűzet-eszköz hozzáférés",
+        "syscheck_paste_tool": "Automatikus beillesztés eszköze",
+        "syscheck_clipboard_tool": "Vágólap eszköz",
+        "syscheck_overlay": "Felvétel overlay (fókuszmentes)",
+        "syscheck_gpu": "GPU gyorsítás",
+        "syscheck_audio": "Hangvisszajelzés",
 
         # File Transcription
         "tray_file_transcription": "Fájl átírása",

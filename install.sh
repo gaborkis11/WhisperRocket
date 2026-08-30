@@ -365,6 +365,15 @@ chmod +x start.sh
 log_ok "Application added to menu"
 
 # =============================================================================
+# 10. SYSTEM CHECK (Wayland: show what is ready and what still needs relogin)
+# =============================================================================
+if [ "$SESSION_TYPE" = "wayland" ]; then
+    echo ""
+    log_info "Running system check..."
+    "$INSTALL_DIR/venv/bin/python" "$INSTALL_DIR/system_check.py" || true
+fi
+
+# =============================================================================
 # SUMMARY
 # =============================================================================
 echo ""
