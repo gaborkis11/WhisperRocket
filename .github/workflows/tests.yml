@@ -62,3 +62,6 @@ jobs:
 
       - name: Non-interactive uninstall (sandboxed)
         run: python tests/test_uninstall_auto.py
+
+      - name: Uninstall dialog UI smoke (self-skips without PySide6)
+        run: python tests/test_uninstall_dialog_ui.py

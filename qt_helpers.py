@@ -195,6 +195,61 @@ def show_source_update_hint(info, lang, parent=None):
     dlg.exec()
 
 
+def show_uninstall_dialog(lang, components, parent=None):
+    """Full-uninstall confirmation: per-component checkboxes with sizes, a
+    note that shared system packages stay, red confirm / default-focused
+    cancel. ``components`` is a list of (id, label_key, size_str,
+    checked_default, locked) tuples. Returns {id: bool} on confirm, or
+    None on cancel."""
+    from translations import t
+
+    dlg = QDialog(parent)
+    dlg.setWindowTitle(t("uninstall_title", lang))
+    dlg.setMinimumWidth(520)
+    layout = QVBoxLayout(dlg)
+    layout.setSpacing(10)
+
+    intro = QLabel(t("uninstall_intro", lang))
+    intro.setWordWrap(True)
+    layout.addWidget(intro)
+
+    boxes = {}
+    for comp_id, label_key, size_str, checked, locked in components:
+        text = t(label_key, lang)
+        if size_str:
+            text += f"  ({size_str})"
+        box = QCheckBox(text)
+        box.setChecked(checked)
+        if locked:
+            box.setEnabled(False)
+        boxes[comp_id] = box
+        layout.addWidget(box)
+
+    note = QLabel(t("uninstall_shared_note", lang))
+    note.setWordWrap(True)
+    note.setStyleSheet("color: #888; font-size: 11px;")
+    layout.addWidget(note)
+
+    btn_row = QHBoxLayout()
+    btn_row.addStretch()
+    cancel_btn = QPushButton(t("update_cancel_btn", lang))
+    cancel_btn.setDefault(True)
+    cancel_btn.clicked.connect(dlg.reject)
+    btn_row.addWidget(cancel_btn)
+    confirm_btn = QPushButton(t("uninstall_confirm_btn", lang))
+    confirm_btn.setStyleSheet("QPushButton { background-color: #F44336; color: white; "
+                              "border: none; border-radius: 8px; padding: 8px 18px; "
+                              "font-weight: 600; } "
+                              "QPushButton:hover { background-color: #D32F2F; }")
+    confirm_btn.clicked.connect(dlg.accept)
+    btn_row.addWidget(confirm_btn)
+    layout.addLayout(btn_row)
+
+    if dlg.exec() != QDialog.Accepted:
+        return None
+    return {comp_id: box.isChecked() for comp_id, box in boxes.items()}
+
+
 def block_wheel_changes(root):
     """
     Apply NoWheelFilter to every dropdown and number field under root.

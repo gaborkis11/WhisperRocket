@@ -77,6 +77,18 @@ LANGUAGES = [
     ("ko", "한국어"),
 ]
 
+def build_uninstall_args(choices):
+    """Map the uninstall dialog's choices onto uninstall.sh --auto flags.
+    Pure function for testability. ``choices`` = {id: bool} from
+    qt_helpers.show_uninstall_dialog."""
+    args = ["--auto"]
+    if not choices.get("models", True):
+        args.append("--keep-models")
+    if not choices.get("config", True):
+        args.append("--keep-config")
+    return args
+
+
 # Whisper models - same translated labels as the setup wizard, so the two
 # lists can never disagree on names or sizes again (they used to: hardcoded
 # Hungarian here, "~6 GB" for large-v3 vs the wizard's "~3 GB")
@@ -539,7 +551,7 @@ class _PhoneProbe(QThread):
 class SettingsWindow(QMainWindow):
     """Beállítások ablak tab-okkal"""
 
-    def __init__(self, apply_phone_endpoint=None):
+    def __init__(self, apply_phone_endpoint=None, request_quit=None):
         """
         apply_phone_endpoint: callback into the running app that starts or stops
         the phone endpoint to match the saved settings. Passed in by whisper_gui
@@ -552,6 +564,7 @@ class SettingsWindow(QMainWindow):
         self.ui_lang = self.config.get("ui_language", "en")
         self.download_manager = get_download_manager()
         self.apply_phone_endpoint = apply_phone_endpoint
+        self.request_quit = request_quit
         self.init_ui()
 
         # Progress frissítő timer
@@ -737,6 +750,27 @@ class SettingsWindow(QMainWindow):
         layout.addWidget(self.update_check_check)
 
         # Info label
+        # Danger zone: full uninstall (Gábor: "a névjegybe senki nem néz be" -
+        # the uninstall the user asked for lives here, in plain sight)
+        danger_sep = QFrame()
+        danger_sep.setFrameShape(QFrame.Shape.HLine)
+        danger_sep.setStyleSheet("color: #555;")
+        layout.addWidget(danger_sep)
+
+        self.uninstall_btn = QPushButton(t("uninstall_btn", self.ui_lang))
+        self.uninstall_btn.setStyleSheet("""
+            QPushButton {
+                color: #F44336;
+                background: transparent;
+                border: 1px solid #F44336;
+                border-radius: 6px;
+                padding: 6px 12px;
+            }
+            QPushButton:hover { background-color: rgba(244, 67, 54, 0.1); }
+        """)
+        self.uninstall_btn.clicked.connect(self.start_uninstall)
+        layout.addWidget(self.uninstall_btn)
+
         info_label = QLabel(t("info_restart", self.ui_lang))
         info_label.setStyleSheet("color: gray; font-size: 11px;")
         info_label.setWordWrap(True)
@@ -1220,6 +1254,59 @@ class SettingsWindow(QMainWindow):
                 self.record_btn.setText(t("btn_record", self.ui_lang))
         else:
             super().keyPressEvent(event)
+
+    def start_uninstall(self):
+        """Full uninstall from the app: confirm with component choices, then
+        run the right backend and quit. System packages are never touched
+        (the dialog says so)."""
+        import appimage_uninstall
+        from qt_helpers import show_uninstall_dialog
+        from platform_support import get_platform_handler
+
+        paths = appimage_uninstall.component_paths()
+        def size_of(key):
+            p = paths[key]
+            return appimage_uninstall.get_size_human(p) if p.exists() else ""
+
+        components = [
+            ("app", "uninstall_comp_app", "", True, True),
+            ("config", "uninstall_comp_config", size_of("config"), True, False),
+            ("models", "uninstall_comp_models", size_of("models"), True, False),
+            ("cuda", "uninstall_comp_cuda", size_of("cuda"), True, False),
+        ]
+        choices = show_uninstall_dialog(self.ui_lang, components, parent=self)
+        if choices is None:
+            return
+
+        try:
+            os.remove("/tmp/whisperrocket_restart")
+        except OSError:
+            pass
+
+        if get_platform_handler().is_appimage():
+            appimage_uninstall.remove_components(
+                config=choices.get("config", True),
+                models=choices.get("models", True),
+                cuda=choices.get("cuda", True))
+            appimage_uninstall.remove_desktop_entries()
+            QMessageBox.information(
+                self, "WhisperRocket",
+                t("uninstall_done_appimage", self.ui_lang,
+                  path=os.environ.get("APPIMAGE", "WhisperRocket.AppImage")))
+        else:
+            import subprocess
+            project_dir = os.path.dirname(os.path.abspath(__file__))
+            script = os.path.join(project_dir, "uninstall.sh")
+            subprocess.Popen(["bash", script] + build_uninstall_args(choices),
+                             cwd=project_dir, start_new_session=True,
+                             stdout=subprocess.DEVNULL,
+                             stderr=subprocess.DEVNULL)
+
+        if self.request_quit:
+            # Deferred: this slot lives in the window the quit will destroy
+            QTimer.singleShot(0, self.request_quit)
+        else:
+            QTimer.singleShot(0, self.close)
 
     def collect_and_save(self):
         """

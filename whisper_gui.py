@@ -506,6 +506,7 @@ def open_settings():
         # __main__), and the app would end up with two of every global.
         settings_window_instance = SettingsWindow(
             apply_phone_endpoint=apply_phone_endpoint_settings,
+            request_quit=quit_app,
         )
         settings_window_instance.show()
     else:
