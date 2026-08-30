@@ -707,9 +707,9 @@ The installer has been tested on:
 | Pop!_OS | X11 | ✅ Fully working |
 | Linux Mint | X11 | ✅ Fully working |
 | Omarchy (Arch) | Wayland (Hyprland) | ✅ Fully working |
-| Pop!_OS | Wayland (COSMIC) | ⚠️ Experimental |
-| GNOME | Wayland | ⚠️ Experimental |
-| KDE Plasma | Wayland | ⚠️ Experimental |
+| Pop!_OS | Wayland (COSMIC) | ❓ Not tested |
+| GNOME | Wayland | ❓ Not tested |
+| KDE Plasma | Wayland | ❓ Not tested |
 
 ### Omarchy / Hyprland notes
 
@@ -762,12 +762,12 @@ The app's runtime log is at `/tmp/whisper_stdout.log`.
 - Try running with `sudo` once to register the hotkey
 
 ### Wayland compatibility
-WhisperRocket has **experimental Wayland support**:
+WhisperRocket's Wayland support:
 - ✅ GTK Layer Shell popup that doesn't steal focus
 - ✅ Native evdev hotkey detection (no X11 required)
 - ✅ Auto-paste via `wtype` (Wayland) or `xdotool` (X11)
 
-> ⚠️ **Warning**: Wayland support is experimental. Due to Wayland's stricter security model, some features may not work reliably on all desktop environments. For the best experience, **X11 is recommended**. Full functionality is not guaranteed on Wayland.
+> ℹ️ Wayland support is **tested and fully working on Hyprland** (Omarchy). Other Wayland desktops (GNOME, KDE Plasma, COSMIC) have not been tested yet — the same mechanisms should largely work, but note that GNOME's compositor does not support Layer Shell, so the overlay falls back to a Qt popup there.
 
 **Note for Wayland users**: Add your user to the `input` group for hotkey support:
 ```bash
