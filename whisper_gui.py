@@ -151,7 +151,7 @@ def load_config():
             "model": "large-v3",
             "device": device,
             "compute_type": compute_type,
-            "language": "hu",
+            "language": "en",
             "sample_rate": 16000,
             "input_device": None,
             "output_device": None,
