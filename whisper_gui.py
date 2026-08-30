@@ -2,10 +2,13 @@
 import os
 import sys
 import json
+import shutil
 import tempfile
 import time
 import threading
 from queue import Queue
+
+import system_check
 
 # Check for --uninstall flag BEFORE Qt imports
 if "--uninstall" in sys.argv:
@@ -69,10 +72,12 @@ sys.stdout.flush()
 class TrayIconUpdater(QObject):
     """Helper osztály thread-safe tray ikon frissítéshez"""
     update_requested = Signal(str, str)  # color, title
+    notify_requested = Signal(str, str)  # title, message (tray balloon)
 
     def __init__(self, parent=None):
         super().__init__(parent)
         self.update_requested.connect(self._do_update)
+        self.notify_requested.connect(self._do_notify)
 
     @Slot(str, str)
     def _do_update(self, color, title):
@@ -80,6 +85,13 @@ class TrayIconUpdater(QObject):
         if tray_icon:
             tray_icon.setIcon(create_icon(color))
             tray_icon.setToolTip(title)
+
+    @Slot(str, str)
+    def _do_notify(self, title, message):
+        global tray_icon
+        if tray_icon:
+            tray_icon.showMessage(title, message,
+                                  QSystemTrayIcon.MessageIcon.Warning, 5000)
 
 
 from translations import t, TRANSLATIONS
@@ -157,6 +169,22 @@ def load_config():
             "phone_endpoint_port": 8771,
             "phone_endpoint_budget_seconds": 20
         }
+
+def save_config_value(key, value):
+    """Persist a single config key without touching the rest of the file."""
+    try:
+        with open(CONFIG_FILE, 'r') as f:
+            current = json.load(f)
+    except Exception:
+        current = dict(config)
+    current[key] = value
+    try:
+        with open(CONFIG_FILE, 'w') as f:
+            json.dump(current, f, indent=2)
+    except Exception as e:
+        print(f"[WARNING] Could not save config: {e}")
+    config[key] = value
+
 
 # Globális változók
 config = load_config()
@@ -610,13 +638,24 @@ def process_audio(audio_copy):
             print("[INFO] Auto-pasting...")
             time.sleep(0.3)
 
-            # Active window detection
-            window_class = platform_handler.get_active_window_class()
-            is_terminal = platform_handler.is_terminal_window(window_class)
+            # The paste tool can be missing (fresh Wayland install): tell the
+            # user via a tray balloon - the text is on the clipboard either way.
+            paste_tool = ("wtype" if system_check.get_session_type() == "wayland"
+                          else "xdotool")
+            if sys.platform == "linux" and not shutil.which(paste_tool):
+                if tray_icon_updater:
+                    tray_icon_updater.notify_requested.emit(
+                        t("notify_paste_missing_title", ui_lang),
+                        t("notify_paste_missing_msg", ui_lang, tool=paste_tool))
+                print(f"[WARNING] {paste_tool} not installed - auto-paste skipped")
+            else:
+                # Active window detection
+                window_class = platform_handler.get_active_window_class()
+                is_terminal = platform_handler.is_terminal_window(window_class)
 
-            # Paste (different key combo for terminals)
-            platform_handler.paste_text(is_terminal=is_terminal)
-            print(f"[INFO] Pasted!")
+                # Paste (different key combo for terminals)
+                platform_handler.paste_text(is_terminal=is_terminal)
+                print(f"[INFO] Pasted!")
         except Exception as e:
             print(f"[WARNING] Paste failed: {e}")
         print("="*60)
@@ -1173,6 +1212,29 @@ def main():
     # Hotkey listener (platform-aware: X11/Wayland/macOS)
     global keyboard_listener
     keyboard_listener = create_keyboard_listener(on_press=on_press, on_release=on_release)
+
+    # Health check: on Wayland a broken piece (no input group, missing wtype,
+    # ...) used to fail silently into /tmp/whisper_stdout.log. Show a dialog
+    # with copyable fix commands instead. A completely dead hotkey listener is
+    # always shown, even when the user suppressed routine warnings.
+    if sys.platform == "linux":
+        session = system_check.get_session_type()
+        if session == "wayland" or keyboard_listener is None:
+            health_results = system_check.run_all(session)
+            critical_bad = [r for r in health_results
+                            if r.critical and r.status in ("warn", "fail")]
+            suppressed = config.get("suppress_system_warnings", False)
+            must_show = keyboard_listener is None
+            if must_show and not critical_bad:
+                # Listener failed although checks pass - show every non-ok row
+                critical_bad = [r for r in health_results if r.status != "ok"] \
+                               or health_results
+            if critical_bad and (must_show or not suppressed):
+                from qt_helpers import show_health_dialog
+                suppress = show_health_dialog(critical_bad, ui_lang,
+                                              show_suppress=not must_show)
+                if suppress:
+                    save_config_value("suppress_system_warnings", True)
 
     # System Tray ikon menüvel (Qt QSystemTrayIcon)
     tray_icon = QSystemTrayIcon(create_icon('gray'), qt_app)

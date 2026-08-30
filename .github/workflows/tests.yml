@@ -29,3 +29,15 @@ jobs:
 
       - name: Translation parity (EN/HU)
         run: python tests/test_translations.py
+
+      - name: Installer distro detection (install_lib.sh)
+        run: python tests/test_install_lib.py
+
+      - name: Environment health checks (system_check.py)
+        run: python tests/test_system_check.py
+
+      - name: Hyprland autostart block management
+        run: python tests/test_hypr_autostart.py
+
+      - name: Setup wizard UI smoke (self-skips without PySide6)
+        run: python tests/test_setup_wizard_ui.py

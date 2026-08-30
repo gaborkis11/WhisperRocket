@@ -267,6 +267,13 @@ if [ "$remove_launcher" = true ]; then
         rm -f "$AUTOSTART_ENTRY"
         log_removed "Autostart entry removed"
     fi
+    # Hyprland: remove the managed exec-once block (markers must match
+    # platform_support/hypr_autostart.py)
+    HYPR_CONF="$HOME/.config/hypr/hyprland.conf"
+    if [ -f "$HYPR_CONF" ] && grep -q ">>> WhisperRocket autostart >>>" "$HYPR_CONF"; then
+        sed -i '/>>> WhisperRocket autostart >>>/,/<<< WhisperRocket autostart <<</d' "$HYPR_CONF"
+        log_removed "Hyprland autostart block removed"
+    fi
 fi
 
 # Remove virtual environment

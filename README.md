@@ -697,7 +697,7 @@ WhisperRocket/
 The installer has been tested on:
 - Ubuntu 22.04+ / Linux Mint / Pop!_OS
 - Fedora 38+
-- Arch Linux / Manjaro
+- Arch Linux / Manjaro / Omarchy (and other Arch derivatives via `ID_LIKE`)
 - openSUSE Tumbleweed
 
 ### Tested Platforms
@@ -706,9 +706,40 @@ The installer has been tested on:
 |--------------|----------------|--------|
 | Pop!_OS | X11 | ✅ Fully working |
 | Linux Mint | X11 | ✅ Fully working |
+| Omarchy (Arch) | Wayland (Hyprland) | 🧪 In testing |
 | Pop!_OS | Wayland (COSMIC) | ⚠️ Experimental |
 | GNOME | Wayland | ⚠️ Experimental |
 | KDE Plasma | Wayland | ⚠️ Experimental |
+
+### Omarchy / Hyprland notes
+
+Omarchy (and any Arch-based Hyprland setup) uses the full Wayland path.
+What the installer sets up there:
+
+- **Hotkeys** need membership in the `input` group — the installer offers to
+  add you, then you must **log out and back in** once.
+- **Auto-paste** uses `wtype`, **clipboard** uses `wl-clipboard` — both
+  installed automatically.
+- **Recording overlay** uses GTK Layer Shell (no focus stealing); the venv is
+  created with `--system-site-packages` so the app can use the distro's
+  PyGObject. If the overlay packages are missing, the app falls back to a Qt
+  popup that may steal focus.
+- **Autostart** on Hyprland is a clearly marked `exec-once` block that the
+  Settings toggle manages in `~/.config/hypr/hyprland.conf` (Hyprland ignores
+  XDG autostart). `uninstall.sh` removes it.
+- The installer prints a **system checklist** at the end of a Wayland install,
+  and the first-run wizard opens with the same checklist — rows that need the
+  relogin go green after you log back in and press **Re-check**.
+- The **AppImage** on Wayland currently uses the Qt fallback popup (GTK Layer
+  Shell is not bundled); the source install gives the full experience.
+
+First troubleshooting step on any problem:
+
+```bash
+venv/bin/python system_check.py    # or: python3 system_check.py
+```
+
+The app's runtime log is at `/tmp/whisper_stdout.log`.
 
 </details>
 
@@ -743,6 +774,13 @@ WhisperRocket has **experimental Wayland support**:
 sudo usermod -a -G input $USER
 ```
 Then log out and back in.
+
+**Diagnosing Wayland problems**: run the built-in checklist — it prints every
+requirement (input group, wtype, wl-clipboard, GTK Layer Shell) with a
+copy-pasteable fix command for anything missing:
+```bash
+venv/bin/python system_check.py
+```
 
 </details>
 

@@ -12,11 +12,14 @@ import threading
 from PySide6.QtCore import Qt, QTimer, Signal
 from PySide6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
-    QRadioButton, QButtonGroup, QProgressBar, QFrame, QApplication
+    QRadioButton, QButtonGroup, QProgressBar, QFrame, QApplication,
+    QStackedLayout, QWidget
 )
 from PySide6.QtGui import QFont, QCursor
 
 import config_paths
+import system_check
+from qt_helpers import STATUS_ICONS, make_copy_row
 from translations import t
 from download_manager import get_download_manager
 from platform_support import get_platform_handler
@@ -97,13 +100,26 @@ class SetupWizard(QDialog):
         self.cuda_download_complete = False
         self.needs_cuda = self.device == "cuda" and CUDA_AVAILABLE and not is_cuda_installed()
 
+        # System check page: always shown on Wayland (the install needs to be
+        # visually followable there), and on X11 only when something critical
+        # is broken. Non-Linux platforms skip straight to model selection.
+        self.health_results = []
+        self.show_check_page = False
+        if sys.platform == "linux":
+            self.health_results = system_check.run_all()
+            self.show_check_page = (
+                system_check.get_session_type() == "wayland"
+                or any(r.critical and r.status in ("warn", "fail")
+                       for r in self.health_results))
+
         self.setup_ui()
         self.setup_connections()
 
     def setup_ui(self):
         """Create the UI"""
         self.setWindowTitle(t("wizard_title", self.lang))
-        self.setFixedSize(450, 440)
+        self.setFixedWidth(450)
+        self.setMinimumHeight(440)
         self.setModal(True)
 
         # Remove close button - user must complete setup
@@ -113,7 +129,145 @@ class SetupWizard(QDialog):
             Qt.CustomizeWindowHint
         )
 
-        layout = QVBoxLayout(self)
+        # Two pages: system check first (when relevant), then model selection
+        self.stack = QStackedLayout(self)
+        self.page_check = QWidget()
+        self._build_check_page(self.page_check)
+        self.page_model = QWidget()
+        self._build_model_page(self.page_model)
+        self.stack.addWidget(self.page_check)
+        self.stack.addWidget(self.page_model)
+        self.stack.setCurrentWidget(
+            self.page_check if self.show_check_page else self.page_model)
+
+    def _build_check_page(self, page):
+        """System-check page: one row per check, copyable fix commands,
+        re-check button. Makes the Wayland onboarding visually followable."""
+        layout = QVBoxLayout(page)
+        layout.setSpacing(12)
+        layout.setContentsMargins(30, 25, 30, 25)
+
+        title = QLabel(t("wizard_syscheck_title", self.lang))
+        title_font = QFont()
+        title_font.setPointSize(18)
+        title_font.setBold(True)
+        title.setFont(title_font)
+        title.setAlignment(Qt.AlignCenter)
+        layout.addWidget(title)
+
+        subtitle = QLabel(t("wizard_syscheck_subtitle", self.lang))
+        subtitle.setAlignment(Qt.AlignCenter)
+        subtitle.setWordWrap(True)
+        subtitle.setStyleSheet("color: #888; margin-bottom: 5px;")
+        layout.addWidget(subtitle)
+
+        rows_frame = QFrame()
+        rows_frame.setStyleSheet("""
+            QFrame {
+                background-color: rgba(255, 255, 255, 0.05);
+                border-radius: 8px;
+            }
+        """)
+        self.check_rows_layout = QVBoxLayout(rows_frame)
+        self.check_rows_layout.setSpacing(6)
+        self.check_rows_layout.setContentsMargins(15, 12, 15, 12)
+        layout.addWidget(rows_frame)
+        self._populate_check_rows()
+
+        self.check_note = QLabel("")
+        self.check_note.setWordWrap(True)
+        self.check_note.setAlignment(Qt.AlignCenter)
+        layout.addWidget(self.check_note)
+
+        layout.addStretch()
+
+        btn_row = QHBoxLayout()
+        self.recheck_btn = QPushButton(t("wizard_syscheck_recheck", self.lang))
+        self.recheck_btn.setFixedHeight(42)
+        self.recheck_btn.setCursor(Qt.PointingHandCursor)
+        self.recheck_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #5a5a5a;
+                color: white;
+                border: none;
+                border-radius: 10px;
+                font-size: 14px;
+            }
+            QPushButton:hover { background-color: #6a6a6a; }
+        """)
+        btn_row.addWidget(self.recheck_btn)
+
+        self.continue_btn = QPushButton("")
+        self.continue_btn.setFixedHeight(42)
+        self.continue_btn.setCursor(Qt.PointingHandCursor)
+        self.continue_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #0A84FF;
+                color: white;
+                border: none;
+                border-radius: 10px;
+                font-size: 14px;
+                font-weight: 600;
+            }
+            QPushButton:hover { background-color: #0071E3; }
+        """)
+        btn_row.addWidget(self.continue_btn)
+        layout.addLayout(btn_row)
+
+        self._update_check_footer()
+
+    @staticmethod
+    def _clear_layout(layout):
+        while layout.count():
+            item = layout.takeAt(0)
+            widget = item.widget()
+            if widget is not None:
+                # setParent(None) removes it from painting immediately;
+                # deleteLater alone leaves it visible until the event loop runs
+                widget.setParent(None)
+                widget.deleteLater()
+            elif item.layout() is not None:
+                SetupWizard._clear_layout(item.layout())
+                item.layout().deleteLater()
+
+    def _populate_check_rows(self):
+        self._clear_layout(self.check_rows_layout)
+        for r in self.health_results:
+            icon, color = STATUS_ICONS.get(r.status, STATUS_ICONS["warn"])
+            row = QLabel(
+                f'<span style="color: {color}; font-weight: bold;">{icon}</span>  '
+                f'{t(r.label_key, self.lang)}'
+                + (f'  <span style="color: #888; font-size: 11px;">— {r.detail}</span>'
+                   if r.detail else ""))
+            row.setWordWrap(True)
+            row.setStyleSheet("font-size: 13px; background: transparent;")
+            self.check_rows_layout.addWidget(row)
+            if r.fix_cmd and r.status in ("warn", "fail"):
+                self.check_rows_layout.addLayout(make_copy_row(r.fix_cmd))
+
+    def _update_check_footer(self):
+        criticals_bad = any(r.critical and r.status in ("warn", "fail")
+                            for r in self.health_results)
+        if criticals_bad:
+            self.continue_btn.setText(t("wizard_syscheck_continue_anyway", self.lang))
+            self.check_note.setText(t("wizard_syscheck_warn_note", self.lang))
+            self.check_note.setStyleSheet("color: #FF9800; font-size: 12px;")
+        else:
+            self.continue_btn.setText(t("wizard_syscheck_continue", self.lang))
+            self.check_note.setText(t("wizard_syscheck_all_ok", self.lang))
+            self.check_note.setStyleSheet("color: #4CAF50; font-size: 12px;")
+
+    def recheck_system(self):
+        """Re-run the checks (e.g. after installing a missing tool)"""
+        self.health_results = system_check.run_all()
+        self._populate_check_rows()
+        self._update_check_footer()
+
+    def continue_to_model_page(self):
+        self.stack.setCurrentWidget(self.page_model)
+
+    def _build_model_page(self, page):
+        layout = QVBoxLayout(page)
         layout.setSpacing(15)
         layout.setContentsMargins(30, 25, 30, 25)
 
@@ -237,9 +391,31 @@ class SetupWizard(QDialog):
         """)
         layout.addWidget(self.download_btn)
 
+        # Secondary action after a failed CUDA download (hidden by default)
+        self.cpu_fallback_btn = QPushButton(t("cuda_continue_cpu", self.lang))
+        self.cpu_fallback_btn.setFixedHeight(36)
+        self.cpu_fallback_btn.setCursor(Qt.PointingHandCursor)
+        self.cpu_fallback_btn.setStyleSheet("""
+            QPushButton {
+                background-color: transparent;
+                color: #FF9800;
+                border: 1px solid #FF9800;
+                border-radius: 8px;
+                font-size: 13px;
+            }
+            QPushButton:hover {
+                background-color: rgba(255, 152, 0, 0.1);
+            }
+        """)
+        self.cpu_fallback_btn.setVisible(False)
+        layout.addWidget(self.cpu_fallback_btn)
+
     def setup_connections(self):
         """Connect signals"""
         self.download_btn.clicked.connect(self.start_download)
+        self.cpu_fallback_btn.clicked.connect(self.continue_with_cpu)
+        self.recheck_btn.clicked.connect(self.recheck_system)
+        self.continue_btn.clicked.connect(self.continue_to_model_page)
         self.button_group.buttonClicked.connect(self.on_model_selected)
         self.cuda_progress_signal.connect(self.on_cuda_progress)
 
@@ -308,6 +484,8 @@ class SetupWizard(QDialog):
         # Update UI
         self.download_btn.setEnabled(False)
         self.download_btn.setText(t("wizard_downloading", self.lang))
+        self.cpu_fallback_btn.setVisible(False)
+        self.progress_label.setStyleSheet("color: #aaa; font-size: 12px;")
 
         # Disable model selection
         for radio in self.model_radios.values():
@@ -355,10 +533,26 @@ class SetupWizard(QDialog):
             # Now start model download
             QTimer.singleShot(500, self.start_model_download)
         elif state.error:
-            # CUDA download failed - continue with CPU mode
-            self.progress_label.setText(t("cuda_download_failed", self.lang))
-            self.device = "cpu"  # Fallback to CPU
-            QTimer.singleShot(2000, self.start_model_download)
+            # CUDA download failed - offer retry; only an explicit user choice
+            # may persist CPU mode (a transient network error must not
+            # permanently slow down a GPU machine)
+            self.progress_label.setText(t("cuda_download_failed_retry", self.lang))
+            self.progress_label.setStyleSheet("color: #ff6b6b; font-size: 12px;")
+            self.is_downloading = False
+            self.download_btn.setEnabled(True)
+            self.download_btn.setText(t("cuda_retry", self.lang))
+            self.cpu_fallback_btn.setVisible(True)
+
+    def continue_with_cpu(self):
+        """User explicitly chose CPU mode after a failed CUDA download"""
+        self.cpu_fallback_btn.setVisible(False)
+        self.device = "cpu"
+        self.needs_cuda = False
+        self.is_downloading = True
+        self.download_btn.setEnabled(False)
+        self.download_btn.setText(t("wizard_downloading", self.lang))
+        self.progress_label.setStyleSheet("color: #aaa; font-size: 12px;")
+        self.start_model_download()
 
     def start_model_download(self):
         """Start model download after CUDA is ready"""
@@ -469,7 +663,8 @@ class SetupWizard(QDialog):
             config["compute_type"] = "int8"
 
         # Set defaults for missing keys (required for first run)
-        config.setdefault("hotkey", "alt+s")
+        # Same default as install.sh writes - the two must not diverge
+        config.setdefault("hotkey", "ctrl+shift+s")
         config.setdefault("language", "en")
         config.setdefault("ui_language", "en")
         config.setdefault("sample_rate", 16000)

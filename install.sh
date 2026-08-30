@@ -27,35 +27,22 @@ log_error() { echo -e "${RED}[ERROR]${NC} $1"; }
 # =============================================================================
 log_info "Detecting distribution..."
 
-DISTRO="unknown"
-PKG_MANAGER=""
+source "$(dirname "$(readlink -f "$0")")/install_lib.sh"
 
-if [ -f /etc/os-release ]; then
-    . /etc/os-release
-    DISTRO=$ID
-fi
+DISTRO=$(detect_distro_id)
+PKG_MANAGER=$(detect_pkg_manager) || true
 
-case $DISTRO in
-    ubuntu|debian|linuxmint|pop|elementary|zorin)
-        PKG_MANAGER="apt"
-        log_ok "Ubuntu/Debian-based system detected ($DISTRO)"
-        ;;
-    fedora|rhel|centos|rocky|almalinux)
-        PKG_MANAGER="dnf"
-        log_ok "Fedora/RHEL-based system detected ($DISTRO)"
-        ;;
-    arch|manjaro|endeavouros|garuda)
-        PKG_MANAGER="pacman"
-        log_ok "Arch-based system detected ($DISTRO)"
-        ;;
-    opensuse*|suse)
-        PKG_MANAGER="zypper"
-        log_ok "openSUSE system detected ($DISTRO)"
-        ;;
+case $PKG_MANAGER in
+    apt)    log_ok "Debian/Ubuntu-based system detected ($DISTRO)" ;;
+    dnf)    log_ok "Fedora/RHEL-based system detected ($DISTRO)" ;;
+    pacman) log_ok "Arch-based system detected ($DISTRO)" ;;
+    zypper) log_ok "openSUSE system detected ($DISTRO)" ;;
     *)
-        log_warn "Unknown distribution: $DISTRO"
-        log_warn "Trying with apt..."
-        PKG_MANAGER="apt"
+        log_error "Unsupported distribution: $DISTRO (no apt/dnf/pacman/zypper found)"
+        log_error "Install these dependencies manually, then re-run with your package"
+        log_error "manager skipped: python3 + venv + pip, portaudio, xdotool, xclip,"
+        log_error "pulseaudio-utils (and on Wayland: wtype, wl-clipboard, gtk-layer-shell)"
+        exit 1
         ;;
 esac
 
@@ -120,14 +107,21 @@ case $PKG_MANAGER in
             xcb-util-cursor
         ;;
     pacman)
-        sudo pacman -Syu --noconfirm \
+        # -S --needed instead of -Syu: installing an app must not trigger a
+        # full system upgrade (kernel/nvidia updates mid-session on Arch).
+        if ! sudo pacman -S --needed --noconfirm \
             python \
             python-pip \
             portaudio \
             xdotool \
             xclip \
             libpulse \
-            xcb-util-cursor
+            xcb-util-cursor; then
+            log_error "pacman install failed. If packages were not found (404),"
+            log_error "your package database is stale - run: sudo pacman -Syu"
+            log_error "then re-run this installer."
+            exit 1
+        fi
         ;;
     zypper)
         sudo zypper install -y \
@@ -204,40 +198,49 @@ else
     log_warn "  sudo usermod -a -G input \$USER"
 fi
 
-# Install wtype for Wayland auto-paste support
+# Install wtype (auto-paste) and wl-clipboard (clipboard copy via pyperclip)
 if [ "$SESSION_TYPE" = "wayland" ]; then
-    log_info "Installing wtype for Wayland auto-paste support..."
+    log_info "Installing wtype + wl-clipboard for Wayland paste/clipboard support..."
     case $PKG_MANAGER in
         apt)
-            sudo apt install -y wtype 2>/dev/null || log_warn "wtype not available in repos, auto-paste may not work"
+            sudo apt install -y wtype wl-clipboard 2>/dev/null || log_warn "wtype/wl-clipboard not available in repos, auto-paste may not work"
             ;;
         dnf)
-            sudo dnf install -y wtype 2>/dev/null || log_warn "wtype not available in repos, auto-paste may not work"
+            sudo dnf install -y wtype wl-clipboard 2>/dev/null || log_warn "wtype/wl-clipboard not available in repos, auto-paste may not work"
             ;;
         pacman)
-            sudo pacman -S --noconfirm wtype 2>/dev/null || log_warn "wtype not available in repos, auto-paste may not work"
+            sudo pacman -S --needed --noconfirm wtype wl-clipboard 2>/dev/null || log_warn "wtype/wl-clipboard not available in repos, auto-paste may not work"
             ;;
         zypper)
-            sudo zypper install -y wtype 2>/dev/null || log_warn "wtype not available in repos, auto-paste may not work"
+            sudo zypper install -y wtype wl-clipboard 2>/dev/null || log_warn "wtype/wl-clipboard not available in repos, auto-paste may not work"
             ;;
     esac
 
-    # Install GTK Layer Shell for focus-free popup overlay
+    # Install GTK Layer Shell + PyGObject runtime for the focus-free popup
+    # overlay (wayland_overlay.py needs: gi, Gtk 3 typelib, GtkLayerShell
+    # typelib, pycairo). The venv is created with --system-site-packages so
+    # these system packages are visible to the app.
     log_info "Installing GTK Layer Shell for Wayland overlay support..."
     case $PKG_MANAGER in
         apt)
-            sudo apt install -y libgtk-layer-shell-dev gir1.2-gtklayershell-0.1 python3-gi 2>/dev/null || log_warn "GTK Layer Shell not available, popup may steal focus"
+            sudo apt install -y gir1.2-gtklayershell-0.1 gir1.2-gtk-3.0 python3-gi python3-gi-cairo python3-cairo 2>/dev/null || log_warn "GTK Layer Shell not available, popup may steal focus"
             ;;
         dnf)
-            sudo dnf install -y gtk-layer-shell-devel python3-gobject 2>/dev/null || log_warn "GTK Layer Shell not available, popup may steal focus"
+            sudo dnf install -y gtk-layer-shell gtk3 python3-gobject python3-cairo 2>/dev/null || log_warn "GTK Layer Shell not available, popup may steal focus"
             ;;
         pacman)
-            sudo pacman -S --noconfirm gtk-layer-shell python-gobject 2>/dev/null || log_warn "GTK Layer Shell not available, popup may steal focus"
+            sudo pacman -S --needed --noconfirm gtk-layer-shell gtk3 python-gobject python-cairo 2>/dev/null || log_warn "GTK Layer Shell not available, popup may steal focus"
             ;;
         zypper)
-            sudo zypper install -y gtk-layer-shell-devel python3-gobject 2>/dev/null || log_warn "GTK Layer Shell not available, popup may steal focus"
+            sudo zypper install -y gtk-layer-shell typelib-1_0-GtkLayerShell-0_1 typelib-1_0-Gtk-3_0 python3-gobject python3-cairo 2>/dev/null || log_warn "GTK Layer Shell not available, popup may steal focus"
             ;;
     esac
+fi
+
+# Test hook: stop after system package phase (used by sandboxed installer tests)
+if [ "${WR_INSTALL_STOP_AFTER:-}" = "packages" ]; then
+    log_info "Stopping after package phase (WR_INSTALL_STOP_AFTER test hook)"
+    exit 0
 fi
 
 # =============================================================================
@@ -250,7 +253,10 @@ if [ -d "venv" ]; then
     rm -rf venv
 fi
 
-python3 -m venv venv
+# --system-site-packages: the Wayland overlay needs the distro's PyGObject
+# (gi) + GTK typelibs, which cannot come from pip. Pip-installed packages in
+# the venv still take precedence over system ones.
+python3 -m venv --system-site-packages venv
 source venv/bin/activate
 
 log_ok "Virtual environment created"
@@ -357,6 +363,15 @@ EOF
 chmod +x start.sh
 
 log_ok "Application added to menu"
+
+# =============================================================================
+# 10. SYSTEM CHECK (Wayland: show what is ready and what still needs relogin)
+# =============================================================================
+if [ "$SESSION_TYPE" = "wayland" ]; then
+    echo ""
+    log_info "Running system check..."
+    "$INSTALL_DIR/venv/bin/python" "$INSTALL_DIR/system_check.py" || true
+fi
 
 # =============================================================================
 # SUMMARY
