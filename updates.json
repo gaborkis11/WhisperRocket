@@ -1,6 +1,22 @@
 {
   "versions": [
     {
+      "version": "1.2.3",
+      "date": "2026-08-30",
+      "notes": {
+        "en": [
+          "Settings window fixed on systems with larger fonts: content now scrolls instead of squeezing text into unreadable slivers",
+          "Model list is translated and shows correct sizes (large-v3 is ~3 GB, not ~6 GB)",
+          "New in Settings: 'Remove WhisperRocket completely' - choose what to delete (settings, models, CUDA libraries); shared system packages are never touched"
+        ],
+        "hu": [
+          "Javítva a Beállítások ablak nagyobb betűméretű rendszereken: a tartalom görgethető, nem nyomódnak össze a feliratok olvashatatlan csíkokká",
+          "A modell-lista fordított és helyes méreteket mutat (a large-v3 ~3 GB, nem ~6 GB)",
+          "Új a Beállításokban: 'A WhisperRocket teljes törlése' - kiválasztod, mi törlődjön (beállítások, modellek, CUDA könyvtárak); a közös rendszercsomagokhoz nem nyúl"
+        ]
+      }
+    },
+    {
       "version": "1.2.2",
       "date": "2026-08-30",
       "notes": {

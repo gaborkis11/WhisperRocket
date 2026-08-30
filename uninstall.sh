@@ -33,6 +33,21 @@ get_size() {
     fi
 }
 
+# Non-interactive mode (used by the in-app uninstall button):
+#   uninstall.sh --auto [--keep-models] [--keep-config]
+# Full uninstall without prompts; keep-flags carve out models/config.
+NONINTERACTIVE=0
+KEEP_MODELS=0
+KEEP_CONFIG=0
+for arg in "$@"; do
+    case "$arg" in
+        --auto)        NONINTERACTIVE=1 ;;
+        --keep-models) KEEP_MODELS=1 ;;
+        --keep-config) KEEP_CONFIG=1 ;;
+        *) echo "Unknown option: $arg"; exit 1 ;;
+    esac
+done
+
 # Define paths
 DESKTOP_LAUNCHER="$HOME/.local/share/applications/whisperrocket.desktop"
 AUTOSTART_ENTRY="$HOME/.config/autostart/whisperrocket.desktop"
@@ -48,14 +63,22 @@ log_info "Checking for running WhisperRocket instances..."
 
 if pgrep -f "whisper_gui.py" > /dev/null; then
     log_warn "WhisperRocket is currently running"
-    read -p "Stop the application before uninstalling? [Y/n] " -n 1 -r
-    echo ""
-    if [[ ! $REPLY =~ ^[Nn]$ ]]; then
+    if [ "$NONINTERACTIVE" = "1" ]; then
+        # The in-app flow quits itself right after spawning us; wait briefly,
+        # then make sure nothing is left
+        sleep 2
         pkill -f "whisper_gui.py" 2>/dev/null || true
-        sleep 1
         log_ok "Application stopped"
     else
-        log_warn "Continuing with uninstall while app is running (not recommended)"
+        read -p "Stop the application before uninstalling? [Y/n] " -n 1 -r
+        echo ""
+        if [[ ! $REPLY =~ ^[Nn]$ ]]; then
+            pkill -f "whisper_gui.py" 2>/dev/null || true
+            sleep 1
+            log_ok "Application stopped"
+        else
+            log_warn "Continuing with uninstall while app is running (not recommended)"
+        fi
     fi
 else
     log_ok "No running instances found"
@@ -144,7 +167,11 @@ echo "  3) Custom (choose what to remove)"
 echo ""
 echo "  4) Cancel"
 echo ""
-read -p "Select option [1-4]: " choice
+if [ "$NONINTERACTIVE" = "1" ]; then
+    choice=2  # --auto = full uninstall (keep-flags adjust below)
+else
+    read -p "Select option [1-4]: " choice
+fi
 
 case $choice in
     1)
@@ -184,10 +211,14 @@ if [ "$MODE" = "full" ]; then
     echo -e "${RED}║  This action CANNOT be undone!                               ║${NC}"
     echo -e "${RED}╚══════════════════════════════════════════════════════════════╝${NC}"
     echo ""
-    read -p "Type 'yes' to confirm full uninstall: " confirm
-    if [ "$confirm" != "yes" ]; then
-        log_warn "Uninstall cancelled (you must type 'yes' to confirm)"
-        exit 0
+    if [ "$NONINTERACTIVE" = "1" ]; then
+        log_ok "Non-interactive mode: confirmation given in the app"
+    else
+        read -p "Type 'yes' to confirm full uninstall: " confirm
+        if [ "$confirm" != "yes" ]; then
+            log_warn "Uninstall cancelled (you must type 'yes' to confirm)"
+            exit 0
+        fi
     fi
 fi
 
@@ -248,6 +279,9 @@ elif [ "$MODE" = "full" ]; then
     remove_config=true
     remove_models=true
     remove_cuda=true
+    # --auto carve-outs
+    [ "$KEEP_MODELS" = "1" ] && remove_models=false
+    [ "$KEEP_CONFIG" = "1" ] && remove_config=false
 fi
 
 # =============================================================================
@@ -275,6 +309,10 @@ if [ "$remove_launcher" = true ]; then
         log_removed "Hyprland autostart block removed"
     fi
 fi
+
+# Restart flag: without this the save-and-restart supervisor could relaunch
+# the app we are removing
+rm -f /tmp/whisperrocket_restart 2>/dev/null || true
 
 # Remove virtual environment
 if [ "$remove_venv" = true ] && [ -d "$VENV_DIR" ]; then
@@ -329,7 +367,7 @@ if [ "$MODE" = "quick" ]; then
     echo ""
     echo "  Preserved:"
     echo "    • Configuration files (can be removed manually from $CONFIG_DIR)"
-    echo "    • Downloaded models (can be removed manually from $MODELS_DIR)"
+    echo "    • Downloaded models (can be removed manually from $WHISPERROCKET_MODELS_DIR)"
 
 elif [ "$MODE" = "full" ]; then
     echo "  Mode: Full uninstall"

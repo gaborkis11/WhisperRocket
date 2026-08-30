@@ -179,6 +179,18 @@ TRANSLATIONS = {
         "update_uptodate": "You are up to date!",
         "update_failed": "Could not check for updates - are you online?",
 
+        # In-app uninstall
+        "uninstall_btn": "Remove WhisperRocket completely...",
+        "uninstall_title": "Remove WhisperRocket",
+        "uninstall_intro": "This removes everything WhisperRocket placed on this machine and quits the app. Choose what to delete - this cannot be undone:",
+        "uninstall_comp_app": "Application files (launcher, autostart, virtual environment)",
+        "uninstall_comp_config": "Settings and history",
+        "uninstall_comp_models": "Downloaded AI models",
+        "uninstall_comp_cuda": "CUDA libraries (used only by WhisperRocket)",
+        "uninstall_shared_note": "System packages installed alongside (portaudio, xdotool, xclip, wtype, wl-clipboard, GTK Layer Shell) may be used by other software, so they are kept. Remove them with your package manager if you are sure nothing else needs them.",
+        "uninstall_confirm_btn": "Remove everything selected",
+        "uninstall_done_appimage": "WhisperRocket's data has been removed. Finally, delete the AppImage file itself:\n{path}",
+
         # File Transcription
         "tray_file_transcription": "File Transcription",
         "ft_title": "File Transcription",
@@ -548,6 +560,18 @@ TRANSLATIONS = {
         "update_checking": "Keresés...",
         "update_uptodate": "A legfrissebb verziót használod!",
         "update_failed": "Nem sikerült ellenőrizni - van internetkapcsolat?",
+
+        # In-app uninstall
+        "uninstall_btn": "A WhisperRocket teljes törlése...",
+        "uninstall_title": "WhisperRocket törlése",
+        "uninstall_intro": "Ez mindent eltávolít, amit a WhisperRocket a gépre tett, és kilép az appból. Válaszd ki, mi törlődjön - a művelet nem visszavonható:",
+        "uninstall_comp_app": "Alkalmazásfájlok (indító, autostart, virtuális környezet)",
+        "uninstall_comp_config": "Beállítások és előzmények",
+        "uninstall_comp_models": "Letöltött AI modellek",
+        "uninstall_comp_cuda": "CUDA könyvtárak (csak a WhisperRocket használja)",
+        "uninstall_shared_note": "A telepítéskor felkerült rendszercsomagokat (portaudio, xdotool, xclip, wtype, wl-clipboard, GTK Layer Shell) más programok is használhatják, ezért megmaradnak. Ha biztos vagy benne, hogy másnak nem kellenek, a csomagkezelővel törölheted őket.",
+        "uninstall_confirm_btn": "Kijelöltek törlése",
+        "uninstall_done_appimage": "A WhisperRocket adatai törölve. Végül töröld magát az AppImage fájlt is:\n{path}",
 
         # File Transcription
         "tray_file_transcription": "Fájl átírása",

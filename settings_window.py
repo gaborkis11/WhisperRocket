@@ -77,15 +77,29 @@ LANGUAGES = [
     ("ko", "한국어"),
 ]
 
-# Whisper modellek
+def build_uninstall_args(choices):
+    """Map the uninstall dialog's choices onto uninstall.sh --auto flags.
+    Pure function for testability. ``choices`` = {id: bool} from
+    qt_helpers.show_uninstall_dialog."""
+    args = ["--auto"]
+    if not choices.get("models", True):
+        args.append("--keep-models")
+    if not choices.get("config", True):
+        args.append("--keep-config")
+    return args
+
+
+# Whisper models - same translated labels as the setup wizard, so the two
+# lists can never disagree on names or sizes again (they used to: hardcoded
+# Hungarian here, "~6 GB" for large-v3 vs the wizard's "~3 GB")
 MODELS = [
-    ("tiny", "Tiny (~150 MB) - Leggyorsabb"),
-    ("base", "Base (~290 MB) - Gyors"),
-    ("small", "Small (~490 MB) - Közepes"),
-    ("medium", "Medium (~1.5 GB) - Jó"),
-    ("large-v3-turbo", "Large-v3-turbo (~1.6 GB) - Gyors és jó"),
-    ("large-v3", "Large-v3 (~6 GB) - Legjobb"),
-    ("large-v3-hu", "Large-v3-hu (~3 GB) - Magyar optimalizált"),
+    ("tiny", "wizard_model_tiny"),
+    ("base", "wizard_model_base"),
+    ("small", "wizard_model_small"),
+    ("medium", "wizard_model_medium"),
+    ("large-v3-turbo", "wizard_model_turbo"),
+    ("large-v3", "wizard_model_large"),
+    ("large-v3-hu", "wizard_model_hu"),
 ]
 
 # Device opciók (platform-függő)
@@ -537,7 +551,7 @@ class _PhoneProbe(QThread):
 class SettingsWindow(QMainWindow):
     """Beállítások ablak tab-okkal"""
 
-    def __init__(self, apply_phone_endpoint=None):
+    def __init__(self, apply_phone_endpoint=None, request_quit=None):
         """
         apply_phone_endpoint: callback into the running app that starts or stops
         the phone endpoint to match the saved settings. Passed in by whisper_gui
@@ -550,6 +564,7 @@ class SettingsWindow(QMainWindow):
         self.ui_lang = self.config.get("ui_language", "en")
         self.download_manager = get_download_manager()
         self.apply_phone_endpoint = apply_phone_endpoint
+        self.request_quit = request_quit
         self.init_ui()
 
         # Progress frissítő timer
@@ -640,7 +655,7 @@ class SettingsWindow(QMainWindow):
         hotkey_layout.addWidget(self.hotkey_edit)
 
         self.record_btn = QPushButton(t("btn_record", self.ui_lang))
-        self.record_btn.setFixedWidth(80)
+        self.record_btn.setMinimumWidth(80)
         self.record_btn.clicked.connect(self.start_hotkey_recording)
         hotkey_layout.addWidget(self.record_btn)
 
@@ -661,9 +676,9 @@ class SettingsWindow(QMainWindow):
 
         # Modell
         self.model_combo = QComboBox()
-        for code, name in MODELS:
+        for code, label_key in MODELS:
             downloaded = " ✓" if is_model_downloaded(code) else ""
-            self.model_combo.addItem(f"{name}{downloaded}", code)
+            self.model_combo.addItem(f"{t(label_key, self.ui_lang)}{downloaded}", code)
         self.set_combo_value(self.model_combo, self.config.get("model", "large-v3"))
         self.model_combo.currentIndexChanged.connect(self.on_model_changed)
         form_layout_model.addRow(t("label_model", self.ui_lang), self.model_combo)
@@ -735,6 +750,27 @@ class SettingsWindow(QMainWindow):
         layout.addWidget(self.update_check_check)
 
         # Info label
+        # Danger zone: full uninstall (Gábor: "a névjegybe senki nem néz be" -
+        # the uninstall the user asked for lives here, in plain sight)
+        danger_sep = QFrame()
+        danger_sep.setFrameShape(QFrame.Shape.HLine)
+        danger_sep.setStyleSheet("color: #555;")
+        layout.addWidget(danger_sep)
+
+        self.uninstall_btn = QPushButton(t("uninstall_btn", self.ui_lang))
+        self.uninstall_btn.setStyleSheet("""
+            QPushButton {
+                color: #F44336;
+                background: transparent;
+                border: 1px solid #F44336;
+                border-radius: 6px;
+                padding: 6px 12px;
+            }
+            QPushButton:hover { background-color: rgba(244, 67, 54, 0.1); }
+        """)
+        self.uninstall_btn.clicked.connect(self.start_uninstall)
+        layout.addWidget(self.uninstall_btn)
+
         info_label = QLabel(t("info_restart", self.ui_lang))
         info_label.setStyleSheet("color: gray; font-size: 11px;")
         info_label.setWordWrap(True)
@@ -748,23 +784,27 @@ class SettingsWindow(QMainWindow):
         button_layout.addStretch()
 
         save_btn = QPushButton(t("btn_save", self.ui_lang))
-        save_btn.setFixedWidth(100)
+        save_btn.setMinimumWidth(100)
         save_btn.clicked.connect(self.save_settings)
         button_layout.addWidget(save_btn)
 
         restart_btn = QPushButton(t("btn_save_restart", self.ui_lang))
-        restart_btn.setFixedWidth(160)
+        restart_btn.setMinimumWidth(160)
         restart_btn.clicked.connect(self.save_and_restart)
         button_layout.addWidget(restart_btn)
 
         close_btn = QPushButton(t("btn_cancel", self.ui_lang))
-        close_btn.setFixedWidth(100)
+        close_btn.setMinimumWidth(100)
         close_btn.clicked.connect(self.close)
         button_layout.addWidget(close_btn)
 
         layout.addLayout(button_layout)
 
-        return tab
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.Shape.NoFrame)
+        scroll.setWidget(tab)
+        return scroll
 
     def create_models_tab(self):
         """Modellek tab létrehozása"""
@@ -829,7 +869,11 @@ class SettingsWindow(QMainWindow):
         # Lista feltöltése
         self.refresh_models_list()
 
-        return tab
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.Shape.NoFrame)
+        scroll.setWidget(tab)
+        return scroll
 
     def refresh_models_list(self):
         """Modellek lista frissítése"""
@@ -865,9 +909,9 @@ class SettingsWindow(QMainWindow):
         self.model_combo.blockSignals(True)
         self.model_combo.clear()
 
-        for code, name in MODELS:
+        for code, label_key in MODELS:
             downloaded = " ✓" if is_model_downloaded(code) else ""
-            self.model_combo.addItem(f"{name}{downloaded}", code)
+            self.model_combo.addItem(f"{t(label_key, self.ui_lang)}{downloaded}", code)
 
         self.set_combo_value(self.model_combo, current_model)
         self.model_combo.blockSignals(False)
@@ -1211,6 +1255,59 @@ class SettingsWindow(QMainWindow):
         else:
             super().keyPressEvent(event)
 
+    def start_uninstall(self):
+        """Full uninstall from the app: confirm with component choices, then
+        run the right backend and quit. System packages are never touched
+        (the dialog says so)."""
+        import appimage_uninstall
+        from qt_helpers import show_uninstall_dialog
+        from platform_support import get_platform_handler
+
+        paths = appimage_uninstall.component_paths()
+        def size_of(key):
+            p = paths[key]
+            return appimage_uninstall.get_size_human(p) if p.exists() else ""
+
+        components = [
+            ("app", "uninstall_comp_app", "", True, True),
+            ("config", "uninstall_comp_config", size_of("config"), True, False),
+            ("models", "uninstall_comp_models", size_of("models"), True, False),
+            ("cuda", "uninstall_comp_cuda", size_of("cuda"), True, False),
+        ]
+        choices = show_uninstall_dialog(self.ui_lang, components, parent=self)
+        if choices is None:
+            return
+
+        try:
+            os.remove("/tmp/whisperrocket_restart")
+        except OSError:
+            pass
+
+        if get_platform_handler().is_appimage():
+            appimage_uninstall.remove_components(
+                config=choices.get("config", True),
+                models=choices.get("models", True),
+                cuda=choices.get("cuda", True))
+            appimage_uninstall.remove_desktop_entries()
+            QMessageBox.information(
+                self, "WhisperRocket",
+                t("uninstall_done_appimage", self.ui_lang,
+                  path=os.environ.get("APPIMAGE", "WhisperRocket.AppImage")))
+        else:
+            import subprocess
+            project_dir = os.path.dirname(os.path.abspath(__file__))
+            script = os.path.join(project_dir, "uninstall.sh")
+            subprocess.Popen(["bash", script] + build_uninstall_args(choices),
+                             cwd=project_dir, start_new_session=True,
+                             stdout=subprocess.DEVNULL,
+                             stderr=subprocess.DEVNULL)
+
+        if self.request_quit:
+            # Deferred: this slot lives in the window the quit will destroy
+            QTimer.singleShot(0, self.request_quit)
+        else:
+            QTimer.singleShot(0, self.close)
+
     def collect_and_save(self):
         """
         Read every tab back into the config and write it out.
@@ -1457,12 +1554,12 @@ class SettingsWindow(QMainWindow):
         row.addWidget(self.phone_save_status)
 
         save_btn = QPushButton(t("btn_save", self.ui_lang))
-        save_btn.setFixedWidth(100)
+        save_btn.setMinimumWidth(100)
         save_btn.clicked.connect(self.save_phone_settings)
         row.addWidget(save_btn)
 
         close_btn = QPushButton(t("btn_cancel", self.ui_lang))
-        close_btn.setFixedWidth(100)
+        close_btn.setMinimumWidth(100)
         close_btn.clicked.connect(self.close)
         row.addWidget(close_btn)
 
@@ -1662,7 +1759,7 @@ class SettingsWindow(QMainWindow):
         btn_layout = QHBoxLayout()
         btn_layout.addStretch()
         self.model_warning_btn = QPushButton(t("model_warning_download", self.ui_lang))
-        self.model_warning_btn.setFixedWidth(120)
+        self.model_warning_btn.setMinimumWidth(120)
         self.model_warning_btn.setStyleSheet("""
             QPushButton {
                 background-color: #FF9800;
@@ -1846,12 +1943,12 @@ class SettingsWindow(QMainWindow):
         row.addWidget(self.ai_save_status)
 
         save_btn = QPushButton(t("btn_save", self.ui_lang))
-        save_btn.setFixedWidth(100)
+        save_btn.setMinimumWidth(100)
         save_btn.clicked.connect(self.save_ai_settings)
         row.addWidget(save_btn)
 
         close_btn = QPushButton(t("btn_cancel", self.ui_lang))
-        close_btn.setFixedWidth(100)
+        close_btn.setMinimumWidth(100)
         close_btn.clicked.connect(self.close)
         row.addWidget(close_btn)
 

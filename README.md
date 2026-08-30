@@ -839,6 +839,24 @@ The uninstaller offers three options:
 
 ## Changelog
 
+### v1.2.3
+
+**Layout fixes + in-app uninstall.**
+
+- The Settings and Models tabs now scroll: on systems with larger fonts
+  (e.g. Omarchy/Hyprland) the content used to get squeezed into unreadable
+  text slivers when the model-warning banner appeared. Fixed button widths
+  that clipped translated captions were relaxed too.
+- The model list in Settings is translated and consistent with the setup
+  wizard (large-v3 correctly shows ~3 GB).
+- **Settings → "Remove WhisperRocket completely"**: in-app uninstall with
+  per-component choices (settings+history, models, CUDA libraries — with
+  sizes). Shared system packages (portaudio, xdotool, wtype, …) are never
+  removed; the dialog lists them so you can clean them up manually if
+  nothing else needs them.
+- New CI guard: a translation key used anywhere in code must exist in both
+  languages — a checkbox can never render as a raw key again.
+
 ### v1.2.2
 
 **The app now keeps itself up to date.**
