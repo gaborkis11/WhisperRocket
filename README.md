@@ -819,6 +819,26 @@ The uninstaller offers three options:
 
 ## Changelog
 
+### v1.2.1
+
+**Omarchy / Hyprland support and visible Wayland onboarding.**
+
+- The installer now recognizes Omarchy, CachyOS and any distro via `ID_LIKE`
+  (no more blind apt fallback), uses `pacman -S --needed` instead of a full
+  system upgrade, and installs everything Wayland needs: `wtype`,
+  `wl-clipboard` and the GTK Layer Shell runtime. The venv is created with
+  `--system-site-packages`, so the focus-free Wayland overlay actually works
+  in source installs.
+- New `system_check.py`: the installer prints a ✓/✗ checklist at the end of a
+  Wayland install, the first-run wizard opens with the same checklist
+  (copyable fix commands, Re-check button), and the app shows a dialog at
+  startup instead of failing silently when something is missing.
+- The Settings autostart toggle now works on Hyprland too (managed
+  `exec-once` block in `hyprland.conf`; removed by the uninstaller).
+- First-run wizard defaults to **English** and has a language selector
+  (previously a fresh install came up Hungarian); a failed CUDA download now
+  offers Retry / explicit CPU choice instead of silently switching to CPU.
+
 ### v1.2.0
 
 **Dictation from your phone** — optional, off by default. Record on your phone, and the
