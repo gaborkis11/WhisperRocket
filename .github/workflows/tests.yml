@@ -50,3 +50,6 @@ jobs:
 
       - name: Update dialog UI smoke (self-skips without PySide6)
         run: python tests/test_update_dialog_ui.py
+
+      - name: About window update UI smoke (self-skips without PySide6)
+        run: python tests/test_about_update_ui.py
