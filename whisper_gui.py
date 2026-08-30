@@ -72,7 +72,7 @@ sys.stdout.flush()
 class TrayIconUpdater(QObject):
     """Helper osztály thread-safe tray ikon frissítéshez"""
     update_requested = Signal(str, str)  # color, title
-    notify_requested = Signal(str, str)  # title, message (tray balloon)
+    notify_requested = Signal(str, str, str)  # title, message, level (info|warning)
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -86,12 +86,13 @@ class TrayIconUpdater(QObject):
             tray_icon.setIcon(create_icon(color))
             tray_icon.setToolTip(title)
 
-    @Slot(str, str)
-    def _do_notify(self, title, message):
+    @Slot(str, str, str)
+    def _do_notify(self, title, message, level):
         global tray_icon
         if tray_icon:
-            tray_icon.showMessage(title, message,
-                                  QSystemTrayIcon.MessageIcon.Warning, 5000)
+            icon = (QSystemTrayIcon.MessageIcon.Information if level == "info"
+                    else QSystemTrayIcon.MessageIcon.Warning)
+            tray_icon.showMessage(title, message, icon, 5000)
 
 
 class UpdateProbe(QThread):
@@ -213,27 +214,43 @@ def load_config():
 _update_probe = None  # keep the QThread referenced while it runs
 
 
-def start_update_probe():
-    """Kick off the once-a-day background version check (tray must exist)."""
+def start_update_probe(manual=False):
+    """Version check off the main thread. manual=True comes from the tray
+    menu item: every outcome gets visible feedback, not just a new version."""
     global _update_probe
+    if _update_probe and _update_probe.isRunning():
+        return
     from about_window import APP_VERSION
     _update_probe = UpdateProbe(APP_VERSION, ui_lang)
-    _update_probe.finished_with.connect(on_update_check_result)
+    _update_probe.finished_with.connect(
+        lambda info: on_update_check_result(info, manual=manual))
     _update_probe.start()
 
 
-def on_update_check_result(info):
+def check_updates_manual():
+    """Tray menu: Check for updates"""
+    start_update_probe(manual=True)
+
+
+def on_update_check_result(info, manual=False):
     """Main-thread handler: notify, show localized notes, act on the choice."""
     if info.error:
         print(f"[UPDATE] check failed: {info.error}")
+        if manual and tray_icon_updater:
+            tray_icon_updater.notify_requested.emit(
+                "WhisperRocket", t("update_failed", ui_lang), "warning")
         return
     if not info.is_newer:
         print(f"[UPDATE] up to date (latest: {info.latest})")
+        if manual and tray_icon_updater:
+            tray_icon_updater.notify_requested.emit(
+                "WhisperRocket", t("update_uptodate", ui_lang), "info")
         return
-    if tray_icon_updater:
+    if not manual and tray_icon_updater:
+        # Manual checks open the dialog right away - no balloon needed
         tray_icon_updater.notify_requested.emit(
             t("update_available_title", ui_lang, version=info.latest),
-            t("update_balloon_msg", ui_lang))
+            t("update_balloon_msg", ui_lang), "info")
     from qt_helpers import show_update_dialog
     choice, disable_auto = show_update_dialog(info, ui_lang)
     if disable_auto:
@@ -805,7 +822,8 @@ def process_audio(audio_copy):
                 if tray_icon_updater:
                     tray_icon_updater.notify_requested.emit(
                         t("notify_paste_missing_title", ui_lang),
-                        t("notify_paste_missing_msg", ui_lang, tool=paste_tool))
+                        t("notify_paste_missing_msg", ui_lang, tool=paste_tool),
+                        "warning")
                 print(f"[WARNING] {paste_tool} not installed - auto-paste skipped")
             else:
                 # Active window detection
@@ -1419,6 +1437,12 @@ def main():
 
     # Fő menü aboutToShow frissíti a history-t (submenu aboutToShow nem megbízható)
     tray_menu.aboutToShow.connect(refresh_history_menu)
+
+    # Frissítés keresése menüpont - a About ablakba senki nem néz be, a tray
+    # menü a látható helye
+    update_action = QAction(t("update_check_btn", ui_lang), qt_app)
+    update_action.triggered.connect(check_updates_manual, Qt.QueuedConnection)
+    tray_menu.addAction(update_action)
 
     # About menüpont
     from about_window import show_about
