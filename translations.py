@@ -145,6 +145,14 @@ TRANSLATIONS = {
         "syscheck_overlay": "Recording overlay (focus-free)",
         "syscheck_gpu": "GPU acceleration",
         "syscheck_audio": "Sound feedback",
+        "health_title": "WhisperRocket - System Check",
+        "health_intro": "Some things needed for recording and pasting are not ready yet. Fix them with the commands below, then log out and back in if you changed group membership.",
+        "health_suppress": "Don't show this again",
+        "notify_paste_missing_title": "Auto-paste unavailable",
+        "notify_paste_missing_msg": "{tool} is not installed - the text is on the clipboard, paste it with Ctrl+V. Install {tool} to enable auto-paste.",
+        "cuda_download_failed_retry": "CUDA download failed. Check your network and retry, or continue in CPU mode.",
+        "cuda_retry": "Retry CUDA Download",
+        "cuda_continue_cpu": "Continue with CPU (slower)",
 
         # File Transcription
         "tray_file_transcription": "File Transcription",
@@ -482,6 +490,14 @@ TRANSLATIONS = {
         "syscheck_overlay": "Felvétel overlay (fókuszmentes)",
         "syscheck_gpu": "GPU gyorsítás",
         "syscheck_audio": "Hangvisszajelzés",
+        "health_title": "WhisperRocket - Rendszer-ellenőrzés",
+        "health_intro": "A felvételhez és beillesztéshez szükséges néhány összetevő még nem áll készen. Javítsd az alábbi parancsokkal, majd ha csoporttagság változott, jelentkezz ki és be.",
+        "health_suppress": "Ne mutasd többet",
+        "notify_paste_missing_title": "Automatikus beillesztés nem elérhető",
+        "notify_paste_missing_msg": "A(z) {tool} nincs telepítve - a szöveg a vágólapon van, illeszd be Ctrl+V-vel. Az automatikus beillesztéshez telepítsd: {tool}.",
+        "cuda_download_failed_retry": "A CUDA letöltése sikertelen. Ellenőrizd a hálózatot és próbáld újra, vagy folytasd CPU módban.",
+        "cuda_retry": "CUDA letöltés újra",
+        "cuda_continue_cpu": "Folytatás CPU-val (lassabb)",
 
         # File Transcription
         "tray_file_transcription": "Fájl átírása",

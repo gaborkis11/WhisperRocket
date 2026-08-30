@@ -237,9 +237,29 @@ class SetupWizard(QDialog):
         """)
         layout.addWidget(self.download_btn)
 
+        # Secondary action after a failed CUDA download (hidden by default)
+        self.cpu_fallback_btn = QPushButton(t("cuda_continue_cpu", self.lang))
+        self.cpu_fallback_btn.setFixedHeight(36)
+        self.cpu_fallback_btn.setCursor(Qt.PointingHandCursor)
+        self.cpu_fallback_btn.setStyleSheet("""
+            QPushButton {
+                background-color: transparent;
+                color: #FF9800;
+                border: 1px solid #FF9800;
+                border-radius: 8px;
+                font-size: 13px;
+            }
+            QPushButton:hover {
+                background-color: rgba(255, 152, 0, 0.1);
+            }
+        """)
+        self.cpu_fallback_btn.setVisible(False)
+        layout.addWidget(self.cpu_fallback_btn)
+
     def setup_connections(self):
         """Connect signals"""
         self.download_btn.clicked.connect(self.start_download)
+        self.cpu_fallback_btn.clicked.connect(self.continue_with_cpu)
         self.button_group.buttonClicked.connect(self.on_model_selected)
         self.cuda_progress_signal.connect(self.on_cuda_progress)
 
@@ -308,6 +328,8 @@ class SetupWizard(QDialog):
         # Update UI
         self.download_btn.setEnabled(False)
         self.download_btn.setText(t("wizard_downloading", self.lang))
+        self.cpu_fallback_btn.setVisible(False)
+        self.progress_label.setStyleSheet("color: #aaa; font-size: 12px;")
 
         # Disable model selection
         for radio in self.model_radios.values():
@@ -355,10 +377,26 @@ class SetupWizard(QDialog):
             # Now start model download
             QTimer.singleShot(500, self.start_model_download)
         elif state.error:
-            # CUDA download failed - continue with CPU mode
-            self.progress_label.setText(t("cuda_download_failed", self.lang))
-            self.device = "cpu"  # Fallback to CPU
-            QTimer.singleShot(2000, self.start_model_download)
+            # CUDA download failed - offer retry; only an explicit user choice
+            # may persist CPU mode (a transient network error must not
+            # permanently slow down a GPU machine)
+            self.progress_label.setText(t("cuda_download_failed_retry", self.lang))
+            self.progress_label.setStyleSheet("color: #ff6b6b; font-size: 12px;")
+            self.is_downloading = False
+            self.download_btn.setEnabled(True)
+            self.download_btn.setText(t("cuda_retry", self.lang))
+            self.cpu_fallback_btn.setVisible(True)
+
+    def continue_with_cpu(self):
+        """User explicitly chose CPU mode after a failed CUDA download"""
+        self.cpu_fallback_btn.setVisible(False)
+        self.device = "cpu"
+        self.needs_cuda = False
+        self.is_downloading = True
+        self.download_btn.setEnabled(False)
+        self.download_btn.setText(t("wizard_downloading", self.lang))
+        self.progress_label.setStyleSheet("color: #aaa; font-size: 12px;")
+        self.start_model_download()
 
     def start_model_download(self):
         """Start model download after CUDA is ready"""
@@ -469,7 +507,8 @@ class SetupWizard(QDialog):
             config["compute_type"] = "int8"
 
         # Set defaults for missing keys (required for first run)
-        config.setdefault("hotkey", "alt+s")
+        # Same default as install.sh writes - the two must not diverge
+        config.setdefault("hotkey", "ctrl+shift+s")
         config.setdefault("language", "en")
         config.setdefault("ui_language", "en")
         config.setdefault("sample_rate", 16000)
