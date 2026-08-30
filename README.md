@@ -706,7 +706,7 @@ The installer has been tested on:
 |--------------|----------------|--------|
 | Pop!_OS | X11 | ✅ Fully working |
 | Linux Mint | X11 | ✅ Fully working |
-| Omarchy (Arch) | Wayland (Hyprland) | 🧪 In testing |
+| Omarchy (Arch) | Wayland (Hyprland) | ✅ Fully working |
 | Pop!_OS | Wayland (COSMIC) | ⚠️ Experimental |
 | GNOME | Wayland | ⚠️ Experimental |
 | KDE Plasma | Wayland | ⚠️ Experimental |
