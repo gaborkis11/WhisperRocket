@@ -28,12 +28,12 @@ WhisperRocket is a desktop application that converts speech to text in real-time
 
 - **Real-time transcription** - Whisper large-v3 model with multi-language support (including Hungarian-optimized model)
 - **GPU acceleration** - NVIDIA CUDA support for fast processing (CPU fallback available)
-- **Global hotkey** - Press Alt+S (configurable) anywhere to start/stop recording
+- **Global hotkey** - Press Ctrl+Shift+S (configurable) anywhere to start/stop recording
 - **Auto-paste** - Transcribed text is automatically pasted into the active window
 - **Smart paste detection** - Automatically uses Ctrl+Shift+V for terminals
 - **Visual feedback** - Modern popup with equalizer visualization during recording
 - **Rocket animation** - Fun animated rocket with witty messages during processing
-- **Wayland support** - GTK Layer Shell overlay (experimental, X11 recommended)
+- **Wayland support** - GTK Layer Shell overlay, evdev hotkeys, wtype paste — tested on Hyprland (Omarchy)
 - **File transcription** - Transcribe audio/video files (meetings, interviews, podcasts) with drag & drop
 - **Speaker diarization** - Identify who is speaking (optional, via [pyannote-audio](https://github.com/pyannote/pyannote-audio))
 - **Export** - Save transcriptions as SRT, VTT, TXT, or JSON
@@ -88,7 +88,7 @@ chmod +x install.sh
 ```
 
 The installer automatically:
-- ✅ Detects your Linux distribution (Ubuntu, Fedora, Arch, openSUSE)
+- ✅ Detects your Linux distribution (Ubuntu, Fedora, Arch, openSUSE — derivatives like Omarchy included via `ID_LIKE`)
 - ✅ Detects your GPU (NVIDIA CUDA / AMD / Intel / CPU-only)
 - ✅ Installs all required system packages
 - ✅ Creates Python virtual environment
@@ -116,9 +116,9 @@ Or launch "WhisperRocket" from your application menu.
 
 ## Usage
 
-1. **Start recording**: Press `Alt+S` (or your configured hotkey)
+1. **Start recording**: Press `Ctrl+Shift+S` (or your configured hotkey)
 2. **Speak**: The popup shows an equalizer while recording
-3. **Stop recording**: Press `Alt+S` again
+3. **Stop recording**: Press `Ctrl+Shift+S` again
 4. **Processing**: Watch the rocket animation while Whisper transcribes
 5. **Done**: Text is automatically pasted and shown in the popup
 
@@ -126,16 +126,19 @@ Or launch "WhisperRocket" from your application menu.
 
 | Key | Action |
 |-----|--------|
-| Alt+S | Start/Stop recording |
+| Ctrl+Shift+S | Start/Stop recording |
 | Escape | Cancel recording (discard) |
 
 ### System Tray Colors
 
 | Color | Status |
 |-------|--------|
+| ⚪ Gray | Starting up |
+| 🟠 Orange | Loading the model — or done with a notice (hover the icon for the reason, e.g. AI cleanup was skipped) |
 | 🔵 Blue | Ready |
-| 🔴 Red | Recording |
-| 🟡 Yellow | Processing |
+| 🔴 Red | Recording (also shown on errors) |
+| 🟡 Yellow | Processing your dictation |
+| 🟣 Purple | Processing a dictation that arrived from your phone |
 | 🟢 Green | Done (text copied) |
 
 ### History

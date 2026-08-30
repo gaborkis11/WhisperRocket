@@ -3,7 +3,7 @@
   "model": "large-v3",
   "device": "cuda",
   "compute_type": "float16",
-  "language": "hu",
+  "language": "en",
   "ui_language": "en",
   "sample_rate": 16000,
   "input_device": null,
