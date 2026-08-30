@@ -162,19 +162,47 @@ StartupNotify=false
 X-GNOME-Autostart-enabled=true
 """
                 autostart_file.write_text(desktop_content)
+                self._update_hyprland_autostart(True, str(start_script))
                 return True
             else:
                 if autostart_file.exists():
                     autostart_file.unlink()
+                self._update_hyprland_autostart(False)
                 return True
         except Exception as e:
             print(f"[HIBA] Autostart beállítás sikertelen: {e}")
             return False
 
+    def _update_hyprland_autostart(self, enable: bool, start_script: str = "") -> None:
+        """Hyprland ignores XDG autostart, so on Hyprland sessions we also
+        manage a marked exec-once block in ~/.config/hypr/hyprland.conf."""
+        from .hypr_autostart import (is_hyprland, add_autostart_block,
+                                     remove_autostart_block)
+        if not is_hyprland():
+            return
+        conf = Path.home() / ".config" / "hypr" / "hyprland.conf"
+        if not conf.exists():
+            return
+        try:
+            text = conf.read_text()
+            new_text = (add_autostart_block(text, start_script) if enable
+                        else remove_autostart_block(text))
+            if new_text != text:
+                conf.write_text(new_text)
+        except Exception as e:
+            print(f"[HIBA] Hyprland autostart blokk írása sikertelen: {e}")
+
     def is_autostart_enabled(self) -> bool:
         """Ellenőrzi, hogy az autostart be van-e kapcsolva"""
         autostart_file = Path.home() / ".config" / "autostart" / "whisperrocket.desktop"
-        return autostart_file.exists()
+        if autostart_file.exists():
+            return True
+        from .hypr_autostart import BLOCK_BEGIN
+        conf = Path.home() / ".config" / "hypr" / "hyprland.conf"
+        try:
+            return conf.exists() and BLOCK_BEGIN in conf.read_text()
+        except Exception:
+            return False
 
     def check_permissions(self) -> dict:
         """Linux-on nincsenek speciális engedélyek szükségesek"""
