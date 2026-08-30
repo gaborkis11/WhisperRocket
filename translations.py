@@ -153,6 +153,13 @@ TRANSLATIONS = {
         "cuda_download_failed_retry": "CUDA download failed. Check your network and retry, or continue in CPU mode.",
         "cuda_retry": "Retry CUDA Download",
         "cuda_continue_cpu": "Continue with CPU (slower)",
+        "wizard_syscheck_title": "System Check",
+        "wizard_syscheck_subtitle": "Checking what recording, pasting and hotkeys need on this system:",
+        "wizard_syscheck_recheck": "Re-check",
+        "wizard_syscheck_continue": "Continue",
+        "wizard_syscheck_continue_anyway": "Continue anyway",
+        "wizard_syscheck_warn_note": "Some items are not ready - the hotkey or auto-paste may not work until you fix them (a group change needs logging out and back in).",
+        "wizard_syscheck_all_ok": "Everything is ready!",
 
         # File Transcription
         "tray_file_transcription": "File Transcription",
@@ -498,6 +505,13 @@ TRANSLATIONS = {
         "cuda_download_failed_retry": "A CUDA letöltése sikertelen. Ellenőrizd a hálózatot és próbáld újra, vagy folytasd CPU módban.",
         "cuda_retry": "CUDA letöltés újra",
         "cuda_continue_cpu": "Folytatás CPU-val (lassabb)",
+        "wizard_syscheck_title": "Rendszer-ellenőrzés",
+        "wizard_syscheck_subtitle": "Ellenőrizzük, mi kell ezen a rendszeren a felvételhez, beillesztéshez és gyorsbillentyűhöz:",
+        "wizard_syscheck_recheck": "Újraellenőrzés",
+        "wizard_syscheck_continue": "Folytatás",
+        "wizard_syscheck_continue_anyway": "Folytatás mindenképp",
+        "wizard_syscheck_warn_note": "Néhány elem nem áll készen - a gyorsbillentyű vagy az automatikus beillesztés addig nem működik (csoportváltozáshoz ki- és bejelentkezés kell).",
+        "wizard_syscheck_all_ok": "Minden készen áll!",
 
         # File Transcription
         "tray_file_transcription": "Fájl átírása",

@@ -41,7 +41,7 @@ class NoWheelFilter(QObject):
         return False
 
 
-_STATUS_ICONS = {
+STATUS_ICONS = {
     "ok": ("✓", "#4CAF50"),
     "warn": ("!", "#FF9800"),
     "fail": ("✗", "#F44336"),
@@ -49,7 +49,7 @@ _STATUS_ICONS = {
 }
 
 
-def _make_copy_row(cmd):
+def make_copy_row(cmd):
     """Read-only monospace command field with a copy button (same pattern as
     the wizard's conversion-deps dialog)."""
     row = QHBoxLayout()
@@ -89,7 +89,7 @@ def show_health_dialog(results, lang, parent=None, show_suppress=True):
     for r in results:
         if r.status == "ok":
             continue
-        icon, color = _STATUS_ICONS.get(r.status, _STATUS_ICONS["warn"])
+        icon, color = STATUS_ICONS.get(r.status, STATUS_ICONS["warn"])
         label = QLabel(f'<span style="color: {color}; font-weight: bold;">{icon}</span>  '
                        f'{t(r.label_key, lang)}'
                        + (f'  <span style="color: #888;">— {r.detail}</span>'
@@ -97,7 +97,7 @@ def show_health_dialog(results, lang, parent=None, show_suppress=True):
         label.setWordWrap(True)
         layout.addWidget(label)
         if r.fix_cmd:
-            layout.addLayout(_make_copy_row(r.fix_cmd))
+            layout.addLayout(make_copy_row(r.fix_cmd))
 
     suppress_check = None
     if show_suppress:
