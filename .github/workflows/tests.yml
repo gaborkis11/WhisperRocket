@@ -30,6 +30,9 @@ jobs:
       - name: Translation parity (EN/HU)
         run: python tests/test_translations.py
 
+      - name: Translation keys used in code all exist
+        run: python tests/test_translation_keys_used.py
+
       - name: Installer distro detection (install_lib.sh)
         run: python tests/test_install_lib.py
 
@@ -53,3 +56,6 @@ jobs:
 
       - name: About window update UI smoke (self-skips without PySide6)
         run: python tests/test_about_update_ui.py
+
+      - name: Settings window UI smoke (self-skips without PySide6)
+        run: python tests/test_settings_ui.py
