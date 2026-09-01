@@ -47,6 +47,7 @@ class TranscriptionEngine:
         beam_size: int = 5,
         progress_callback: Optional[Callable] = None,
         segment_callback: Optional[Callable] = None,
+        hotwords: Optional[str] = None,
     ) -> TranscriptionResult:
         """
         Transcribe an audio/video file.
@@ -59,6 +60,8 @@ class TranscriptionEngine:
             beam_size: Beam size for decoding
             progress_callback: Called with (float 0.0-1.0, str status_message)
             segment_callback: Called with each TranscriptionSegment as it's ready
+            hotwords: Vocabulary hint for the recogniser (faster-whisper only;
+                see dictionary_manager.pack_hotwords for the token budget)
         """
         self._cancel_flag = False
         result = TranscriptionResult(
@@ -67,16 +70,17 @@ class TranscriptionEngine:
         )
 
         if self.whisper_backend == "mlx":
+            # mlx_whisper has no hotwords parameter - unchanged behaviour there
             return self._transcribe_mlx(file_path, language, result, progress_callback, segment_callback)
         else:
             return self._transcribe_faster_whisper(
                 file_path, language, vad_enabled, word_timestamps,
-                beam_size, result, progress_callback, segment_callback
+                beam_size, result, progress_callback, segment_callback, hotwords
             )
 
     def _transcribe_faster_whisper(
         self, file_path, language, vad_enabled, word_timestamps,
-        beam_size, result, progress_callback, segment_callback
+        beam_size, result, progress_callback, segment_callback, hotwords=None
     ):
         """Transcribe using faster-whisper backend"""
         # Acquire model lock and consume all segments
@@ -87,6 +91,7 @@ class TranscriptionEngine:
                 beam_size=beam_size,
                 vad_filter=vad_enabled,
                 word_timestamps=word_timestamps,
+                hotwords=hotwords,
             )
             result.duration = info.duration
             raw_segments = list(segments_gen)

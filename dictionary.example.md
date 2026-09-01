@@ -42,3 +42,19 @@ faster-whisper
 #
 # Word boundaries are respected and case and accents are ignored, so
 # "tail scale" matches but "tailscalexyz" does not.
+#
+# ---------------------------------------------------------------------------
+# OPTIONAL: words the recogniser itself hears first
+#
+# The list is also handed to the recogniser while it is still listening
+# (faster-whisper hotwords) - the only point where a name it would otherwise
+# mishear can still be saved. But it takes at most 223 tokens of hints and
+# silently drops the rest: a few dozen words, fewer for long names.
+#
+# Put ! in front of the ones that matter most; they go in first, the others
+# fill what is left in file order. The marker is not part of the spelling.
+#
+#     !Sanyi
+#     !Berkes Annamária
+#
+# The log says what got through: [HOTWORDS] 42/160 words, 222/223 tokens; ...

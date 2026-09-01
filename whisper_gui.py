@@ -137,6 +137,7 @@ class UpdateDownloader(QThread):
 
 from translations import t, TRANSLATIONS
 import history_manager
+import dictionary_manager
 from functools import partial
 
 # Konfiguráció (bundled app-ban user könyvtárba mentjük)
@@ -204,6 +205,9 @@ def load_config():
                                    "segíts megfogalmazni", "jarvis segíts megfogalmazni"],
             "ai_timeout_seconds": 120,
             "ai_dictionary_enabled": True,
+            # The dictionary also goes to the recogniser as hotwords. On by
+            # default; config-only switch in case it ever misbehaves.
+            "hotwords_enabled": True,
             # Phone endpoint - off by default. It opens a network port, so it
             # has to be something the user switches on deliberately.
             "phone_endpoint_enabled": False,
@@ -366,6 +370,7 @@ def save_config_value(key, value):
 config = load_config()
 ui_lang = config.get("ui_language", "en")
 model = None
+hotwords_provider = None  # dictionary_manager.HotwordsProvider, set in load_model()
 recording = False
 audio_data = []
 stream = None
@@ -526,6 +531,7 @@ def open_file_transcription():
             config=config,
             ui_lang=ui_lang,
             model_lock=model_lock,
+            hotwords=current_hotwords,
         )
         file_transcription_window_instance.show()
     else:
@@ -615,7 +621,7 @@ def refresh_history_menu():
 
 # Modell betöltés
 def load_model():
-    global model
+    global model, hotwords_provider
     print("[INFO] Whisper modell betoltese...")
     sys.stdout.flush()
     update_icon('orange', t("tray_loading", ui_lang))
@@ -637,6 +643,12 @@ def load_model():
                 device=config["device"],
                 compute_type=config["compute_type"]
             )
+            # The dictionary as a hint to the recogniser. Counted with the
+            # model's own tokenizer, because faster-whisper cuts hotwords at
+            # 223 tokens without saying so - see dictionary_manager.
+            hf_tokenizer = model.hf_tokenizer
+            hotwords_provider = dictionary_manager.HotwordsProvider(
+                lambda text: len(hf_tokenizer.encode(text, add_special_tokens=False).ids))
         print("[INFO] Modell betoltve!")
         sys.stdout.flush()
         update_icon('blue', t("tray_ready", ui_lang))
@@ -682,6 +694,8 @@ def run_whisper(file_path):
     """
     with model_lock:
         if whisper_backend == "mlx":
+            # mlx_whisper has no hotwords parameter; the dictionary still
+            # reaches the AI layer as before
             import mlx_whisper
             result = mlx_whisper.transcribe(
                 file_path,
@@ -694,8 +708,26 @@ def run_whisper(file_path):
             file_path,
             language=config["language"],
             beam_size=5,
+            hotwords=current_hotwords(),
         )
         return " ".join(segment.text.strip() for segment in segments)
+
+
+def current_hotwords():
+    """
+    The dictionary packed for the recogniser, or None.
+
+    None when switched off in config, when the model is not loaded, or when the
+    dictionary is empty. Never raises: this sits in the dictation path, and a
+    broken dictionary file must cost the hint, not the transcription.
+    """
+    if not config.get("hotwords_enabled", True) or hotwords_provider is None:
+        return None
+    try:
+        return hotwords_provider.current()
+    except Exception as e:
+        print(f"[HOTWORDS] skipped: {e}")
+        return None
 
 
 def ai_reason_label(reason: str) -> str:

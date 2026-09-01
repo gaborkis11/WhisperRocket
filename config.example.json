@@ -20,6 +20,7 @@
   ],
   "ai_timeout_seconds": 120,
   "ai_dictionary_enabled": true,
+  "hotwords_enabled": true,
   "phone_endpoint_enabled": false,
   "phone_endpoint_port": 8771,
   "phone_endpoint_budget_seconds": 20

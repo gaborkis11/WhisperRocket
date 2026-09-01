@@ -132,13 +132,16 @@ class FileTranscriptionWindow(QMainWindow):
     transcription_complete = Signal(object)
     transcription_error = Signal(str)
 
-    def __init__(self, model, whisper_backend, config, ui_lang, model_lock):
+    def __init__(self, model, whisper_backend, config, ui_lang, model_lock, hotwords=None):
         super().__init__()
         self.model = model
         self.whisper_backend = whisper_backend
         self.config = config
         self.ui_lang = ui_lang
         self.model_lock = model_lock
+        # Callable returning the dictionary packed for the recogniser (or None);
+        # called per run so a dictionary edited meanwhile is picked up
+        self._hotwords = hotwords
 
         self.engine = None
         self.result = None
@@ -359,6 +362,7 @@ class FileTranscriptionWindow(QMainWindow):
                 vad_enabled=vad,
                 word_timestamps=False,
                 beam_size=5,
+                hotwords=self._hotwords() if self._hotwords else None,
                 progress_callback=lambda p, s: self.progress_updated.emit(
                     p * (0.80 if do_diarize else 1.0), s
                 ),

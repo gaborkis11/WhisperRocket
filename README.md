@@ -370,6 +370,28 @@ exactly what you spell out, which is why inflected forms need listing. Word boun
 respected and case and accents are ignored, so `tail scale` matches while
 `tailscalexyz` does not.
 
+**The words the recogniser itself hears first.** Everything above works on text, after
+recognition — and a name Whisper has already written down wrong ("Sonny" for "Sanyi")
+cannot be recovered from four letters, because the sound is gone by then. So the list is
+also handed to the recogniser while it is still listening (faster-whisper `hotwords`),
+where it tilts the odds towards words it has been told to expect. Nothing is replaced
+afterwards: a real "Sonny" stays "Sonny".
+
+There is a catch: the recogniser takes at most 223 tokens of hints and silently drops the
+rest — roughly a few dozen words, fewer for long names. Put `!` in front of the ones that
+matter most and they go in first; the others fill what is left, in file order:
+
+```
+!Sanyi
+!Berkes Annamária
+Tailscale
+```
+
+The marker is not part of the spelling — the AI cleanup and the literal corrections see
+the word without it. The log (`/tmp/whisper_stdout.log`) says exactly what got through,
+e.g. `[HOTWORDS] 42/160 words, 222/223 tokens; dropped (118): ...`. To switch the hint
+off without touching the dictionary, set `"hotwords_enabled": false` in `config.json`.
+
 The file lives at `~/.config/whisperrocket/dictionary.md`; see
 [`dictionary.example.md`](dictionary.example.md). A `dictionary.json` written by an
 earlier version is converted automatically on first use.
