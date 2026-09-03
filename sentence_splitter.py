@@ -26,9 +26,15 @@ miután mióta hogyha noha bár habár jóllehet amennyire amennyiben miért mi 
 kik hol mikor hova honnan mennyi mennyire milyen melyik merre meddig
 """.split())
 
-# The second half of "ha ..., akkor ..." / "amikor ..., akkor ..." pairs.
-CORRELATIVE_OPENERS = ("ha ", "hogyha ", "amikor ", "amint ", "mihelyt ", "miután ")
-CORRELATIVE_CLOSERS = frozenset(["akkor", "úgy", "annál", "az", "azt", "arra"])
+# The second half of a correlative pair: "ha ..., akkor ...", "ami ..., az
+# ...", "aki ..., annak ...". Cutting between the halves leaves a fragment
+# ("De ami a legnehezebb volt. Az hogy bementem." - seen 2026-09-03).
+CORRELATIVE_OPENERS = ("ha ", "hogyha ", "amikor ", "amint ", "mihelyt ", "miután ",
+                       "ami ", "amit ", "aki ", "akit ", "amelyik ", "amely ",
+                       "amennyi ", "ahol ", "ahogy ", "amiért ")
+CORRELATIVE_CLOSERS = frozenset(["akkor", "úgy", "annál", "az", "azt", "arra", "annak",
+                                 "abban", "abból", "annyi", "annyit", "ott", "úgy",
+                                 "azért", "attól", "ahhoz", "amiatt"])
 
 _SENTENCE_END = re.compile(r"(?<=[.!?…])\s+")
 _COMMA = re.compile(r",\s+")
@@ -45,6 +51,12 @@ def _splittable(before: str, after: str) -> bool:
     if not nxt or nxt in SUBORDINATORS:
         return False
     if nxt in CORRELATIVE_CLOSERS and any(o in f" {before.lower()}" for o in CORRELATIVE_OPENERS):
+        return False
+    # "..., az hogy ..." / "..., az, hogy ...": the pronoun only introduces the
+    # clause, a sentence cannot start with it
+    after_words = after.split()
+    if nxt in ("az", "azt", "annak", "arra", "abban") and len(after_words) > 1 \
+            and after_words[1].lower().strip(",") == "hogy":
         return False
     # Enumerations and short tails ("backup, restart és update"; "..., oké")
     if len(before.split()) < _MIN_WORDS_EACH_SIDE or len(after.split()) < _MIN_WORDS_EACH_SIDE:

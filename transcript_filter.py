@@ -37,6 +37,10 @@ HALLUCINATION_PHRASES = (
 )
 
 _BRACKETED = re.compile(r"\s*[\[\(\{][^\]\)\}]{0,80}[\]\)\}]")
+# The same word three or more times in a row is the decoder looping, not
+# speech ("azoknak azoknak azoknak ..." eighteen times, 2026-09-03). Twice
+# can be a real stutter or emphasis and is left to the cleanup.
+_REPEAT = re.compile(r"\b(\w+)(?:[ ,]+\1\b){2,}", re.IGNORECASE | re.UNICODE)
 _SENTENCE = re.compile(r"(?<=[.!?…])\s+")
 
 
@@ -62,6 +66,7 @@ def filter_transcript(text: str) -> str:
     if not text:
         return text
     text = _BRACKETED.sub("", text)
+    text = _REPEAT.sub(r"\1", text)
     kept: List[str] = []
     for sentence in _SENTENCE.split(text.strip()):
         if sentence.strip() and not is_hallucination(sentence):

@@ -51,6 +51,13 @@ t = "Szia! [zene] Ez itt a lényeg (nevetés) és kész."
 check("bracketed stage directions are dropped", filter_transcript(t) == "Szia! Ez itt a lényeg és kész.",
       filter_transcript(t))
 
+# repetition loops
+t = "hogy azoknak azoknak azoknak azoknak azoknak azoknak az hogy a lába se éri a földet"
+check("a word repeated three or more times collapses to one",
+      filter_transcript(t) == "hogy azoknak az hogy a lába se éri a földet", filter_transcript(t))
+check("a double word is left for the cleanup", filter_transcript("ezt ezt holnap") == "ezt ezt holnap")
+check("repetition with commas collapses too", filter_transcript("na, na, na, na, jó") == "na, jó")
+
 # untouched ordinary text
 t = "Oké, most éppen látom az ikont. Viszont ha ráklikkelek, hogy megnyíljon, akkor csak felugrik."
 check("ordinary text passes through unchanged", filter_transcript(t) == t)

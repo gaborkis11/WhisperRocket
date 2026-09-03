@@ -59,6 +59,14 @@ corr = "De amúgy meg úgy vagyok arra, hogy ha csináljuk, úgy csináljuk meg,
 check("'ha ..., úgy ...' correlative is not cut", "csináljuk, úgy csináljuk" in split_sentence(corr),
       split_sentence(corr))
 
+ami = ("De ami az igazán legnehezebb volt, az, hogy irodába bementem, és a Magdolnától "
+       "olyan szinten ki vagyok borulva, hogy legszívesebben elzavarnám.")
+out = split_sentence(ami)
+check("'ami ..., az, hogy' correlative is not cut", "legnehezebb volt, az, hogy irodába" in out, out)
+check("the cut happens at 'és' instead", ". És a Magdolnától" in out, out)
+ami2 = "De ami az igazán legnehezebb volt, az hogy irodába bementem, és a Magdolnától olyan szinten ki vagyok borulva, hogy elzavarnám."
+check("'az hogy' without its comma is not cut either", "volt, az hogy irodába" in split_sentence(ami2), split_sentence(ami2))
+
 enum = "Tehát ahol van a beállítások, fájlátírás, előzmények, névjegy, kilépés, oda kéne egy gomb."
 out = split_sentence(enum)
 check("enumeration items are not turned into sentences",
