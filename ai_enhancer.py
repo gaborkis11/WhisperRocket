@@ -577,6 +577,7 @@ def _enhance(raw_text: str, config: Dict, started: float) -> EnhanceResult:
         # first tripped a check, and it only costs time when something did
         # trip. A retry that still fails only softly (words swapped) is
         # accepted anyway - the raw transcript would serve the user worse.
+        print(f"[AI] retry after {verdict.reason}")
         ok2, output2, reason2 = _run_claude(wrapped, system_prompt, model, timeout)
         second = judge(output2) if ok2 else None
         if second is not None and second.ok:
