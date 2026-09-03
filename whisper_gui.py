@@ -206,9 +206,11 @@ def load_config():
                                    "segíts megfogalmazni", "jarvis segíts megfogalmazni"],
             "ai_timeout_seconds": 120,
             "ai_dictionary_enabled": True,
-            # The dictionary also goes to the recogniser as hotwords. On by
-            # default; config-only switch in case it ever misbehaves.
-            "hotwords_enabled": True,
+            # The dictionary can also go to the recogniser as hotwords. Off by
+            # default: the AI layer already resolves misheard terms from the
+            # same list, and the hint costs decoder budget and can echo hint
+            # words on near-silence. Config-only switch for measuring it.
+            "hotwords_enabled": False,
             # Phone endpoint - off by default. It opens a network port, so it
             # has to be something the user switches on deliberately.
             "phone_endpoint_enabled": False,
