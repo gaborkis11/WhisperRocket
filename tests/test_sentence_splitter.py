@@ -50,6 +50,17 @@ check("the comma before 'hogy' stays", ", hogy megnyíljon" in out, out)
 check("a new sentence starts with a capital after the cut",
       ". Viszont" in out or ". És" in out or ". Hanem" in out, out)
 
+frag = ("És most már itthon vagyok, ezért tudok veled beszélni, nem a Jarvison keresztül, "
+        "és van itt ez a személyes fájlod, a személyes fájlok, ugye, az annyi van, hogy oda van beállítva.")
+out = split_sentence(frag)
+check("no cut before a word a sentence cannot open with ('nem', 'a', 'ugye')",
+      ". Nem" not in out and ". A személyes" not in out and ". Ugye" not in out, out)
+check("cuts still happen before 'ezért' and 'és'", ". Ezért" in out and ". És van" in out, out)
+short = "Ezt megnéztem, meg minden ilyen dolgot, mondjuk itt nálam, tehát ennyi volt ma, és kész."
+out = split_sentence(short)
+check("a tail shorter than four words is never made a sentence", ". És kész" not in out, out)
+check("'meg' and 'mondjuk' never open a sentence", ". Meg" not in out and ". Mondjuk" not in out, out)
+
 # --- grammar-owned commas are never cut ---------------------------------------
 sub = "Azt mondta, hogy jön, mert kell neki, ami ott van, aki tudja, ha lehet."
 check("subordinators keep their comma (nothing to cut here)",

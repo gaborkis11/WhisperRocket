@@ -57,6 +57,14 @@ check("a word repeated three or more times collapses to one",
       filter_transcript(t) == "hogy azoknak az hogy a lába se éri a földet", filter_transcript(t))
 check("a double word is left for the cleanup", filter_transcript("ezt ezt holnap") == "ezt ezt holnap")
 check("repetition with commas collapses too", filter_transcript("na, na, na, na, jó") == "na, jó")
+t = ("amik el vannak mentve stílus profil promptok fogalmazómód meg minden ilyen dolgokat "
+     "amik el vannak mentve stílus profil promptok fogalmazómód meg minden ilyen dolgokat "
+     "amik el vannak mentve stílus profil promptok fogalmazómód meg minden ilyen dolgokat azt ugye oda menti")
+check("a phrase looped verbatim collapses to one",
+      filter_transcript(t) == "amik el vannak mentve stílus profil promptok fogalmazómód meg minden ilyen dolgokat azt ugye oda menti",
+      filter_transcript(t))
+check("a two-word phrase said twice is left alone (could be emphasis)",
+      filter_transcript("nagyon jó nagyon jó lett") == "nagyon jó nagyon jó lett")
 
 # untouched ordinary text
 t = "Oké, most éppen látom az ikont. Viszont ha ráklikkelek, hogy megnyíljon, akkor csak felugrik."

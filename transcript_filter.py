@@ -41,6 +41,11 @@ _BRACKETED = re.compile(r"\s*[\[\(\{][^\]\)\}]{0,80}[\]\)\}]")
 # speech ("azoknak azoknak azoknak ..." eighteen times, 2026-09-03). Twice
 # can be a real stutter or emphasis and is left to the cleanup.
 _REPEAT = re.compile(r"\b(\w+)(?:[ ,]+\1\b){2,}", re.IGNORECASE | re.UNICODE)
+# A phrase of three or more words said twice in a row verbatim is the same
+# loop at phrase level ("... stílus profil promptok fogalmazómód meg minden
+# ilyen dolgokat" three times over, 2026-09-03); a person does not repeat
+# six words letter for letter.
+_REPEAT_PHRASE = re.compile(r"\b((?:\w+[ ,]+){2,19}\w+)(?:[ ,]+\1\b)+", re.IGNORECASE | re.UNICODE)
 _SENTENCE = re.compile(r"(?<=[.!?…])\s+")
 
 
@@ -66,6 +71,7 @@ def filter_transcript(text: str) -> str:
     if not text:
         return text
     text = _BRACKETED.sub("", text)
+    text = _REPEAT_PHRASE.sub(r"\1", text)
     text = _REPEAT.sub(r"\1", text)
     kept: List[str] = []
     for sentence in _SENTENCE.split(text.strip()):

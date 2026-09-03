@@ -10,10 +10,10 @@ left 14-15 commas per 100 words (2026-09-03). Punctuation is deterministic,
 so this does it in code, after the guard has accepted the model's text.
 
 Only commas become full stops and the next word gets a capital; no word is
-touched. A comma is left alone when Hungarian grammar owns it: before a
-subordinator ("hogy", "mert", "ha", "aki", "ami", ...), before the second
-half of a correlative pair ("ha ..., akkor ..."), and inside enumerations
-(short items on either side).
+touched. A comma is left alone when grammar owns it - before a subordinator
+("hogy", "mert", "ha", "aki", "ami", ...), between the halves of a
+correlative pair ("ha ..., akkor ...") - when the next word cannot open a
+sentence ("nem", "a", "meg", "ugye", ...), and inside an enumeration.
 """
 import re
 from typing import List
@@ -36,9 +36,21 @@ CORRELATIVE_CLOSERS = frozenset(["akkor", "úgy", "annál", "az", "azt", "arra",
                                  "abban", "abból", "annyi", "annyit", "ott", "úgy",
                                  "azért", "attól", "ahhoz", "amiatt"])
 
+# Words a sentence does not open with: an article, a negation, a particle.
+# Cutting in front of them produced fragments - "Nem a Jarvison keresztül.",
+# "Meg minden ilyen dolgot.", "Mondjuk itt nálam." (2026-09-03). A whitelist
+# of conjunctions instead was measured at 12.7 commas per 100 words against
+# 10.9 for this rule, so the blacklist stays.
+NEVER_OPENS = frozenset("""
+a az egy nem ne sem se is csak meg még már ugye mondjuk persze talán szinte
+épp éppen pont olyan ilyen annyira elég nagyon például vagy hát na
+""".split())
+
 _SENTENCE_END = re.compile(r"(?<=[.!?…])\s+")
 _COMMA = re.compile(r",\s+")
-_MIN_WORDS_EACH_SIDE = 3
+_MIN_WORDS_BEFORE = 3
+_MIN_WORDS_AFTER = 3        # a shorter clause is an enumeration item
+_MIN_WORDS_REMAINING = 4    # a shorter rest is a tail, not a sentence
 
 
 def _first_word(segment: str) -> str:
@@ -46,9 +58,13 @@ def _first_word(segment: str) -> str:
     return words[0].lower().strip("\"„”«»'‘’(") if words else ""
 
 
-def _splittable(before: str, after: str) -> bool:
+def _splittable(before: str, after: str, remaining: str) -> bool:
+    """
+    Whether the comma between `before` and `after` may become a full stop.
+    `after` is the next clause, `remaining` the whole rest of the sentence.
+    """
     nxt = _first_word(after)
-    if not nxt or nxt in SUBORDINATORS:
+    if not nxt or nxt in SUBORDINATORS or nxt in NEVER_OPENS:
         return False
     if nxt in CORRELATIVE_CLOSERS and any(o in f" {before.lower()}" for o in CORRELATIVE_OPENERS):
         return False
@@ -58,8 +74,9 @@ def _splittable(before: str, after: str) -> bool:
     if nxt in ("az", "azt", "annak", "arra", "abban") and len(after_words) > 1 \
             and after_words[1].lower().strip(",") == "hogy":
         return False
-    # Enumerations and short tails ("backup, restart és update"; "..., oké")
-    if len(before.split()) < _MIN_WORDS_EACH_SIDE or len(after.split()) < _MIN_WORDS_EACH_SIDE:
+    # Enumerations and short tails ("backup, restart és update"; "..., és kész")
+    if len(before.split()) < _MIN_WORDS_BEFORE or len(after.split()) < _MIN_WORDS_AFTER \
+            or len(remaining.split()) < _MIN_WORDS_REMAINING:
         return False
     return True
 
@@ -79,11 +96,12 @@ def split_sentence(sentence: str, max_commas: int = 2) -> str:
     if len(pieces) < 2:
         return sentence
     out: List[str] = [pieces[0]]
-    for piece in pieces[1:]:
+    for index, piece in enumerate(pieces[1:], start=1):
         current = out[-1]
+        remaining = ", ".join(pieces[index:])
         # Split whenever it is allowed: fewer commas per sentence is the
         # point, and a comma-free sentence is what the speaker writes himself
-        if _splittable(current, piece):
+        if _splittable(current, piece, remaining):
             out[-1] = current.rstrip() + "."
             out.append(_capitalise(piece))
         else:
