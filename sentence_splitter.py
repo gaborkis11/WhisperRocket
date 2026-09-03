@@ -22,14 +22,15 @@ from typing import List
 SUBORDINATORS = frozenset("""
 hogy mert ha aki akik akit akinek ami amik amit aminek amely amelyek amelyet
 ahol ahova ahonnan amikor amíg amint ahogy ahogyan mint mivel hiszen mielőtt
-miután mióta hogyha noha bár habár jóllehet amennyire amennyiben miért mi ki
-kik hol mikor hova honnan mennyi mennyire milyen melyik merre meddig
+miután mióta miközben mialatt míg hogyha noha bár habár jóllehet amennyire
+amennyiben miért mi ki kik hol mikor hova honnan mennyi mennyire milyen melyik
+merre meddig
 """.split())
 
 # The second half of a correlative pair: "ha ..., akkor ...", "ami ..., az
 # ...", "aki ..., annak ...". Cutting between the halves leaves a fragment
 # ("De ami a legnehezebb volt. Az hogy bementem." - seen 2026-09-03).
-CORRELATIVE_OPENERS = ("ha ", "hogyha ", "amikor ", "amint ", "mihelyt ", "miután ",
+CORRELATIVE_OPENERS = ("ha ", "hogyha ", "amikor ", "amint ", "mihelyt ", "miután ", "miközben ",
                        "ami ", "amit ", "aki ", "akit ", "amelyik ", "amely ",
                        "amennyi ", "ahol ", "ahogy ", "amiért ")
 CORRELATIVE_CLOSERS = frozenset(["akkor", "úgy", "annál", "az", "azt", "arra", "annak",

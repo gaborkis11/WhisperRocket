@@ -78,6 +78,11 @@ check("the cut happens at 'és' instead", ". És a Magdolnától" in out, out)
 ami2 = "De ami az igazán legnehezebb volt, az hogy irodába bementem, és a Magdolnától olyan szinten ki vagyok borulva, hogy elzavarnám."
 check("'az hogy' without its comma is not cut either", "volt, az hogy irodába" in split_sentence(ami2), split_sentence(ami2))
 
+kozben = "Azért, e közben, miközben a tesztelést is nézed, akkor válaszolj a kérdésemre is, mert ezek reális kérdések."
+out = split_sentence(kozben)
+check("'miközben' is a subordinator, no cut in front of it", ". Miközben" not in out, out)
+check("'miközben ..., akkor' is a pair, no cut in front of 'akkor'", ". Akkor" not in out, out)
+
 enum = "Tehát ahol van a beállítások, fájlátírás, előzmények, névjegy, kilépés, oda kéne egy gomb."
 out = split_sentence(enum)
 check("enumeration items are not turned into sentences",
