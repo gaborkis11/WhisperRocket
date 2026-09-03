@@ -54,6 +54,9 @@ jobs:
       - name: Transcript filter (silence hallucinations)
         run: python tests/test_transcript_filter.py
 
+      - name: Popup phase row (stdlib part; Qt/GTK parts self-skip)
+        run: python tests/test_popup_phase.py
+
       - name: Hyprland autostart block management
         run: python tests/test_hypr_autostart.py
 

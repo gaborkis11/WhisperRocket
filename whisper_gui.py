@@ -140,6 +140,7 @@ from translations import t, TRANSLATIONS
 import history_manager
 import dictionary_manager
 import transcript_filter
+import popup_phases
 from functools import partial
 
 # Konfiguráció (bundled app-ban user könyvtárba mentjük)
@@ -847,7 +848,11 @@ def process_audio(audio_copy):
         elapsed = time.time() - start_time
 
         # AI enhancement. The processing popup started in stop_recording() is
-        # still up, so it covers this step too - no new popup state needed.
+        # still up; it now says which phase runs, so the user can tell the
+        # local model's seconds from the AI's. Only when the model is actually
+        # called - dictionary-only fixes are instant and stay "local".
+        if current_ai_config().get("ai_enhance_enabled"):
+            show_processing_phase(popup_phases.PHASE_AI)
         ai_result = apply_ai_enhancement(text)
         if ai_result is not None:
             text = ai_result.text
@@ -1152,6 +1157,12 @@ def show_text_popup(text: str):
     global popup_window
     if popup_window:
         popup_window.request_show_text.emit(text)
+
+def show_processing_phase(phase: str):
+    """Tell the processing popup which phase runs now (thread-safe, non-blocking)"""
+    global popup_window
+    if popup_window:
+        popup_window.request_show_phase.emit(phase)
 
 def show_processing_popup():
     """Processing állapot megjelenítése (thread-safe)"""

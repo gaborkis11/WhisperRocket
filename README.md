@@ -280,6 +280,14 @@ prompt could not do them:
   "mert" or "ha", never splitting a "ha …, akkor" pair, never opening a sentence with an
   article or a particle. Only punctuation changes, never a word.
 
+#### The popup tells you which half you are waiting for
+
+While the rocket flies, a small row under it says what is happening: **Local
+transcription** while Whisper works on the audio, then **AI cleanup** from the moment
+the model is called. The icon and colour change with it — sound bars in blue, a sparkle
+in gold — and so do the jokes. Whatever the AI does, the popup ends the way it always
+did: the text appears, or the plain transcript does.
+
 #### Nothing is ever lost
 
 Every failure path — CLI missing, not signed in, usage limit reached, timeout, no
@@ -924,6 +932,10 @@ The uninstaller offers three options:
 - **Settings explain themselves.** Personal files, effort, compose mode, style profile,
   prompts and dictionary each say what they are for, when they are used and where the
   file lives.
+- **The popup says which phase is running.** Under the rocket a small row switches from
+  *Local transcription* (sound-bar icon, blue) to *AI cleanup* (sparkle icon, gold) the
+  moment the model is called, and the jokes switch subject with it. Same window size,
+  same rocket, same ending as before. The phone path's purple tray icon is unchanged.
 - The swear-word check matches at word start, so "sushit" no longer trips it.
 - New stdlib tests for the dictionary and hotwords, prompt rules, guard, splitter and
   filter — all in CI.
