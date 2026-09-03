@@ -63,6 +63,14 @@ t = ("amik el vannak mentve stílus profil promptok fogalmazómód meg minden il
 check("a phrase looped verbatim collapses to one",
       filter_transcript(t) == "amik el vannak mentve stílus profil promptok fogalmazómód meg minden ilyen dolgokat azt ugye oda menti",
       filter_transcript(t))
+t = ("hogy ezt a szótárt is meg kellene nézni meg kellene nézni meg kellene nézni "
+     "meg kellene nézni meg kellene nézni meg kellene ez csak úgy szintén")
+check("a short phrase looped five times collapses to one, even with a partial tail",
+      filter_transcript(t) == "hogy ezt a szótárt is meg kellene nézni meg kellene ez csak úgy szintén",
+      filter_transcript(t))
+t = "na jó tehát na jó tehát na jó tehát akkor na jó tehát na jó tehát na jó tehát akkor mehet"
+check("nested loops collapse all the way",
+      filter_transcript(t) == "na jó tehát akkor mehet", filter_transcript(t))
 check("a two-word phrase said twice is left alone (could be emphasis)",
       filter_transcript("nagyon jó nagyon jó lett") == "nagyon jó nagyon jó lett")
 
