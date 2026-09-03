@@ -42,6 +42,7 @@ from typing import Dict, Optional, Tuple
 import ai_guard
 import claude_cli
 import dictionary_manager
+import sentence_splitter
 
 STYLE_PROFILE_FILENAME = "style_profile.md"
 PROMPT_FILENAMES = {
@@ -563,7 +564,12 @@ def _enhance(raw_text: str, config: Dict, started: float) -> EnhanceResult:
     if not verdict.ok:
         return failure("guard:" + verdict.reason)
 
-    return EnhanceResult(verdict.text, True, mode, "",
+    # Comma-heavy sentences are cut in code, after the guard has accepted
+    # the words: the model does not hold the two-comma rule at low effort
+    # however it is asked (see sentence_splitter), and this step changes
+    # punctuation only.
+    text = sentence_splitter.split_long_sentences(verdict.text)
+    return EnhanceResult(text, True, mode, "",
                          time.time() - started, hits, raw_text)
 
 

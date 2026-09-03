@@ -148,6 +148,29 @@ def found_profanity(text: str) -> Set[str]:
     return {stem for stem in PROFANITY_STEMS if stem in normalized}
 
 
+# Verbal prefixes a swear word can carry: "kibaszott", "lebasz", "elkurv".
+_VERBAL_PREFIXES: Sequence[str] = (
+    "ki", "be", "le", "fel", "meg", "el", "at", "szet", "ossze", "ra", "oda",
+    "vissza", "hozza", "agyon",
+)
+
+
+def _has_stem(words: List[str], stem: str) -> bool:
+    """
+    Whether a stem starts one of these words, on its own or after a verbal
+    prefix. A plain substring test rejected a good cleanup because "sushit"
+    contains "shit" (2026-09-03) - the one direction where a false positive
+    throws away correct output must not match inside unrelated words.
+    """
+    for word in words:
+        if word.startswith(stem):
+            return True
+        for prefix in _VERBAL_PREFIXES:
+            if word.startswith(prefix) and word[len(prefix):].startswith(stem):
+                return True
+    return False
+
+
 def content_words(text: str, min_length: int = 5) -> Set[str]:
     """
     Content words as 5-character stems, so Hungarian suffixes don't cause false
@@ -210,8 +233,11 @@ def check(raw_text: str, model_text: str, mode: str = "transcript",
     if softened:
         failures.append("profanity_softened(" + ",".join(sorted(softened)) + ")")
 
-    # Addition: core list only, because a false positive here rejects good output
-    added = {s for s in CORE_PROFANITY_STEMS if s in out_norm and s not in raw_norm}
+    # Addition: core list only and matched at word start, because a false
+    # positive here rejects good output
+    raw_w, out_w = _words(raw_norm), _words(out_norm)
+    added = {s for s in CORE_PROFANITY_STEMS
+             if _has_stem(out_w, s) and not _has_stem(raw_w, s)}
     if added:
         failures.append("profanity_added(" + ",".join(sorted(added)) + ")")
 
