@@ -103,7 +103,8 @@ def main():
     def run(path, hw):
         t = time.time()
         segments, _ = model.transcribe(path, language=language, beam_size=args.beam,
-                                       hotwords=hw, vad_filter=args.vad)
+                                       vad_filter=args.vad,
+                                       **dictionary_manager.hotwords_options(hw))
         text = " ".join(s.text.strip() for s in segments)
         return text, time.time() - t
 

@@ -6,6 +6,7 @@ import shutil
 import tempfile
 import time
 import threading
+import traceback
 from queue import Queue
 
 import system_check
@@ -708,7 +709,7 @@ def run_whisper(file_path):
             file_path,
             language=config["language"],
             beam_size=5,
-            hotwords=current_hotwords(),
+            **dictionary_manager.hotwords_options(current_hotwords()),
         )
         return " ".join(segment.text.strip() for segment in segments)
 
@@ -816,6 +817,7 @@ def process_audio(audio_copy):
     # Claimed for the whole run so a phone dictation arriving mid-way cannot
     # repaint the tray out from under the one happening at the desk.
     local_busy = True
+    temp_file = None
 
     try:
         # Audio concatenation
@@ -874,9 +876,6 @@ def process_audio(audio_copy):
         print("="*60)
         print(">>> CLIPBOARD: Press Ctrl+V to paste! <<<")
         print("="*60 + "\n")
-        
-        # Temp fájl törlés
-        os.unlink(temp_file.name)
 
         # History mentés
         if text.strip():
@@ -907,6 +906,7 @@ def process_audio(audio_copy):
     except Exception as e:
         print("\n" + "="*60)
         print(f"[HIBA] {e}")
+        traceback.print_exc()
         print("="*60 + "\n")
 
         update_icon('red', t("tray_error", ui_lang))
@@ -916,6 +916,13 @@ def process_audio(audio_copy):
 
     finally:
         local_busy = False
+        # The recording must not outlive this run either way - a failed
+        # transcription used to leave the WAV behind in /tmp
+        if temp_file is not None:
+            try:
+                os.unlink(temp_file.name)
+            except OSError:
+                pass
 
 
 # --- Phone endpoint -------------------------------------------------------

@@ -39,6 +39,9 @@ jobs:
       - name: Environment health checks (system_check.py)
         run: python tests/test_system_check.py
 
+      - name: Dictionary hotwords
+        run: python tests/test_dictionary_hotwords.py
+
       - name: Hyprland autostart block management
         run: python tests/test_hypr_autostart.py
 

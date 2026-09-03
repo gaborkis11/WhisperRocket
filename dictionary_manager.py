@@ -50,12 +50,27 @@ MAX_VOCABULARY = 300
 # "!" in front of a word: it goes to the recogniser first (see pack_hotwords)
 PRIORITY_MARKER = "!"
 
-# faster-whisper hands hotwords to the model as decoder context and cuts them
-# at max_length // 2 - 1 = 223 tokens without a warning (TranscriptionModel
-# .get_prompt). Measured on a real 160-word Hungarian list: 825 tokens, so
-# two thirds would vanish - always the same two thirds, the end of the file.
-# We pack to this budget ourselves and say what was left out.
-HOTWORDS_TOKEN_BUDGET = 448 // 2 - 1
+# faster-whisper hands hotwords to the model as decoder context. The prompt
+# and the text the decoder generates share one hard limit, max_length = 448
+# tokens per 30 s window, and the library cuts hotwords at max_length // 2 - 1
+# = 223 tokens without a warning (TranscriptionModel.get_prompt). Measured on
+# a real 160-word Hungarian list: 825 tokens, so two thirds would vanish -
+# always the same two thirds, the end of the file. We pack to our own budget
+# and say what was left out.
+#
+# The budget is what remains of max_length after the prompt framing and the
+# room one window of speech needs. A hint filling the library's 223 left only
+# 221 tokens for the text - and none at all once the previous window's text
+# joined the prompt as well; see hotwords_options().
+WHISPER_MAX_LENGTH = 448
+# sot_prev in front of the hint, the three-token sot sequence after it
+HOTWORDS_PROMPT_OVERHEAD = 4
+# Tokens one 30 s window of speech may need, timestamps included. Fast
+# Hungarian dictation measured at 179 in a window (a real 70 s recording,
+# 2026-09-03; about 15 characters a second). A window the decoder cannot
+# finish loses its tail mid-word, so the reserve stays well above that.
+HOTWORDS_DECODE_ROOM = 294
+HOTWORDS_TOKEN_BUDGET = WHISPER_MAX_LENGTH - HOTWORDS_PROMPT_OVERHEAD - HOTWORDS_DECODE_ROOM
 
 def get_dictionary_path() -> Path:
     """Path to the user's vocabulary (never inside the project directory)"""
@@ -302,6 +317,24 @@ def pack_hotwords(words: List[str], count_tokens: Callable[[str], int],
         else:
             pack.dropped.append(word)
     return pack
+
+
+def hotwords_options(hotwords: Optional[str]) -> Dict[str, object]:
+    """
+    Keyword arguments for model.transcribe() that carry the hint.
+
+    With a hint, the previous window's text is kept out of the decoder prompt.
+    faster-whisper puts both there - sot_prev + hotwords + previous text +
+    sot_sequence - against the same 448-token max_length, trimming each to 223
+    on its own, so with a full hint the prompt alone passed the limit from the
+    fourth 30 s window and generate() failed with "The maximum decoding length
+    must be > 0"; from the second window only a few dozen tokens were left for
+    the text, which then ended mid-word. Every dictation over a minute was lost
+    that way (2026-09-02/03). Without a hint the library defaults stand.
+    """
+    if not hotwords:
+        return {"hotwords": None}
+    return {"hotwords": hotwords, "condition_on_previous_text": False}
 
 
 class HotwordsProvider:

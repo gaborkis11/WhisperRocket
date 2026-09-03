@@ -9,6 +9,8 @@ import threading
 from dataclasses import dataclass, field
 from typing import List, Optional, Callable
 
+import dictionary_manager
+
 
 @dataclass
 class TranscriptionSegment:
@@ -91,7 +93,7 @@ class TranscriptionEngine:
                 beam_size=beam_size,
                 vad_filter=vad_enabled,
                 word_timestamps=word_timestamps,
-                hotwords=hotwords,
+                **dictionary_manager.hotwords_options(hotwords),
             )
             result.duration = info.duration
             raw_segments = list(segments_gen)

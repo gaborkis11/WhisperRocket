@@ -116,7 +116,6 @@ check("the counter sees exactly what faster-whisper encodes (leading space, stri
       seen and all(s.startswith(" ") and not s.startswith("  ") for s in seen)
       and pack.text == "Sanyi, Tomi", str(seen))
 
-check("default budget is the library's silent cut-off (448 // 2 - 1)", dm.HOTWORDS_TOKEN_BUDGET == 223)
 
 # --- HotwordsProvider: reload, repack only on change, log the drop ------------
 
@@ -161,6 +160,37 @@ check("transcribe_file passes hotwords through to model.transcribe",
 engine.transcribe_file("x.wav", "hu")
 check("without hotwords the model gets None (library default)",
       calls[-1].get("hotwords") is None, str(calls[-1]))
+
+# --- Decode options: the hint must not starve the decoder --------------------
+#
+# faster-whisper builds the decoder prompt as sot_prev + hotwords (<= 223) +
+# the previous window's text (<= 223, condition_on_previous_text is on by
+# default) + sot_sequence (3), against a hard max_length of 448. With a full
+# hint that prompt reaches 449 from the fourth 30 s window and generate()
+# raises "The maximum decoding length must be > 0"; from the second window
+# only a few dozen tokens are left and the text ends mid-word. Seen on real
+# 70-93 s dictations on 2026-09-02/03 - every one of them was lost.
+
+opts = dm.hotwords_options("Sanyi, Tomi")
+check("with a hint, the previous window's text stays out of the prompt",
+      opts == {"hotwords": "Sanyi, Tomi", "condition_on_previous_text": False}, str(opts))
+check("without a hint the library defaults are untouched",
+      dm.hotwords_options(None) == {"hotwords": None}, str(dm.hotwords_options(None)))
+check("an empty hint counts as no hint",
+      dm.hotwords_options("") == {"hotwords": None}, str(dm.hotwords_options("")))
+
+room = dm.WHISPER_MAX_LENGTH - dm.HOTWORDS_PROMPT_OVERHEAD - dm.HOTWORDS_TOKEN_BUDGET
+check("a full hint leaves the decoder more than half of max_length for one window",
+      room > dm.WHISPER_MAX_LENGTH // 2, f"room={room}")
+check("the budget stays under the library's silent cut-off",
+      dm.HOTWORDS_TOKEN_BUDGET < 448 // 2 - 1, str(dm.HOTWORDS_TOKEN_BUDGET))
+
+engine.transcribe_file("x.wav", "hu", hotwords="Sanyi, Tomi")
+check("transcribe_file keeps the previous window out of the prompt when there is a hint",
+      calls[-1].get("condition_on_previous_text") is False, str(calls[-1]))
+engine.transcribe_file("x.wav", "hu")
+check("transcribe_file leaves condition_on_previous_text alone without a hint",
+      "condition_on_previous_text" not in calls[-1], str(calls[-1]))
 
 print(f"\n{passed} passed, {failed} failed")
 sys.exit(1 if failed else 0)
