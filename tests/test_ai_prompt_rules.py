@@ -7,9 +7,9 @@ description, and a description loses every conflict with the imperative rules
 of prompt_transcript.md: the model kept the comma after "Szia", left "hat ora
 tizenotkor" in words and deleted "hat" as filler - each one a rule the profile
 stated (2026-09-01/03). So the rules that decide those cases live in the
-prompt itself, the profile section is worded as instructions, and the CLI is
-called at the default effort, where the model kept word order and rhythm words
-that it dropped at "low".
+prompt itself, the profile section is worded as instructions, and the CLI
+stays at low effort: at the default the model thinks adaptively (4749 thinking
+tokens, 54 s on a 44-word message) and the phone budget cuts it off.
 
 Standard library only, never touches ~/.config/whisperrocket/.
 
@@ -78,7 +78,7 @@ check("build_prompt: rules, then profile, then vocabulary",
       full.index("RULES Hungarian") < full.index("STYLE RULES") < full.index("PROFILE-TEXT")
       < full.index("VOCABULARY") < full.index("- Sanyi"), full)
 
-# --- the CLI runs at the default effort --------------------------------------
+# --- the CLI runs at low effort: no adaptive thinking ------------------------
 captured = {}
 
 
@@ -92,8 +92,9 @@ ai_enhancer.claude_cli.find_binary = lambda: "/usr/bin/true"
 ai_enhancer.subprocess.run = fake_run
 ok, out, reason = ai_enhancer._run_claude("text", "system", "sonnet", 10)
 check("_run_claude succeeds through the fake CLI", ok and out == "ok", f"{ok} {out!r} {reason!r}")
-check("no --effort flag: the default effort is used",
-      "--effort" not in captured.get("cmd", []), str(captured.get("cmd")))
+cmd = captured.get("cmd", [])
+check("--effort low: the default effort thinks for tens of seconds on ordinary input",
+      "--effort" in cmd and cmd[cmd.index("--effort") + 1] == "low", str(cmd))
 check("still isolated: --safe-mode and --no-session-persistence",
       "--safe-mode" in captured["cmd"] and "--no-session-persistence" in captured["cmd"])
 

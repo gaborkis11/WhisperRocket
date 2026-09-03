@@ -440,12 +440,14 @@ def _run_claude(text: str, system_prompt: str, model: str,
         "--model", model,
         "--safe-mode",
         "--no-session-persistence",
-        # Default effort on purpose. "low" was measured once as a second
-        # faster with identical output; on the rules that matter it is not:
-        # at low the model reordered words ("figyelj bazdmeg" -> "Bazdmeg,
-        # figyelj") and dropped rhythm words the profile says to keep, at the
-        # default it did neither - at the same 3-4 s (2026-09-03, two inputs,
-        # two runs each).
+        # "low" is load-bearing, not an optimisation. Without it the model
+        # thinks adaptively, and on an ordinary 44-word message that was 4749
+        # thinking tokens and 54 s - past the phone budget, so the raw
+        # transcript went out (2026-09-03, four dictations in a row). At low
+        # and medium the same input had zero thinking tokens and took 4-5 s;
+        # medium changed a word more than low did. Measure thinking_tokens in
+        # the JSON before touching this again, not just wall time on two runs.
+        "--effort", "low",
         "--system-prompt", system_prompt,
         "--output-format", "json",
     ]
