@@ -86,6 +86,18 @@ def main():
           repr(label0))
 
     win.close()
+    # --- AI effort selector ----------------------------------------------------
+    combo = getattr(win, "ai_effort_combo", None)
+    check("AI tab has an effort selector", combo is not None)
+    if combo is not None:
+        levels = [combo.itemData(i) for i in range(combo.count())]
+        check("effort levels are the CLI's five, low first",
+              levels == ["low", "medium", "high", "xhigh", "max"], str(levels))
+        check("effort defaults to low", combo.currentData() == "low", str(combo.currentData()))
+        win.collect_ai_settings()
+        check("collect_ai_settings writes ai_effort", win.config.get("ai_effort") == "low",
+              str(win.config.get("ai_effort")))
+
     print(f"\n{passed} passed, {failed} failed")
     return 1 if failed else 0
 

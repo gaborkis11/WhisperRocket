@@ -96,8 +96,13 @@ ai_enhancer.subprocess.run = fake_run
 ok, out, reason = ai_enhancer._run_claude("text", "system", "sonnet", 10)
 check("_run_claude succeeds through the fake CLI", ok and out == "ok", f"{ok} {out!r} {reason!r}")
 cmd = captured.get("cmd", [])
-check("--effort low: the default effort thinks for tens of seconds on ordinary input",
+check("--effort low by default: the CLI's own default thinks for tens of seconds",
       "--effort" in cmd and cmd[cmd.index("--effort") + 1] == "low", str(cmd))
+check("effort_for: default is low", ai_enhancer.effort_for({}) == "low")
+check("effort_for: a configured level is used", ai_enhancer.effort_for({"ai_effort": "medium"}) == "medium")
+check("effort_for: an unknown value falls back to low", ai_enhancer.effort_for({"ai_effort": "turbo"}) == "low")
+ai_enhancer._run_claude("text", "system", "sonnet", 10, "medium")
+check("_run_claude passes the given effort", captured["cmd"][captured["cmd"].index("--effort") + 1] == "medium")
 check("still isolated: --safe-mode and --no-session-persistence",
       "--safe-mode" in captured["cmd"] and "--no-session-persistence" in captured["cmd"])
 

@@ -203,6 +203,7 @@ def load_config():
             # exactly as it did before the feature existed
             "ai_enhance_enabled": False,
             "ai_model": "sonnet",
+            "ai_effort": "low",
             "ai_trigger_phrases": ["fogalmazzuk meg hogy", "fogalmazd meg hogy",
                                    "segíts megfogalmazni", "jarvis segíts megfogalmazni"],
             "ai_timeout_seconds": 120,

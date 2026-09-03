@@ -417,8 +417,22 @@ def _classify_failure(text: str, returncode: int) -> str:
     return f"cli_error({returncode})"
 
 
+# Effort levels the claude CLI accepts, in the order the Settings shows them.
+# Dictation cleanup wants the lowest: at "low" and "medium" the model answers
+# in 4-5 s with no thinking; from the default upwards it thinks adaptively,
+# and one ordinary 44-word message took 54 s that way (2026-09-03).
+EFFORT_LEVELS = ("low", "medium", "high", "xhigh", "max")
+DEFAULT_EFFORT = "low"
+
+
+def effort_for(config: Dict) -> str:
+    """The configured effort level, or the default when the value is unknown"""
+    value = str(config.get("ai_effort") or "").strip().lower()
+    return value if value in EFFORT_LEVELS else DEFAULT_EFFORT
+
+
 def _run_claude(text: str, system_prompt: str, model: str,
-                timeout: int) -> Tuple[bool, str, str]:
+                timeout: int, effort: str = DEFAULT_EFFORT) -> Tuple[bool, str, str]:
     """
     One standalone Claude Code call.
 
@@ -444,14 +458,12 @@ def _run_claude(text: str, system_prompt: str, model: str,
         "--model", model,
         "--safe-mode",
         "--no-session-persistence",
-        # "low" is load-bearing, not an optimisation. Without it the model
-        # thinks adaptively, and on an ordinary 44-word message that was 4749
-        # thinking tokens and 54 s - past the phone budget, so the raw
-        # transcript went out (2026-09-03, four dictations in a row). At low
-        # and medium the same input had zero thinking tokens and took 4-5 s;
-        # medium changed a word more than low did. Measure thinking_tokens in
-        # the JSON before touching this again, not just wall time on two runs.
-        "--effort", "low",
+        # Always passed: without it the model thinks adaptively, and on an
+        # ordinary 44-word message that was 4749 thinking tokens and 54 s -
+        # past the phone budget, so the raw transcript went out (2026-09-03,
+        # four dictations in a row). Measure thinking_tokens in the JSON
+        # before changing the default, not just wall time on two runs.
+        "--effort", effort,
         "--system-prompt", system_prompt,
         "--output-format", "json",
     ]
@@ -560,7 +572,8 @@ def _enhance(raw_text: str, config: Dict, started: float) -> EnhanceResult:
     # that it is data - every dictation tool with a public prompt does this
     wrapped = f"<TRANSCRIPT>\n{payload}\n</TRANSCRIPT>"
 
-    ok, output, reason = _run_claude(wrapped, system_prompt, model, timeout)
+    effort = effort_for(config)
+    ok, output, reason = _run_claude(wrapped, system_prompt, model, timeout, effort)
     if not ok:
         return failure(reason)
 
@@ -578,7 +591,7 @@ def _enhance(raw_text: str, config: Dict, started: float) -> EnhanceResult:
         # trip. A retry that still fails only softly (words swapped) is
         # accepted anyway - the raw transcript would serve the user worse.
         print(f"[AI] retry after {verdict.reason}")
-        ok2, output2, reason2 = _run_claude(wrapped, system_prompt, model, timeout)
+        ok2, output2, reason2 = _run_claude(wrapped, system_prompt, model, timeout, effort)
         second = judge(output2) if ok2 else None
         if second is not None and second.ok:
             verdict = second
