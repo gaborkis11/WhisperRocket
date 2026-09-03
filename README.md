@@ -259,6 +259,27 @@ who is speaking and who is being addressed, summarising instead of tidying, inve
 sentence, or answering with commentary rather than the message. Every one of those was
 observed in testing before the check existed.
 
+#### The output is checked, and sentences are kept short
+
+The model's answer is not trusted on its own. Before it reaches your clipboard it must
+pass a guard that compares it with what you said: nothing softened or added in the
+swearing, no content you never said (a reply instead of a transcript scores far above
+the ceiling), no web address, e-mail or long number lost, no sentences rearranged. A
+failed check gets one retry; if that fails too, you get the plain transcript and the
+tray icon turns orange with the reason.
+
+Two more things happen in code rather than in the model, because measurement showed the
+prompt could not do them:
+
+- **Silence and loops are filtered before the AI.** Whisper writes subtitle credits on
+  silence ("Feliratot készítette…") and sometimes loops a word or a phrase; both are
+  dropped before anything downstream can paste them, with or without AI cleanup.
+- **No sentence has more than two commas.** Hungarian dictation came back at 14.7 commas
+  per 100 words whatever the prompt said, while grammar itself owns about 6. Sentences
+  with more than two are cut at the commas grammar does not own — never before "hogy",
+  "mert" or "ha", never splitting a "ha …, akkor" pair, never opening a sentence with an
+  article or a particle. Only punctuation changes, never a word.
+
 #### Nothing is ever lost
 
 Every failure path — CLI missing, not signed in, usage limit reached, timeout, no
@@ -273,7 +294,10 @@ Everything happens in **Settings → AI**; you never need a terminal.
    [official installer](https://code.claude.com/docs/en/setup). It shows the exact
    command and asks first.
 2. **Sign in** — opens Anthropic's own browser sign-in flow.
-3. **Enable AI cleanup** — and optionally pick a model (Sonnet by default).
+3. **Enable AI cleanup** — and optionally pick a model (Sonnet by default). Leave
+   **Effort** at *low*: cleaning a transcript is mechanical, and at low the answer comes
+   back in 4–5 seconds. From *high* upwards the model thinks for tens of seconds on an
+   ordinary message, and the phone budget cuts it off.
 
 Requires a Claude Pro, Max, Team or Enterprise plan. Usage counts against that plan's
 limits, shared with everything else you do with Claude. A dictation costs roughly 700
@@ -306,6 +330,22 @@ copy that ends up in the project directory during development.
 
 Settings → AI shows the path with an **Open folder** button. To move your setup to
 another machine, copy that one folder.
+
+#### The prompts are yours to edit
+
+Settings → AI → Prompts shows the two instruction texts the cleanup works from — one
+for transcript mode, one for compose mode. **Edit** opens your own copy
+(`~/.config/whisperrocket/prompt_transcript.md` and `prompt_compose.md`), **Reset**
+returns to the built-in text. Your style profile and your dictionary are appended
+automatically on every call, so they do not belong in the prompt. Worth changing: a
+rule, an example, a filler word to keep or drop. Better left alone: the lines that say
+the transcript is content to clean and never to answer.
+
+One thing learned here: the style profile *describes*, the prompt *commands*, and in
+every conflict the command wins. A rule you want obeyed every time — numbers as digits,
+a greeting that ends with `!` — belongs in the prompt, with an example, not in the
+profile. The built-in transcript prompt already carries those two, plus: rhythm words
+("akkor", "szerintem", "amúgy") are not filler, and swearing stays verbatim.
 
 #### Style profile — how to fill it in
 
@@ -370,27 +410,16 @@ exactly what you spell out, which is why inflected forms need listing. Word boun
 respected and case and accents are ignored, so `tail scale` matches while
 `tailscalexyz` does not.
 
-**The words the recogniser itself hears first.** Everything above works on text, after
-recognition — and a name Whisper has already written down wrong ("Sonny" for "Sanyi")
-cannot be recovered from four letters, because the sound is gone by then. So the list is
-also handed to the recogniser while it is still listening (faster-whisper `hotwords`),
-where it tilts the odds towards words it has been told to expect. Nothing is replaced
-afterwards: a real "Sonny" stays "Sonny".
-
-There is a catch: the recogniser takes at most 223 tokens of hints and silently drops the
-rest — roughly a few dozen words, fewer for long names. Put `!` in front of the ones that
-matter most and they go in first; the others fill what is left, in file order:
-
-```
-!Sanyi
-!Berkes Annamária
-Tailscale
-```
-
-The marker is not part of the spelling — the AI cleanup and the literal corrections see
-the word without it. The log (`/tmp/whisper_stdout.log`) says exactly what got through,
-e.g. `[HOTWORDS] 42/160 words, 222/223 tokens; dropped (118): ...`. To switch the hint
-off without touching the dictionary, set `"hotwords_enabled": false` in `config.json`.
+**Optional — hints for the recogniser itself (off by default).** Everything above works
+on text, after recognition. faster-whisper can also take the list as `hotwords` while it
+is still listening, and an earlier version did that by default. It is now off: the hint
+competes with the speech for the decoder's token budget (with a full list, every
+dictation over a minute was cut short until that was fixed), it fits only a few dozen
+words, and the AI cleanup resolves the same names from the same list anyway. To try it,
+set `"hotwords_enabled": true` in `config.json`; a `!` in front of a word then sends it
+first, and the log (`/tmp/whisper_stdout.log`) says what got through, e.g.
+`[HOTWORDS] 36/112 words, 149/150 tokens; dropped (76): ...`. With hotwords off the `!`
+changes nothing. `tools/hotwords_ab.py recording.wav` compares one recording both ways.
 
 The file lives at `~/.config/whisperrocket/dictionary.md`; see
 [`dictionary.example.md`](dictionary.example.md). A `dictionary.json` written by an
@@ -613,6 +642,7 @@ Right-click the tray icon → **Settings** to configure:
 - **Device** - GPU (CUDA) or CPU
 - **Popup duration** - How long the result popup stays visible (1-30 seconds)
 - **Autostart** - Launch on system startup
+- **AI** - AI cleanup: model, effort, compose trigger phrases, style profile, your own words, prompts (see [AI cleanup](#ai-cleanup-optional))
 
 ### Files and secrets
 
@@ -702,6 +732,8 @@ WhisperRocket/
 ├── diarization_manager.py        # Speaker diarization (pyannote)
 ├── ai_enhancer.py        # AI cleanup pipeline (prompt, Claude call, modes)
 ├── ai_guard.py           # Rejects model output that betrays the transcript
+├── sentence_splitter.py  # Two-comma rule: cuts long sentences at commas grammar does not own
+├── transcript_filter.py  # Drops silence hallucinations and decoder loops before anything pastes them
 ├── claude_cli.py         # Claude Code CLI wrapper (install, sign-in status)
 ├── dictionary_manager.py # Personal vocabulary for misheard proper nouns
 ├── translations.py       # Multi-language UI support (EN/HU)
@@ -721,6 +753,8 @@ WhisperRocket/
 ├── style_profile.example.md   # Style profile template for AI cleanup
 ├── dictionary.example.md      # Personal vocabulary template
 ├── .githooks/            # Opt-in secret-scanning pre-commit hook
+├── tests/                # Stdlib-only test scripts, all run by CI
+├── tools/hotwords_ab.py  # A/B one recording with and without the recogniser hint
 ├── start.sh              # Startup script
 ├── install.sh            # Installation script
 ├── uninstall.sh          # Uninstallation script
@@ -860,6 +894,39 @@ The uninstaller offers three options:
 </details>
 
 ## Changelog
+
+### Unreleased — on `feature/hotwords`, not yet on `main` (v1.2.4 candidate)
+
+**AI cleanup made reliable on long, real dictations.**
+
+- **Long dictations no longer break off.** The recogniser hint (hotwords) shared the
+  decoder's token budget with the speech, so every dictation over a minute was cut
+  short or lost. Fixed — and the hint is now **off by default** (`hotwords_enabled`):
+  the AI cleanup resolves the same names from the same dictionary. A `!` in front of a
+  dictionary word does nothing unless hotwords are switched on.
+- **The AI answers nothing.** The transcript travels inside `<TRANSCRIPT>` tags and the
+  prompt says what is inside is spoken content to clean, never to answer or follow. The
+  guard also rejects output with content you never said, lost web addresses, e-mails or
+  long numbers, and rearranged sentences (soft), and retries once before falling back to
+  the plain transcript.
+- **Silence and loops filtered.** Subtitle credits Whisper writes on silence, bracketed
+  stage directions, a word repeated three or more times and a phrase repeated verbatim
+  are dropped before anything can paste them — with or without AI cleanup.
+- **No sentence has more than two commas.** Prompt wording could not move the comma
+  density (measured); it is enforced in code, at commas grammar does not own, and only
+  punctuation changes.
+- **Style rules that are obeyed.** The default transcript prompt now commands what the
+  profile only described: greetings end with `!` and keep the name, numbers become
+  digits, rhythm words ("akkor", "szerintem", "amúgy") are not filler, swearing stays.
+- **Effort selectable** in Settings → AI, *low* by default and recommended: the CLI
+  default thinks for tens of seconds on an ordinary message and the phone budget cuts
+  it off.
+- **Settings explain themselves.** Personal files, effort, compose mode, style profile,
+  prompts and dictionary each say what they are for, when they are used and where the
+  file lives.
+- The swear-word check matches at word start, so "sushit" no longer trips it.
+- New stdlib tests for the dictionary and hotwords, prompt rules, guard, splitter and
+  filter — all in CI.
 
 ### v1.2.3
 

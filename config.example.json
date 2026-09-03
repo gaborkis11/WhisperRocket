@@ -12,6 +12,7 @@
   "setup_complete": false,
   "ai_enhance_enabled": false,
   "ai_model": "sonnet",
+  "ai_effort": "low",
   "ai_trigger_phrases": [
     "fogalmazzuk meg hogy",
     "fogalmazd meg hogy",
@@ -20,7 +21,7 @@
   ],
   "ai_timeout_seconds": 120,
   "ai_dictionary_enabled": true,
-  "hotwords_enabled": true,
+  "hotwords_enabled": false,
   "phone_endpoint_enabled": false,
   "phone_endpoint_port": 8771,
   "phone_endpoint_budget_seconds": 20
