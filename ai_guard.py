@@ -88,22 +88,52 @@ _QUOTE_PAIRS = (('"', '"'), ("'", "'"), ("„", "”"), ("“", "”"),
 # Compose mode is supposed to reformulate, so its retention floor is only there
 # to catch a response that has nothing to do with the transcript at all - a
 # refusal shares almost no content words, a genuine rewrite shares plenty.
+# max_novelty: share of the output's content words the speaker never said.
+# Calibrated on 139 real cleanups (2026-09-03): the two answers the model gave
+# instead of a transcript ("Igen, itt vagyok, hallak") scored 0.50 and 0.60,
+# and at 0.40 exactly one good cleanup is caught with them (a misheard word
+# fixed from context) - which a retry then usually resolves.
 _THRESHOLDS = {
-    "transcript": {"min_ratio": 0.5, "max_ratio": 1.6, "min_retention": 0.6},
-    "compose": {"min_ratio": 0.25, "max_ratio": 3.5, "min_retention": 0.15},
+    "transcript": {"min_ratio": 0.5, "max_ratio": 1.6, "min_retention": 0.6,
+                   "max_novelty": 0.40},
+    "compose": {"min_ratio": 0.25, "max_ratio": 3.5, "min_retention": 0.15,
+                "max_novelty": 1.0},
 }
+
+# Things that must come through a cleanup untouched: a web address, an e-mail
+# address, a number of four or more digits (a phone number, a year, an
+# amount). Short numbers are deliberately not on the list - "hat óra
+# tizenötkor" legitimately turns into "6:15-kor".
+_ENTITY = re.compile(
+    r"(?:https?://\S+|www\.\S+|[\w.+-]+@[\w-]+\.[\w.]+|(?<!\d)\d{4,}(?!\d))",
+    re.IGNORECASE,
+)
+
+_TRANSCRIPT_TAG = re.compile(r"</?transcript>", re.IGNORECASE)
 
 
 @dataclass
 class GuardResult:
-    """Verdict on one model response"""
+    """
+    Verdict on one model response.
+
+    `soft` is True when every failure is one the caller may still accept after
+    a retry did no better - today that is only a reordering, where the raw
+    transcript (no punctuation, no capitals) would serve the user worse than
+    two swapped words do.
+    """
     ok: bool
     text: str
     failures: List[str] = field(default_factory=list)
+    soft: bool = False
 
     @property
     def reason(self) -> str:
         return ", ".join(self.failures)
+
+
+# Failures the caller may accept after one retry (see GuardResult.soft)
+SOFT_FAILURES = ("reordered",)
 
 
 def normalize(text: str) -> str:
@@ -129,6 +159,10 @@ def strip_wrapper(text: str) -> str:
         text = fenced.group(1).strip()
 
     text = _LABEL_LINE.sub("", text, count=1).strip()
+
+    # The transcript reaches the model inside <TRANSCRIPT> tags; an echoed tag
+    # is packaging, not content
+    text = _TRANSCRIPT_TAG.sub("", text).strip()
 
     # Quotes wrapping the whole response (only when there is no inner quote of
     # the same kind, so a legitimately quoted phrase inside is left alone)
@@ -171,6 +205,57 @@ def _has_stem(words: List[str], stem: str) -> bool:
     return False
 
 
+def _lcs_length(a: List[str], b: List[str]) -> int:
+    """Length of the longest common subsequence (small inputs, O(n*m))"""
+    previous = [0] * (len(b) + 1)
+    for x in a:
+        current = [0]
+        for j, y in enumerate(b):
+            current.append(previous[j] + 1 if x == y else max(previous[j + 1], current[j]))
+        previous = current
+    return previous[-1]
+
+
+def reordered_words(raw_text: str, text: str, min_length: int = 5) -> int:
+    """
+    How many content words changed places between transcript and output.
+
+    Over the content words both texts share (as a multiset), M is their count
+    and L the longest common subsequence; M - L is the number that could only
+    be matched out of order. Deleting filler, splitting a sentence and turning
+    a number into digits never lower L relative to M, so any positive value
+    is a real swap - "figyelj bazdmeg" coming back as "Bazdmeg, figyelj" gives
+    1. Restricted to content words because short function words ("a" / "az")
+    get substituted legitimately and made the plain-word version fire on 11%
+    of good cleanups (measured 2026-09-03); on content words it fires on 2%.
+    """
+    def sequence(t: str) -> List[str]:
+        return [w for w in _words(normalize(t))
+                if len(w) >= min_length and w not in FILLER_WORDS]
+
+    raw_seq, out_seq = sequence(raw_text), sequence(text)
+    counts_raw: dict = {}
+    for w in raw_seq:
+        counts_raw[w] = counts_raw.get(w, 0) + 1
+    counts_out: dict = {}
+    for w in out_seq:
+        counts_out[w] = counts_out.get(w, 0) + 1
+    common = {w: min(c, counts_out.get(w, 0)) for w, c in counts_raw.items()
+              if counts_out.get(w)}
+    matched = sum(common.values())
+    if matched < 2:
+        return 0
+    raw_common = [w for w in raw_seq if w in common]
+    out_common = [w for w in out_seq if w in common]
+    return matched - _lcs_length(raw_common, out_common)
+
+
+def missing_entities(raw_text: str, text: str) -> List[str]:
+    """Addresses and long numbers from the transcript that the output lost"""
+    present = set(_ENTITY.findall(text))
+    return [e for e in _ENTITY.findall(raw_text) if e not in present]
+
+
 def content_words(text: str, min_length: int = 5) -> Set[str]:
     """
     Content words as 5-character stems, so Hungarian suffixes don't cause false
@@ -189,7 +274,8 @@ def content_words(text: str, min_length: int = 5) -> Set[str]:
 
 
 def check(raw_text: str, model_text: str, mode: str = "transcript",
-          extra_profanity: Sequence[str] = ()) -> GuardResult:
+          extra_profanity: Sequence[str] = (),
+          allowed_terms: Sequence[str] = ()) -> GuardResult:
     """
     Decide whether the model's response may replace the raw transcript.
 
@@ -198,6 +284,8 @@ def check(raw_text: str, model_text: str, mode: str = "transcript",
         model_text: what the model returned
         mode: "transcript" (strict) or "compose" (profanity only)
         extra_profanity: user-supplied stems, added to the built-in list
+        allowed_terms: the user's dictionary - words the model may introduce
+            (a name it resolved from how it sounded) without counting as new
 
     Returns:
         GuardResult. When ok is False, the caller must use raw_text.
@@ -241,14 +329,36 @@ def check(raw_text: str, model_text: str, mode: str = "transcript",
     if added:
         failures.append("profanity_added(" + ",".join(sorted(added)) + ")")
 
-    if limits["min_retention"] > 0:
-        raw_content = content_words(raw_text)
-        if raw_content:
-            kept = raw_content & content_words(text)
-            retention = len(kept) / len(raw_content)
-            if retention < limits["min_retention"]:
-                failures.append(f"rewritten({retention:.2f})")
+    raw_content = content_words(raw_text)
+    out_content = content_words(text)
+    if limits["min_retention"] > 0 and raw_content:
+        kept = raw_content & out_content
+        retention = len(kept) / len(raw_content)
+        if retention < limits["min_retention"]:
+            failures.append(f"rewritten({retention:.2f})")
+
+    # Novelty: the other direction. Retention says how much survived; this
+    # says how much the model made up. A reply to the transcript ("Igen, itt
+    # vagyok, hallak") keeps its one content word and adds everything else.
+    if limits["max_novelty"] < 1.0 and out_content:
+        allowed = set()
+        for term in allowed_terms:
+            allowed |= content_words(term)
+        new = (out_content - raw_content) - allowed
+        novelty = len(new) / len(out_content)
+        if novelty > limits["max_novelty"]:
+            failures.append(f"invented({novelty:.2f})")
+
+    lost = missing_entities(raw_text, text)
+    if lost:
+        failures.append("entity_lost(" + ",".join(lost[:3]) + ")")
+
+    if mode == "transcript":
+        swapped = reordered_words(raw_text, text)
+        if swapped:
+            failures.append(f"reordered({swapped})")
 
     if failures:
-        return GuardResult(False, raw_text, failures)
+        soft = all(f.startswith(SOFT_FAILURES) for f in failures)
+        return GuardResult(False, raw_text, failures, soft)
     return GuardResult(True, text, [])

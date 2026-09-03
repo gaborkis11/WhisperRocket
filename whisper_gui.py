@@ -139,6 +139,7 @@ class UpdateDownloader(QThread):
 from translations import t, TRANSLATIONS
 import history_manager
 import dictionary_manager
+import transcript_filter
 from functools import partial
 
 # Konfiguráció (bundled app-ban user könyvtárba mentjük)
@@ -713,7 +714,13 @@ def run_whisper(file_path):
             beam_size=5,
             **dictionary_manager.hotwords_options(current_hotwords()),
         )
-        return " ".join(segment.text.strip() for segment in segments)
+        text = " ".join(segment.text.strip() for segment in segments)
+        # What Whisper writes on silence ("Feliratot készítette Amara.org
+        # közössége") goes before anything downstream can paste it
+        filtered = transcript_filter.filter_transcript(text)
+        if filtered != text:
+            print(f"[FILTER] dropped: {text[len(filtered):].strip()[:80]!r}")
+        return filtered
 
 
 def current_hotwords():
