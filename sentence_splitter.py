@@ -30,7 +30,8 @@ merre meddig
 # The second half of a correlative pair: "ha ..., akkor ...", "ami ..., az
 # ...", "aki ..., annak ...". Cutting between the halves leaves a fragment
 # ("De ami a legnehezebb volt. Az hogy bementem." - seen 2026-09-03).
-CORRELATIVE_OPENERS = ("ha ", "hogyha ", "amikor ", "amint ", "mihelyt ", "miután ", "miközben ",
+CORRELATIVE_OPENERS = ("ha ", "hogyha ", "amennyiben ", "amikor ", "amint ", "mihelyt ", "miután ",
+                       "miközben ", "mikor ",
                        "ami ", "amit ", "aki ", "akit ", "amelyik ", "amely ",
                        "amennyi ", "ahol ", "ahogy ", "amiért ")
 CORRELATIVE_CLOSERS = frozenset(["akkor", "úgy", "annál", "az", "azt", "arra", "annak",

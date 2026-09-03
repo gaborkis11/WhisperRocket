@@ -83,6 +83,9 @@ out = split_sentence(kozben)
 check("'miközben' is a subordinator, no cut in front of it", ". Miközben" not in out, out)
 check("'miközben ..., akkor' is a pair, no cut in front of 'akkor'", ". Akkor" not in out, out)
 
+amennyiben = "Amennyiben ez így van, akkor a stílusprofilt ugyanígy írjuk oda, hogy amennyiben be van kapcsolva az AI, akkor használódik ez a profil."
+check("'amennyiben ..., akkor' is a pair", ". Akkor" not in split_sentence(amennyiben), split_sentence(amennyiben))
+
 enum = "Tehát ahol van a beállítások, fájlátírás, előzmények, névjegy, kilépés, oda kéne egy gomb."
 out = split_sentence(enum)
 check("enumeration items are not turned into sentences",
