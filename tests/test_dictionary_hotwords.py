@@ -63,6 +63,17 @@ dup = dm.parse("Sanyi\n!Sanyi\n")
 check("duplicate lines: marked wins regardless of order",
       len(dup) == 1 and dup[0]["priority"] is True, str(dup))
 
+from translations import t as _t  # noqa: E402
+for lang in ("en", "hu"):
+    template = _t("ai_dict_template", lang)
+    check(f"the {lang} template is comments only, so a fresh install has no words",
+          dm.parse(template) == [], str(dm.parse(template)))
+    check(f"the {lang} template no longer advertises the hotwords marker",
+          "!" not in template, template)
+    advanced = _t("ai_dict_dialog_advanced", lang)
+    check(f"the {lang} advanced note says the marker does nothing now",
+          "!" in advanced, advanced)
+
 check("vocabulary() never shows the marker",
       dm.vocabulary(terms) == ["Sanyi", "Tomi", "Zsófi", "Tailscale"], str(dm.vocabulary(terms)))
 fixed, n = dm.apply("we use tail scale", terms)

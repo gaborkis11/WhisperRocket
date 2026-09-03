@@ -47,7 +47,10 @@ LEGACY_JSON_FILENAME = "dictionary.json"
 # anyone maintains by hand.
 MAX_VOCABULARY = 300
 
-# "!" in front of a word: it goes to the recogniser first (see pack_hotwords)
+# "!" in front of a word: it goes to the recogniser first when hotwords are
+# switched on (config "hotwords_enabled", off by default - see pack_hotwords).
+# With hotwords off the marker changes nothing; it is stripped either way, so
+# files written for older versions still parse.
 PRIORITY_MARKER = "!"
 
 # faster-whisper hands hotwords to the model as decoder context. The prompt
