@@ -650,7 +650,7 @@ class WaylandOverlay:
         """Icon and label for the current phase, in its accent colour"""
         self._phase_icon.phase = self.phase
         self._phase_icon.queue_draw()
-        label = t(popup_phases.LABEL_KEYS[self.phase], self.ui_lang).upper()
+        label = popup_phases.LABELS[self.phase].upper()
         r, g, b = popup_phases.ACCENT_RGB[self.phase]
         self._phase_label.set_markup(
             f'<span foreground="#{r:02x}{g:02x}{b:02x}" font_size="x-small" weight="bold" '

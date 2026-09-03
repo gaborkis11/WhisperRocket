@@ -452,7 +452,7 @@ class RecordingPopup(QWidget):
 
     def _draw_phase_row(self, painter: QPainter, baseline: int):
         """Icon + small-caps label, centred, in the phase's accent colour"""
-        label = t(popup_phases.LABEL_KEYS[self.phase], self.ui_lang).upper()
+        label = popup_phases.LABELS[self.phase].upper()
         r, g, b = popup_phases.ACCENT_RGB[self.phase]
 
         font = get_font(7)

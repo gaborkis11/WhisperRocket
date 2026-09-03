@@ -4,7 +4,7 @@ The processing popup's phase row: local transcription first, AI cleanup when
 the model is called, and the popup never changes size between the two.
 
 Three parts, each self-skipping when its toolkit is missing:
-  1. popup_phases (stdlib): pools, lengths, labels present in both languages
+  1. popup_phases (stdlib): pools, lengths, labels English on every UI language
   2. the Qt popup, offscreen: state gating, size, both phases painted
   3. the GTK overlay's icon, drawn on a bare cairo surface (no display needed)
 
@@ -44,10 +44,11 @@ for phase in popup_phases.PHASES:
     check(f"{phase}: every joke fits the popup", not too_long, str(too_long))
     check(f"{phase}: every joke trails off like the old ones",
           all(m.endswith("...") for m in pool), str([m for m in pool if not m.endswith("...")]))
-    for lang in ("en", "hu"):
-        key = popup_phases.LABEL_KEYS[phase]
-        check(f"{phase}: label key {key} exists in {lang}",
-              bool(TRANSLATIONS.get(lang, {}).get(key)), key)
+    label = popup_phases.LABELS[phase]
+    check(f"{phase}: the label is plain English, not a translation key",
+          label.isascii() and " " in label or label == "AI cleanup", label)
+    check(f"{phase}: the label is not in translations.py (English on every UI language)",
+          not any(label == v for v in TRANSLATIONS["hu"].values()), label)
     check(f"{phase}: accent is an RGB triple",
           len(popup_phases.ACCENT_RGB[phase]) == 3 and all(0 <= c <= 255 for c in popup_phases.ACCENT_RGB[phase]))
 

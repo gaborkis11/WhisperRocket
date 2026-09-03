@@ -19,8 +19,9 @@ PHASE_AI = "ai"     # the AI cleanup, only while it is switched on
 
 PHASES = (PHASE_STT, PHASE_AI)
 
-# The label under the rocket is UI text, so it goes through translations.py
-LABEL_KEYS = {PHASE_STT: "popup_phase_stt", PHASE_AI: "popup_phase_ai"}
+# The label is English whatever the UI language, like the jokes under it: the
+# animation is one piece and speaks one voice (the user's call, 2026-09-03).
+LABELS = {PHASE_STT: "Local transcription", PHASE_AI: "AI cleanup"}
 
 # One accent per phase, shared by the icon and the label: the rocket's window
 # blue for the local model, the flame's gold for the AI - both colours are
