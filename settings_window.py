@@ -2153,6 +2153,12 @@ class SettingsWindow(QMainWindow):
         layout = QVBoxLayout(group)
         layout.setSpacing(8)
 
+        # What these two files are, before the buttons - the user asked
+        hint = QLabel(t("ai_prompts_hint", self.ui_lang))
+        hint.setWordWrap(True)
+        hint.setStyleSheet("color: #888; font-size: 11px;")
+        layout.addWidget(hint)
+
         self.ai_prompt_labels = {}
         for mode, key in (("transcript", "ai_prompt_transcript"),
                           ("compose", "ai_prompt_compose")):
@@ -2177,6 +2183,10 @@ class SettingsWindow(QMainWindow):
             form_label = QLabel(t(key, self.ui_lang))
             form_label.setStyleSheet("font-weight: bold;")
             layout.addWidget(form_label)
+            desc = QLabel(t(f"{key}_desc", self.ui_lang))
+            desc.setWordWrap(True)
+            desc.setStyleSheet("color: #888; font-size: 11px;")
+            layout.addWidget(desc)
             layout.addWidget(container)
 
         self.update_ai_prompt_labels()
