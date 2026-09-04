@@ -6,6 +6,7 @@ import shutil
 import tempfile
 import time
 import threading
+import traceback
 from queue import Queue
 
 import system_check
@@ -137,6 +138,9 @@ class UpdateDownloader(QThread):
 
 from translations import t, TRANSLATIONS
 import history_manager
+import dictionary_manager
+import transcript_filter
+import popup_phases
 from functools import partial
 
 # Konfiguráció (bundled app-ban user könyvtárba mentjük)
@@ -200,10 +204,16 @@ def load_config():
             # exactly as it did before the feature existed
             "ai_enhance_enabled": False,
             "ai_model": "sonnet",
+            "ai_effort": "low",
             "ai_trigger_phrases": ["fogalmazzuk meg hogy", "fogalmazd meg hogy",
                                    "segíts megfogalmazni", "jarvis segíts megfogalmazni"],
             "ai_timeout_seconds": 120,
             "ai_dictionary_enabled": True,
+            # The dictionary can also go to the recogniser as hotwords. Off by
+            # default: the AI layer already resolves misheard terms from the
+            # same list, and the hint costs decoder budget and can echo hint
+            # words on near-silence. Config-only switch for measuring it.
+            "hotwords_enabled": False,
             # Phone endpoint - off by default. It opens a network port, so it
             # has to be something the user switches on deliberately.
             "phone_endpoint_enabled": False,
@@ -366,6 +376,7 @@ def save_config_value(key, value):
 config = load_config()
 ui_lang = config.get("ui_language", "en")
 model = None
+hotwords_provider = None  # dictionary_manager.HotwordsProvider, set in load_model()
 recording = False
 audio_data = []
 stream = None
@@ -526,6 +537,7 @@ def open_file_transcription():
             config=config,
             ui_lang=ui_lang,
             model_lock=model_lock,
+            hotwords=current_hotwords,
         )
         file_transcription_window_instance.show()
     else:
@@ -615,7 +627,7 @@ def refresh_history_menu():
 
 # Modell betöltés
 def load_model():
-    global model
+    global model, hotwords_provider
     print("[INFO] Whisper modell betoltese...")
     sys.stdout.flush()
     update_icon('orange', t("tray_loading", ui_lang))
@@ -637,6 +649,12 @@ def load_model():
                 device=config["device"],
                 compute_type=config["compute_type"]
             )
+            # The dictionary as a hint to the recogniser. Counted with the
+            # model's own tokenizer, because faster-whisper cuts hotwords at
+            # 223 tokens without saying so - see dictionary_manager.
+            hf_tokenizer = model.hf_tokenizer
+            hotwords_provider = dictionary_manager.HotwordsProvider(
+                lambda text: len(hf_tokenizer.encode(text, add_special_tokens=False).ids))
         print("[INFO] Modell betoltve!")
         sys.stdout.flush()
         update_icon('blue', t("tray_ready", ui_lang))
@@ -682,6 +700,8 @@ def run_whisper(file_path):
     """
     with model_lock:
         if whisper_backend == "mlx":
+            # mlx_whisper has no hotwords parameter; the dictionary still
+            # reaches the AI layer as before
             import mlx_whisper
             result = mlx_whisper.transcribe(
                 file_path,
@@ -694,8 +714,32 @@ def run_whisper(file_path):
             file_path,
             language=config["language"],
             beam_size=5,
+            **dictionary_manager.hotwords_options(current_hotwords()),
         )
-        return " ".join(segment.text.strip() for segment in segments)
+        text = " ".join(segment.text.strip() for segment in segments)
+        # What Whisper writes on silence ("Feliratot készítette Amara.org
+        # közössége") goes before anything downstream can paste it
+        filtered = transcript_filter.filter_transcript(text)
+        if filtered != text:
+            print(f"[FILTER] dropped: {text[len(filtered):].strip()[:80]!r}")
+        return filtered
+
+
+def current_hotwords():
+    """
+    The dictionary packed for the recogniser, or None.
+
+    None when switched off in config, when the model is not loaded, or when the
+    dictionary is empty. Never raises: this sits in the dictation path, and a
+    broken dictionary file must cost the hint, not the transcription.
+    """
+    if not config.get("hotwords_enabled", True) or hotwords_provider is None:
+        return None
+    try:
+        return hotwords_provider.current()
+    except Exception as e:
+        print(f"[HOTWORDS] skipped: {e}")
+        return None
 
 
 def ai_reason_label(reason: str) -> str:
@@ -784,6 +828,7 @@ def process_audio(audio_copy):
     # Claimed for the whole run so a phone dictation arriving mid-way cannot
     # repaint the tray out from under the one happening at the desk.
     local_busy = True
+    temp_file = None
 
     try:
         # Audio concatenation
@@ -803,7 +848,11 @@ def process_audio(audio_copy):
         elapsed = time.time() - start_time
 
         # AI enhancement. The processing popup started in stop_recording() is
-        # still up, so it covers this step too - no new popup state needed.
+        # still up; it now says which phase runs, so the user can tell the
+        # local model's seconds from the AI's. Only when the model is actually
+        # called - dictionary-only fixes are instant and stay "local".
+        if current_ai_config().get("ai_enhance_enabled"):
+            show_processing_phase(popup_phases.PHASE_AI)
         ai_result = apply_ai_enhancement(text)
         if ai_result is not None:
             text = ai_result.text
@@ -842,9 +891,6 @@ def process_audio(audio_copy):
         print("="*60)
         print(">>> CLIPBOARD: Press Ctrl+V to paste! <<<")
         print("="*60 + "\n")
-        
-        # Temp fájl törlés
-        os.unlink(temp_file.name)
 
         # History mentés
         if text.strip():
@@ -875,6 +921,7 @@ def process_audio(audio_copy):
     except Exception as e:
         print("\n" + "="*60)
         print(f"[HIBA] {e}")
+        traceback.print_exc()
         print("="*60 + "\n")
 
         update_icon('red', t("tray_error", ui_lang))
@@ -884,6 +931,13 @@ def process_audio(audio_copy):
 
     finally:
         local_busy = False
+        # The recording must not outlive this run either way - a failed
+        # transcription used to leave the WAV behind in /tmp
+        if temp_file is not None:
+            try:
+                os.unlink(temp_file.name)
+            except OSError:
+                pass
 
 
 # --- Phone endpoint -------------------------------------------------------
@@ -1103,6 +1157,12 @@ def show_text_popup(text: str):
     global popup_window
     if popup_window:
         popup_window.request_show_text.emit(text)
+
+def show_processing_phase(phase: str):
+    """Tell the processing popup which phase runs now (thread-safe, non-blocking)"""
+    global popup_window
+    if popup_window:
+        popup_window.request_show_phase.emit(phase)
 
 def show_processing_popup():
     """Processing állapot megjelenítése (thread-safe)"""

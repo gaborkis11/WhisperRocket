@@ -1,6 +1,30 @@
 {
   "versions": [
     {
+      "version": "1.2.4",
+      "date": "2026-09-04",
+      "notes": {
+        "en": [
+          "Long dictations no longer break off: the recogniser hint that starved the decoder is fixed and switched off by default; the AI cleanup resolves your dictionary names instead",
+          "The AI no longer answers your message instead of cleaning it: the transcript is marked as content, the output is checked for invented text and lost addresses or numbers, and retried once before the plain transcript is used",
+          "Silence hallucinations ('Feliratot készítette...') and stuttering loops are removed before anything is pasted, with or without AI",
+          "No sentence with more than two commas: long sentences are cut in code, only the punctuation changes",
+          "Style rules are now obeyed: a greeting ends with !, numbers become digits, rhythm words stay, swearing stays verbatim",
+          "AI effort is selectable in Settings (low recommended), and every AI setting explains what it does and where its file lives",
+          "The popup shows which phase is running: Local transcription, then AI cleanup, each with its own icon, colour and jokes"
+        ],
+        "hu": [
+          "A hosszú diktálás nem szakad meg: a felismerőnek adott szótár-tipp kiéheztette a dekódert - javítva, és alapból kikapcsolva; a neveket az AI-tisztítás javítja a szótárból",
+          "Az AI nem válaszol az üzenetedre tisztítás helyett: az átirat tartalomként van megjelölve, a kimenetet a program ellenőrzi (kitalált szöveg, elveszett cím vagy szám), egyszer újrapróbálja, és csak utána adja a nyers átiratot",
+          "A csendre írt feliratszöveg (\"Feliratot készítette...\") és az ismétlődő hurkok kikerülnek, mielőtt bármi beillesztődne - AI nélkül is",
+          "Nincs kettőnél több vessző egy mondatban: a hosszú mondatokat a program vágja, csak az írásjelek változnak",
+          "A stílusszabályok most érvényesülnek: a köszönés felkiáltójellel végződik, a számok számjeggyel, a ritmusszavak megmaradnak, a káromkodás szó szerint",
+          "Az AI erőfeszítés-szintje választható a Beállításokban (alacsony ajánlott), és minden AI-beállítás elmondja, mire való és hol a fájlja",
+          "A felugró ablak mutatja, melyik fázis fut: Local transcription, majd AI cleanup, saját ikonnal, színnel és viccekkel"
+        ]
+      }
+    },
+    {
       "version": "1.2.3",
       "date": "2026-08-30",
       "notes": {

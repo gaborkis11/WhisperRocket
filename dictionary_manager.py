@@ -26,12 +26,16 @@ File: ~/.config/whisperrocket/dictionary.md  (never committed)
 
     # With a colon, the mishearing is corrected in code as well:
     Tailscale: tail scale, telszkel
+
+    # With "!", the word reaches the recogniser itself first (hotwords):
+    !Sanyi
 """
 import json
 import re
 import unicodedata
+from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Callable, Dict, List, Optional, Tuple
 
 from platform_support import get_platform_handler
 
@@ -42,6 +46,34 @@ LEGACY_JSON_FILENAME = "dictionary.json"
 # is roughly 600 tokens - a fraction of a cent per dictation - and far more than
 # anyone maintains by hand.
 MAX_VOCABULARY = 300
+
+# "!" in front of a word: it goes to the recogniser first when hotwords are
+# switched on (config "hotwords_enabled", off by default - see pack_hotwords).
+# With hotwords off the marker changes nothing; it is stripped either way, so
+# files written for older versions still parse.
+PRIORITY_MARKER = "!"
+
+# faster-whisper hands hotwords to the model as decoder context. The prompt
+# and the text the decoder generates share one hard limit, max_length = 448
+# tokens per 30 s window, and the library cuts hotwords at max_length // 2 - 1
+# = 223 tokens without a warning (TranscriptionModel.get_prompt). Measured on
+# a real 160-word Hungarian list: 825 tokens, so two thirds would vanish -
+# always the same two thirds, the end of the file. We pack to our own budget
+# and say what was left out.
+#
+# The budget is what remains of max_length after the prompt framing and the
+# room one window of speech needs. A hint filling the library's 223 left only
+# 221 tokens for the text - and none at all once the previous window's text
+# joined the prompt as well; see hotwords_options().
+WHISPER_MAX_LENGTH = 448
+# sot_prev in front of the hint, the three-token sot sequence after it
+HOTWORDS_PROMPT_OVERHEAD = 4
+# Tokens one 30 s window of speech may need, timestamps included. Fast
+# Hungarian dictation measured at 179 in a window (a real 70 s recording,
+# 2026-09-03; about 15 characters a second). A window the decoder cannot
+# finish loses its tail mid-word, so the reserve stays well above that.
+HOTWORDS_DECODE_ROOM = 294
+HOTWORDS_TOKEN_BUDGET = WHISPER_MAX_LENGTH - HOTWORDS_PROMPT_OVERHEAD - HOTWORDS_DECODE_ROOM
 
 def get_dictionary_path() -> Path:
     """Path to the user's vocabulary (never inside the project directory)"""
@@ -82,7 +114,7 @@ def parse(text: str) -> List[Dict]:
     means the term is vocabulary only, with no literal replacement.
     """
     terms: List[Dict] = []
-    seen = set()
+    seen: Dict[str, Dict] = {}
 
     for line in (text or "").splitlines():
         line = line.strip()
@@ -93,6 +125,13 @@ def parse(text: str) -> List[Dict]:
         if not line:
             continue
 
+        # A leading "!" marks a word that must reach the recogniser (hotwords)
+        # even when the whole list would not fit. It is a marker, not part
+        # of the spelling, so it is stripped before anything else sees it.
+        priority = line.startswith(PRIORITY_MARKER)
+        if priority:
+            line = line[len(PRIORITY_MARKER):].strip()
+
         correct, _, variants_raw = line.partition(":")
         correct = correct.strip()
         if not correct:
@@ -100,11 +139,15 @@ def parse(text: str) -> List[Dict]:
 
         key = fold(correct)
         if key in seen:
+            # Same word twice: the marker sticks whichever line carries it
+            if priority:
+                seen[key]["priority"] = True
             continue
-        seen.add(key)
 
         variants = [v.strip() for v in variants_raw.split(",") if v.strip()]
-        terms.append({"correct": correct, "heard": variants})
+        term = {"correct": correct, "heard": variants, "priority": priority}
+        seen[key] = term
+        terms.append(term)
 
     return terms
 
@@ -116,6 +159,8 @@ def render(terms: List[Dict]) -> str:
         correct = str(term.get("correct") or "").strip()
         if not correct:
             continue
+        if term.get("priority"):
+            correct = PRIORITY_MARKER + correct
         variants = [str(v).strip() for v in (term.get("heard") or []) if str(v).strip()]
         lines.append(f"{correct}: {', '.join(variants)}" if variants else correct)
     return "\n".join(lines) + ("\n" if lines else "")
@@ -221,6 +266,113 @@ def vocabulary(terms: Optional[List[Dict]] = None) -> List[str]:
     """Correct spellings, for the prompt"""
     terms = load() if terms is None else terms
     return [t["correct"] for t in terms if t.get("correct")][:MAX_VOCABULARY]
+
+
+# --- Hotwords: the vocabulary the recogniser itself gets ----------------------
+#
+# Everything above acts after recognition, on text. A name Whisper has already
+# written down wrong ("Sonny" for "Sanyi") cannot be recovered from four
+# letters - the sound is gone. faster-whisper's `hotwords` puts the list into
+# the decoder's context, where the model still hears the audio and can prefer
+# a word it has been told to expect. It is the only point where this kind of
+# error is fixable at all. Nothing is replaced afterwards, so a real "Zsófi"
+# stays "Zsófi"; the list only tilts the odds.
+
+
+def hotword_candidates(terms: Optional[List[Dict]] = None) -> List[str]:
+    """
+    The words to offer the recogniser, in the order they compete for the budget:
+    marked ("!") words first, then the rest - file order kept within each group.
+    """
+    terms = load() if terms is None else terms
+    marked = [t["correct"] for t in terms if t.get("correct") and t.get("priority")]
+    rest = [t["correct"] for t in terms if t.get("correct") and not t.get("priority")]
+    return marked + rest
+
+
+@dataclass
+class HotwordsPack:
+    text: str = ""
+    included: List[str] = field(default_factory=list)
+    dropped: List[str] = field(default_factory=list)
+    tokens: int = 0
+
+
+def pack_hotwords(words: List[str], count_tokens: Callable[[str], int],
+                  budget: int = HOTWORDS_TOKEN_BUDGET) -> HotwordsPack:
+    """
+    Fill the token budget with words in the given order.
+
+    `count_tokens` is handed exactly the string faster-whisper will encode
+    (" " + the comma-separated list), so the count is the model's own, not an
+    estimate from characters. A word that does not fit is dropped and the next
+    one is still tried - a long name should not lock out a short one behind it.
+    """
+    pack = HotwordsPack()
+    for word in words:
+        candidate = pack.included + [word]
+        joined = ", ".join(candidate)
+        tokens = count_tokens(" " + joined)
+        if tokens <= budget:
+            pack.included = candidate
+            pack.text = joined
+            pack.tokens = tokens
+        else:
+            pack.dropped.append(word)
+    return pack
+
+
+def hotwords_options(hotwords: Optional[str]) -> Dict[str, object]:
+    """
+    Keyword arguments for model.transcribe() that carry the hint.
+
+    With a hint, the previous window's text is kept out of the decoder prompt.
+    faster-whisper puts both there - sot_prev + hotwords + previous text +
+    sot_sequence - against the same 448-token max_length, trimming each to 223
+    on its own, so with a full hint the prompt alone passed the limit from the
+    fourth 30 s window and generate() failed with "The maximum decoding length
+    must be > 0"; from the second window only a few dozen tokens were left for
+    the text, which then ended mid-word. Every dictation over a minute was lost
+    that way (2026-09-02/03). Without a hint the library defaults stand.
+    """
+    if not hotwords:
+        return {"hotwords": None}
+    return {"hotwords": hotwords, "condition_on_previous_text": False}
+
+
+class HotwordsProvider:
+    """
+    Keeps the packed hotwords string current with the dictionary file.
+
+    The file can change while the app runs (the Settings editor, or someone
+    editing it by hand), so every call re-reads it; repacking and the log line
+    only happen when the word list actually changed, otherwise the log would
+    repeat itself on every dictation.
+    """
+
+    def __init__(self, count_tokens: Callable[[str], int],
+                 budget: int = HOTWORDS_TOKEN_BUDGET,
+                 log: Callable[[str], None] = print):
+        self._count_tokens = count_tokens
+        self._budget = budget
+        self._log = log
+        self._candidates: Optional[List[str]] = None
+        self._text: Optional[str] = None
+
+    def current(self, terms: Optional[List[Dict]] = None) -> Optional[str]:
+        """The hotwords string for the next transcription, or None if there is none"""
+        candidates = hotword_candidates(terms)
+        if candidates != self._candidates:
+            self._candidates = candidates
+            pack = pack_hotwords(candidates, self._count_tokens, self._budget)
+            self._text = pack.text or None
+            self._log(
+                f"[HOTWORDS] {len(pack.included)}/{len(candidates)} words, "
+                f"{pack.tokens}/{self._budget} tokens"
+                + (f"; dropped ({len(pack.dropped)}): {', '.join(pack.dropped)}"
+                   if pack.dropped else "")
+            )
+        return self._text
 
 
 def _variant_pattern(variant: str) -> re.Pattern:

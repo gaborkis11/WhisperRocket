@@ -5,7 +5,7 @@ Valós idejű waveform vizualizáció felvétel közben
 Transzkripció utáni szöveg megjelenítés
 """
 from PySide6.QtWidgets import QWidget, QApplication
-from PySide6.QtCore import Qt, QTimer, QPoint, QRectF, Slot, Signal, QObject
+from PySide6.QtCore import Qt, QTimer, QPoint, QPointF, QRectF, Slot, Signal, QObject
 from PySide6.QtGui import QPainter, QColor, QPen, QBrush, QPainterPath, QFont, QFontDatabase
 from queue import Queue, Empty
 import os
@@ -31,6 +31,7 @@ def get_font(size: int, italic: bool = False) -> QFont:
     return font
 from enum import Enum, auto
 from translations import t
+import popup_phases
 import sys
 import math
 import random
@@ -53,6 +54,7 @@ class RecordingPopup(QWidget):
     # Signalok thread-safe kommunikációhoz
     request_show_popup = Signal()
     request_show_processing = Signal()
+    request_show_phase = Signal(str)  # popup_phases.PHASE_STT / PHASE_AI
     request_show_text = Signal(str)
     request_hide_popup = Signal()
     popup_closed = Signal()  # Jelzi a managernek hogy bezáródott
@@ -94,37 +96,11 @@ class RecordingPopup(QWidget):
         self.close_btn_rect = QRectF(0, 0, 0, 0)
         self.copy_btn_rect = QRectF(0, 0, 0, 0)
 
-        # Processing állapot - vicces üzenetek
-        self.processing_messages = [
-            # Klasszikus
-            "Transcribing your thoughts...",
-            "Converting speech to text...",
-            "Processing your words...",
-            "Almost there...",
-            "Just a moment...",
-            # Vicces / Funny
-            "Making your cocktail...",
-            "Brewing some magic...",
-            "Cooking up your text...",
-            "Summoning the words...",
-            "Decoding your genius...",
-            "Translating brilliance...",
-            "Working overtime here...",
-            "Hold my coffee...",
-            "Doing the heavy lifting...",
-            "Crunching the soundwaves...",
-            "Teaching AI to listen...",
-            "One moment of magic...",
-            "Converting genius to text...",
-            "Whisper is thinking...",
-            "Interpreting your wisdom...",
-            "Almost got it...",
-            "Patience, young padawan...",
-            "Loading awesomeness...",
-            "Shazam! Almost ready...",
-            "BRB, transcribing...",
-        ]
-        self.current_message = random.choice(self.processing_messages)
+        # Processing state: which of the two phases runs (local model, then the
+        # AI when it is on) and the joke told for it. Pools and colours live in
+        # popup_phases, shared with the Wayland overlay.
+        self.phase = popup_phases.PHASE_STT
+        self.current_message = popup_phases.pick_message(self.phase)
         self.animation_frame = 0
 
         # Üzenet váltó timer (2 másodpercenként)
@@ -175,6 +151,7 @@ class RecordingPopup(QWidget):
         # Signal-slot összekötések (thread-safe)
         self.request_show_popup.connect(self.show_popup)
         self.request_show_processing.connect(self.show_processing)
+        self.request_show_phase.connect(self.show_phase)
         self.request_show_text.connect(self.show_text)
         self.request_hide_popup.connect(self.hide_popup)
 
@@ -348,7 +325,7 @@ class RecordingPopup(QWidget):
         self.stars = []
         for _ in range(15):
             x = random.randint(0, self.base_width)
-            y = random.randint(10, 55)
+            y = random.randint(8, 52)  # above the phase row
             size = random.uniform(1.5, 3.5)
             speed = random.uniform(2, 5)
             self.stars.append([x, y, size, speed])
@@ -360,7 +337,7 @@ class RecordingPopup(QWidget):
             # Ha kilép bal oldalon, újra jobb oldalon
             if star[0] < -5:
                 star[0] = self.base_width + 5
-                star[1] = random.randint(10, 55)
+                star[1] = random.randint(8, 52)
                 star[2] = random.uniform(1.5, 3.5)
                 star[3] = random.uniform(2, 5)
 
@@ -446,8 +423,13 @@ class RecordingPopup(QWidget):
         painter.drawEllipse(QPoint(int(x + 3 * scale), int(y - 2 * scale)), int(2 * scale), int(2 * scale))
 
     def _draw_processing(self, painter: QPainter):
-        """Processing animáció - rakéta + csillagok + vicces szöveg"""
-        # Csillagok frissítése és rajzolása
+        """Processing: stars + rocket, the phase row under it, the joke at the bottom
+
+        The window is the same 350x100 as while recording and stays so through
+        both phases. The rocket keeps its old place; the phase row takes the
+        empty band the joke used to float above, and the joke moves down into
+        the margin that was unused.
+        """
         self._update_stars()
         self._draw_stars(painter)
 
@@ -456,20 +438,73 @@ class RecordingPopup(QWidget):
         rocket_y = 38
         self._draw_rocket(painter, rocket_x, rocket_y)
 
+        self._draw_phase_row(painter, baseline=67)
+
         # Vicces szöveg alul - középre igazítva, szebb font
         painter.setPen(QPen(QColor(200, 200, 200)))
         painter.setFont(get_font(10, italic=True))
         fm = painter.fontMetrics()
         text_x = (self.width() - fm.horizontalAdvance(self.current_message)) // 2
-        painter.drawText(text_x, 78, self.current_message)
+        painter.drawText(text_x, 86, self.current_message)
 
         # Frame növelés (animáció)
         self.animation_frame = (self.animation_frame + 1) % 60
 
+    def _draw_phase_row(self, painter: QPainter, baseline: int):
+        """Icon + small-caps label, centred, in the phase's accent colour"""
+        label = popup_phases.LABELS[self.phase].upper()
+        r, g, b = popup_phases.ACCENT_RGB[self.phase]
+
+        font = get_font(7)
+        font.setBold(True)
+        font.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 1.5)
+        painter.setFont(font)
+        fm = painter.fontMetrics()
+
+        icon_w, gap = 16, 6
+        total = icon_w + gap + fm.horizontalAdvance(label)
+        x = (self.width() - total) // 2
+        icon_cy = baseline - fm.capHeight() // 2 - 1
+
+        self._draw_phase_icon(painter, x, icon_cy, self.phase)
+        painter.setPen(QPen(QColor(r, g, b, 235)))
+        painter.drawText(x + icon_w + gap, baseline, label)
+
+    def _draw_phase_icon(self, painter: QPainter, x: int, cy: int, phase: str):
+        """Vector glyph for the phase, 16 px wide, animated with the rocket
+
+        Local model: five sound bars that breathe, the same shape as the
+        recording equalizer, in the rocket window's blue. AI: a four-point
+        sparkle with a small companion twinkling in counter-phase, in the
+        flame's gold. Drawn, not a font glyph, so it looks the same on every
+        machine.
+        """
+        r, g, b = popup_phases.ACCENT_RGB[phase]
+        phase_angle = (self.animation_frame / 60.0) * 2 * math.pi
+
+        if phase == popup_phases.PHASE_STT:
+            pen = QPen(QColor(r, g, b, 230))
+            pen.setWidth(2)
+            pen.setCapStyle(Qt.PenCapStyle.RoundCap)
+            painter.setPen(pen)
+            for i, height in enumerate((4, 8, 11, 7, 5)):
+                pulse = 0.75 + 0.25 * math.sin(phase_angle + i * 1.1)
+                half = height * pulse / 2
+                bx = x + 2 + i * 3
+                painter.drawLine(QPointF(bx, cy - half), QPointF(bx, cy + half))
+            return
+
+        twinkle = 0.8 + 0.2 * math.sin(phase_angle)
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(QBrush(QColor(r, g, b, int(255 * twinkle))))
+        painter.drawPath(_sparkle_path(x + 6, cy, 6 * twinkle))
+        painter.setBrush(QBrush(QColor(r, g, b, int(220 * (1.2 - twinkle)))))
+        painter.drawPath(_sparkle_path(x + 13, cy - 4.5, 2.5))
+
     @Slot()
     def _next_message(self):
-        """Következő üzenet - RANDOM választás"""
-        self.current_message = random.choice(self.processing_messages)
+        """Következő üzenet - RANDOM választás a fázis készletéből"""
+        self.current_message = popup_phases.pick_message(self.phase, self.current_message)
         self.update()
 
     def _draw_text_preview(self, painter: QPainter):
@@ -715,10 +750,33 @@ class RecordingPopup(QWidget):
     def show_processing(self):
         """Processing állapot megjelenítése (feldolgozás közben)"""
         self.state = PopupState.PROCESSING
-        self.current_message = random.choice(self.processing_messages)
+        self.phase = popup_phases.PHASE_STT  # every dictation starts local
+        self.current_message = popup_phases.pick_message(self.phase)
         self.animation_frame = 0
         self.message_timer.start(2000)  # 2 mp-ként új szöveg
         self.setFixedSize(self.base_width, self.base_height)
+        self.update()
+
+    @Slot(str)
+    def show_phase(self, phase: str):
+        """
+        The processing popup switches to the other phase; ignored otherwise.
+
+        Only the PROCESSING state has a phase row, so a late signal - the AI
+        step starting after an error already hid the popup, or after the text
+        is up - changes nothing. The end of processing is show_text() or
+        hide_popup() exactly as before, so the row cannot get stuck on
+        "AI cleanup" when the model fails: the plain transcript arrives
+        through the same show_text().
+        """
+        if self.state != PopupState.PROCESSING:
+            return
+        phase = popup_phases.normalize(phase)
+        if phase == self.phase:
+            return
+        self.phase = phase
+        self.current_message = popup_phases.pick_message(phase)
+        self.message_timer.start(2000)  # a fresh two seconds for the new joke
         self.update()
 
     @Slot()
@@ -773,6 +831,19 @@ class RecordingPopup(QWidget):
         self.hide()
 
 
+def _sparkle_path(cx: float, cy: float, r: float) -> QPainterPath:
+    """Four-point sparkle: the tips are r away, the waist pinched to 0.28 r"""
+    k = r * 0.28
+    path = QPainterPath()
+    path.moveTo(cx, cy - r)
+    path.quadTo(cx + k, cy - k, cx + r, cy)
+    path.quadTo(cx + k, cy + k, cx, cy + r)
+    path.quadTo(cx - k, cy + k, cx - r, cy)
+    path.quadTo(cx - k, cy - k, cx, cy - r)
+    path.closeSubpath()
+    return path
+
+
 def _is_wayland() -> bool:
     """Check if running on Wayland"""
     session_type = os.environ.get('XDG_SESSION_TYPE', '').lower()
@@ -793,6 +864,7 @@ class PopupManager(QObject):
     # Signalok a thread-safe kommunikációhoz (publikus API)
     request_show_popup = Signal()
     request_show_processing = Signal()
+    request_show_phase = Signal(str)
     request_show_text = Signal(str)
     request_hide_popup = Signal()
 
@@ -811,6 +883,7 @@ class PopupManager(QObject):
         # Signal összekötések
         self.request_show_popup.connect(self._show_popup)
         self.request_show_processing.connect(self._show_processing)
+        self.request_show_phase.connect(self._show_phase)
         self.request_show_text.connect(self._show_text)
         self.request_hide_popup.connect(self._hide_popup)
 
@@ -875,6 +948,15 @@ class PopupManager(QObject):
                 self._popup.request_show_processing.emit()
 
     @Slot(str)
+    def _show_phase(self, phase: str):
+        """Which phase the processing popup should show"""
+        if self._popup:
+            if self._is_wayland:
+                self._popup.show_phase(phase)
+            else:
+                self._popup.request_show_phase.emit(phase)
+
+    @Slot(str)
     def _show_text(self, text: str):
         """Szöveg megjelenítése transzkripció után"""
         if self._popup:
@@ -923,5 +1005,10 @@ if __name__ == "__main__":
 
     popup = RecordingPopup(test_queue)
     popup.show_popup()
+
+    # Walk through the states the way a real dictation does
+    QTimer.singleShot(3000, popup.show_processing)
+    QTimer.singleShot(6000, lambda: popup.show_phase(popup_phases.PHASE_AI))
+    QTimer.singleShot(10000, lambda: popup.show_text("Szia! Ez egy próba, 3 mondattal."))
 
     sys.exit(app.exec())

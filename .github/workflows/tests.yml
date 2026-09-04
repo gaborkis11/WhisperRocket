@@ -39,6 +39,24 @@ jobs:
       - name: Environment health checks (system_check.py)
         run: python tests/test_system_check.py
 
+      - name: Dictionary hotwords
+        run: python tests/test_dictionary_hotwords.py
+
+      - name: AI cleanup prompt rules
+        run: python tests/test_ai_prompt_rules.py
+
+      - name: AI cleanup guard
+        run: python tests/test_ai_guard.py
+
+      - name: Sentence splitter (two-comma rule)
+        run: python tests/test_sentence_splitter.py
+
+      - name: Transcript filter (silence hallucinations)
+        run: python tests/test_transcript_filter.py
+
+      - name: Popup phase row (stdlib part; Qt/GTK parts self-skip)
+        run: python tests/test_popup_phase.py
+
       - name: Hyprland autostart block management
         run: python tests/test_hypr_autostart.py
 

@@ -42,3 +42,18 @@ faster-whisper
 #
 # Word boundaries are respected and case and accents are ignored, so
 # "tail scale" matches but "tailscalexyz" does not.
+#
+# ---------------------------------------------------------------------------
+# OPTIONAL: hints for the recogniser itself (off by default)
+#
+# The list is used by the AI cleanup, after recognition. faster-whisper can
+# also take it as "hotwords" while still listening; that is switched off by
+# default, because the hint competes with your speech for the decoder's
+# budget, fits only a few dozen words, and the AI resolves the same names
+# from this list anyway. To try it, set "hotwords_enabled": true in
+# config.json. Only then does a ! in front of a word mean anything (it goes
+# to the recogniser first); with hotwords off the marker changes nothing.
+#
+#     !Sanyi
+#
+# The log says what got through: [HOTWORDS] 36/112 words, 149/150 tokens; ...

@@ -18,6 +18,7 @@ from queue import Queue, Empty
 from enum import Enum, auto
 
 from translations import t
+import popup_phases
 
 
 def init_gtk():
@@ -144,7 +145,9 @@ class RocketWidget(Gtk.DrawingArea):
         self.stars = []
         self._init_stars()
 
-        self.set_size_request(350, 60)
+        # 46 px, not 60: the phase row under the rocket takes the difference,
+        # so the overlay keeps its height through both phases
+        self.set_size_request(350, 46)
         self.connect("draw", self._on_draw)
 
     def _init_stars(self):
@@ -152,7 +155,7 @@ class RocketWidget(Gtk.DrawingArea):
         self.stars = []
         for _ in range(15):
             x = random.randint(0, 350)
-            y = random.randint(5, 55)
+            y = random.randint(4, 42)
             size = random.uniform(1.5, 3.5)
             speed = random.uniform(2, 5)
             self.stars.append([x, y, size, speed])
@@ -163,7 +166,7 @@ class RocketWidget(Gtk.DrawingArea):
             star[0] -= star[3]
             if star[0] < -5:
                 star[0] = 355
-                star[1] = random.randint(5, 55)
+                star[1] = random.randint(4, 42)
                 star[2] = random.uniform(1.5, 3.5)
                 star[3] = random.uniform(2, 5)
 
@@ -180,7 +183,7 @@ class RocketWidget(Gtk.DrawingArea):
             cr.fill()
 
         # Rakéta középen
-        self._draw_rocket(cr, 190, 30)
+        self._draw_rocket(cr, 190, 23)
 
         self.animation_frame = (self.animation_frame + 1) % 60
         return False
@@ -261,27 +264,32 @@ class RocketWidget(Gtk.DrawingArea):
         self.queue_draw()
 
 
+class PhaseIconWidget(Gtk.DrawingArea):
+    """The phase glyph, animated together with the rocket (drawn in popup_phases)"""
+
+    def __init__(self):
+        super().__init__()
+        self.phase = popup_phases.PHASE_STT
+        self.frame = 0
+        self.set_size_request(popup_phases.ICON_WIDTH, popup_phases.ICON_HEIGHT)
+        self.connect("draw", self._on_draw)
+
+    def _on_draw(self, widget, cr):
+        popup_phases.draw_icon_cairo(cr, self.phase, self.frame)
+        return False
+
+    def animate(self):
+        self.frame = (self.frame + 1) % 60
+        self.queue_draw()
+
+
 class WaylandOverlay:
     """
     GTK Layer-Shell alapú overlay Wayland-hez.
     NEM lop fókuszt a keyboard_interactivity=NONE beállítás miatt.
     """
 
-    PROCESSING_MESSAGES = [
-        "Transcribing your thoughts...",
-        "Converting speech to text...",
-        "Processing your words...",
-        "Making your cocktail...",
-        "Brewing some magic...",
-        "Decoding your genius...",
-        "Hold my coffee...",
-        "Crunching the soundwaves...",
-        "Whisper is thinking...",
-        "Almost got it...",
-        "Loading awesomeness...",
-        "Patience, young padawan...",
-        "BRB, transcribing...",
-    ]
+    # Jokes and phase colours come from popup_phases, shared with the Qt popup
 
     def __init__(self, amplitude_queue: Queue, hotkey: str = "Ctrl+Shift+S",
                  popup_duration: int = 5, ui_language: str = "en"):
@@ -294,6 +302,7 @@ class WaylandOverlay:
         self.transcribed_text = ""
         self.countdown_remaining = 0
         self.current_message = ""
+        self.phase = popup_phases.PHASE_STT
 
         # Timer ID-k
         self._animation_timer_id = None
@@ -414,6 +423,17 @@ class WaylandOverlay:
         self._cancel_btn.set_markup('<span foreground="#b4b4b4" font_size="small" background="#505050"> Esc </span>')
         self._right_box.pack_start(self._cancel_btn, False, False, 0)
 
+        # Phase row under the rocket: icon + small-caps label (processing only)
+        self._phase_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
+        self._phase_box.set_no_show_all(True)
+        self._phase_box.set_halign(Gtk.Align.CENTER)
+        self._phase_icon = PhaseIconWidget()
+        self._phase_icon.set_valign(Gtk.Align.CENTER)
+        self._phase_box.pack_start(self._phase_icon, False, False, 0)
+        self._phase_label = Gtk.Label()
+        self._phase_box.pack_start(self._phase_label, False, False, 0)
+        self._main_box.pack_start(self._phase_box, False, False, 0)
+
         # Processing message label (kezdetben rejtett)
         self._message_label = Gtk.Label()
         self._message_label.set_no_show_all(True)
@@ -507,6 +527,13 @@ class WaylandOverlay:
         return self._request_show_processing
 
     @property
+    def request_show_phase(self):
+        if not hasattr(self, '_request_show_phase'):
+            self._request_show_phase = self._SignalEmitter()
+            self._request_show_phase._callback = lambda phase: self._run_on_gtk_thread(lambda: self.show_phase(phase))
+        return self._request_show_phase
+
+    @property
     def request_show_text(self):
         if not hasattr(self, '_request_show_text'):
             self._request_show_text = self._SignalEmitter()
@@ -533,6 +560,7 @@ class WaylandOverlay:
         self._waveform.show()
         self._rocket.hide()
         self._bottom_box.show()
+        self._phase_box.hide()
         self._message_label.hide()
         self._text_label.hide()
         self._countdown_box.hide()
@@ -577,17 +605,22 @@ class WaylandOverlay:
         self._stop_all_timers()
 
         self.state = OverlayState.PROCESSING
-        self.current_message = random.choice(self.PROCESSING_MESSAGES)
+        self.phase = popup_phases.PHASE_STT  # every dictation starts local
+        self.current_message = popup_phases.pick_message(self.phase)
 
         # Widgetek láthatósága
         self._waveform.hide()
         self._rocket.show()
         self._bottom_box.hide()
+        self._phase_icon.show()
+        self._phase_label.show()
+        self._phase_box.show()
         self._message_label.show()
         self._text_label.hide()
         self._countdown_box.hide()
 
-        # Message label
+        # Phase row + message label
+        self._update_phase_row()
         self._message_label.set_markup(f'<span foreground="#c8c8c8" font_style="italic">{self.current_message}</span>')
 
         # Méret
@@ -610,13 +643,47 @@ class WaylandOverlay:
         if self.state != OverlayState.PROCESSING:
             return False
         self._rocket.animate()
+        self._phase_icon.animate()
         return True
 
+    def _update_phase_row(self):
+        """Icon and label for the current phase, in its accent colour"""
+        self._phase_icon.phase = self.phase
+        self._phase_icon.queue_draw()
+        label = popup_phases.LABELS[self.phase].upper()
+        r, g, b = popup_phases.ACCENT_RGB[self.phase]
+        self._phase_label.set_markup(
+            f'<span foreground="#{r:02x}{g:02x}{b:02x}" font_size="x-small" weight="bold" '
+            f'letter_spacing="1500">{GLib.markup_escape_text(label)}</span>')
+
+    def show_phase(self, phase: str):
+        """
+        Switch the processing overlay to the other phase; ignored in any other
+        state, so a late signal cannot revive a hidden overlay. The end of
+        processing is show_text() or hide() exactly as before.
+        """
+        if self.state != OverlayState.PROCESSING:
+            return
+        phase = popup_phases.normalize(phase)
+        if phase == self.phase:
+            return
+        self.phase = phase
+        self._update_phase_row()
+        self.current_message = popup_phases.pick_message(phase)
+        self._message_label.set_markup(f'<span foreground="#c8c8c8" font_style="italic">{self.current_message}</span>')
+        # A fresh two seconds for the new joke
+        if self._message_timer_id:
+            try:
+                GLib.source_remove(self._message_timer_id)
+            except Exception:
+                pass
+        self._message_timer_id = GLib.timeout_add(2000, self._next_message)
+
     def _next_message(self):
-        """Következő vicces üzenet"""
+        """Következő vicces üzenet a fázis készletéből"""
         if self.state != OverlayState.PROCESSING:
             return False
-        self.current_message = random.choice(self.PROCESSING_MESSAGES)
+        self.current_message = popup_phases.pick_message(self.phase, self.current_message)
         self._message_label.set_markup(f'<span foreground="#c8c8c8" font_style="italic">{self.current_message}</span>')
         return True
 
@@ -633,6 +700,7 @@ class WaylandOverlay:
         self._waveform.hide()
         self._rocket.hide()
         self._bottom_box.hide()
+        self._phase_box.hide()
         self._message_label.hide()
         self._text_label.show()
         self._countdown_box.show()
@@ -757,6 +825,10 @@ if __name__ == "__main__":
         overlay.request_show_processing.emit()
         return False
 
+    def switch_to_ai():
+        overlay.show_phase(popup_phases.PHASE_AI)
+        return False
+
     def switch_to_text():
         print("Showing text...")
         overlay.request_show_text.emit("This is a test transcription!")
@@ -768,7 +840,8 @@ if __name__ == "__main__":
         return False
 
     GLib.timeout_add(4000, switch_to_processing)
-    GLib.timeout_add(8000, switch_to_text)
+    GLib.timeout_add(6500, switch_to_ai)
+    GLib.timeout_add(10000, switch_to_text)
     GLib.timeout_add(14000, quit_app)
 
     Gtk.main()

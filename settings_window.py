@@ -156,6 +156,7 @@ def load_config():
             # setup wizard once wrote to a file the app never read.
             "ai_enhance_enabled": False,
             "ai_model": "sonnet",
+            "ai_effort": "low",
             "ai_trigger_phrases": ["fogalmazzuk meg hogy", "fogalmazd meg hogy",
                                    "segíts megfogalmazni", "jarvis segíts megfogalmazni"],
             "ai_timeout_seconds": 120,
@@ -2036,6 +2037,28 @@ class SettingsWindow(QMainWindow):
         )
         form.addRow(t("ai_model", self.ui_lang), self.ai_model_combo)
 
+        # Effort: how much the model may think. Dictation wants the lowest -
+        # the note says so, because the higher levels look like "better" and
+        # cost tens of seconds per message.
+        self.ai_effort_combo = QComboBox()
+        for level in ai_enhancer.EFFORT_LEVELS:
+            self.ai_effort_combo.addItem(t(f"ai_effort_{level}", self.ui_lang), level)
+        self.set_combo_value(
+            self.ai_effort_combo,
+            ai_enhancer.effort_for(self.config),
+        )
+        self.ai_effort_combo.setToolTip(t("ai_effort_tip", self.ui_lang))
+        effort_row = QHBoxLayout()
+        effort_row.setContentsMargins(0, 0, 0, 0)
+        effort_row.addWidget(self.ai_effort_combo)
+        effort_note = QLabel(t("ai_effort_note", self.ui_lang))
+        effort_note.setStyleSheet("color: #888; font-size: 11px;")
+        effort_note.setToolTip(t("ai_effort_tip", self.ui_lang))
+        effort_row.addWidget(effort_note, 1)
+        effort_widget = QWidget()
+        effort_widget.setLayout(effort_row)
+        form.addRow(t("ai_effort", self.ui_lang), effort_widget)
+
         # A plain field, not a spin box: a spin box swallows the mouse wheel, so
         # scrolling this tab with the pointer over it silently changes the value.
         self.ai_timeout_edit = QLineEdit(
@@ -2130,6 +2153,12 @@ class SettingsWindow(QMainWindow):
         layout = QVBoxLayout(group)
         layout.setSpacing(8)
 
+        # What these two files are, before the buttons - the user asked
+        hint = QLabel(t("ai_prompts_hint", self.ui_lang))
+        hint.setWordWrap(True)
+        hint.setStyleSheet("color: #888; font-size: 11px;")
+        layout.addWidget(hint)
+
         self.ai_prompt_labels = {}
         for mode, key in (("transcript", "ai_prompt_transcript"),
                           ("compose", "ai_prompt_compose")):
@@ -2154,6 +2183,10 @@ class SettingsWindow(QMainWindow):
             form_label = QLabel(t(key, self.ui_lang))
             form_label.setStyleSheet("font-weight: bold;")
             layout.addWidget(form_label)
+            desc = QLabel(t(f"{key}_desc", self.ui_lang))
+            desc.setWordWrap(True)
+            desc.setStyleSheet("color: #888; font-size: 11px;")
+            layout.addWidget(desc)
             layout.addWidget(container)
 
         self.update_ai_prompt_labels()
@@ -2247,6 +2280,7 @@ class SettingsWindow(QMainWindow):
         # the box ticked costs nothing.
         self.ai_enable_check.setEnabled(status.ready)
         self.ai_model_combo.setEnabled(status.ready)
+        self.ai_effort_combo.setEnabled(status.ready)
         self.ai_timeout_edit.setEnabled(status.ready)
 
     def update_ai_style_label(self):
@@ -2270,6 +2304,7 @@ class SettingsWindow(QMainWindow):
         """Read the AI tab back into the config, called from both save paths"""
         self.config["ai_enhance_enabled"] = self.ai_enable_check.isChecked()
         self.config["ai_model"] = self.ai_model_combo.currentData()
+        self.config["ai_effort"] = self.ai_effort_combo.currentData() or ai_enhancer.DEFAULT_EFFORT
         # An empty or nonsense field must not become a 0-second timeout that
         # fails every call - fall back to the default instead.
         try:
