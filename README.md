@@ -903,7 +903,7 @@ The uninstaller offers three options:
 
 ## Changelog
 
-### Unreleased — on `feature/hotwords`, not yet on `main` (v1.2.4 candidate)
+### v1.2.4
 
 **AI cleanup made reliable on long, real dictations.**
 

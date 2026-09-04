@@ -17,7 +17,7 @@ import config_paths
 
 
 # Verzió
-APP_VERSION = "1.2.3"
+APP_VERSION = "1.2.4"
 
 
 def _get_ui_language():
