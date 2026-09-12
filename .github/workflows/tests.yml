@@ -24,6 +24,12 @@ jobs:
       - name: Phone endpoint (security-critical, 73 checks)
         run: python tests/test_phone_endpoint.py
 
+      - name: Phone AI budget and failure reason
+        run: python tests/test_phone_ai_budget.py
+
+      - name: Phone endpoint watchdog (boot race with Tailscale)
+        run: python tests/test_phone_watchdog.py
+
       - name: Import guarantee of the network-facing module
         run: python tests/test_stdlib_guarantee.py
 
