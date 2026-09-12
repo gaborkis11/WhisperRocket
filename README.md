@@ -626,6 +626,7 @@ phone can read them aloud while you are driving.
 | What you see | What it means |
 |---|---|
 | Status: *Tailscale is not running* | Start Tailscale on the computer and sign in |
+| Status: *Not running* right after boot | The app starts before Tailscale is ready. It re-checks every 30 seconds and starts the endpoint on its own - no need to save the settings again |
 | Status: *The port is in use* | Change the port in Settings, and update the phone |
 | *Wrong access key* | The key was regenerated - copy the current one |
 | *The model is still loading* | Wait a few seconds after starting the app |

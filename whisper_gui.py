@@ -424,6 +424,18 @@ local_busy = False
 
 phone_endpoint_instance = None  # phone_endpoint.PhoneEndpoint while it is running
 
+# Serialises start/stop of the endpoint: the Settings window's Save and the
+# watchdog below both call apply_phone_endpoint_settings(), from different
+# threads, and two concurrent starts would fight over the same port.
+phone_endpoint_lock = threading.Lock()
+
+# How often the watchdog re-checks the endpoint against the settings.
+PHONE_ENDPOINT_WATCHDOG_SECONDS = 30
+
+# The last reason the endpoint could not start, so the watchdog logs an
+# obstacle once when it appears rather than every 30 seconds while it lasts.
+_phone_last_obstacle = None
+
 # Hang lejátszás (platform-független)
 def play_sound(sound_file):
     """Hangfájl lejátszása háttérszálban (platform-specifikus implementáció)"""
@@ -1156,18 +1168,32 @@ def apply_phone_endpoint_settings():
     """
     Start, stop or restart the endpoint to match the saved settings.
 
-    Called at startup and again whenever the Settings window saves, so switching
-    the feature on takes effect immediately - restarting the app to open a port
-    would be a poor trade for a setting the user is likely to be experimenting
-    with.
+    Called at startup, whenever the Settings window saves, and every 30 seconds
+    by the watchdog. Idempotent: a correctly running server is left alone, so
+    calling it often costs one `tailscale status` and nothing else.
 
     Returns (running, reason) where reason names the obstacle when it is not.
     """
+    with phone_endpoint_lock:
+        return _apply_phone_endpoint_settings_locked()
+
+
+def _phone_obstacle(reason):
+    """Log an obstacle the first time it is seen, stay quiet while it persists"""
+    global _phone_last_obstacle
+    if reason != _phone_last_obstacle:
+        _phone_last_obstacle = reason
+        if reason is not None:
+            print(f"[PHONE] not starting - {reason}")
+
+
+def _apply_phone_endpoint_settings_locked():
     global phone_endpoint_instance
 
     settings = current_ai_config()
     if not settings.get("phone_endpoint_enabled"):
         stop_phone_endpoint()
+        _phone_obstacle(None)
         return False, "disabled"
 
     import phone_endpoint
@@ -1178,9 +1204,11 @@ def apply_phone_endpoint_settings():
     if not state.usable:
         # Refusing to start is the whole point: without Tailscale the only
         # addresses left are the LAN and the wildcard, and this endpoint is not
-        # meant to be reachable on either.
+        # meant to be reachable on either. Not fatal either: at boot Tailscale
+        # is often still "Starting" when we first look, and the watchdog will
+        # be back in 30 seconds.
         stop_phone_endpoint()
-        print(f"[PHONE] not starting - Tailscale is {state.reason}")
+        _phone_obstacle(f"Tailscale is {state.reason}")
         return False, state.reason
 
     token = secrets_manager.get_secret(phone_endpoint.TOKEN_ENV_NAME)
@@ -1194,10 +1222,12 @@ def apply_phone_endpoint_settings():
     # Restart when anything about the socket or the token changed; leave a
     # correctly running server alone.
     if phone_endpoint_instance is not None:
-        unchanged = (phone_endpoint_instance.host == state.ipv4
+        unchanged = (phone_endpoint_instance.is_running
+                     and phone_endpoint_instance.host == state.ipv4
                      and phone_endpoint_instance.port == port
                      and phone_endpoint_instance.token == token)
         if unchanged:
+            _phone_obstacle(None)
             return True, "ok"
         stop_phone_endpoint()
 
@@ -1213,14 +1243,43 @@ def apply_phone_endpoint_settings():
     try:
         endpoint.start()
     except OSError as error:
-        print(f"[PHONE] could not open the port: {error}")
+        _phone_obstacle(f"could not open the port: {error}")
         return False, "port_busy"
     except Exception as error:
-        print(f"[PHONE] could not start: {error}")
+        _phone_obstacle(f"could not start: {error}")
         return False, "unknown"
 
     phone_endpoint_instance = endpoint
+    _phone_obstacle(None)
     return True, "ok"
+
+
+def start_phone_endpoint_watchdog():
+    """
+    Re-check the endpoint against the settings every 30 seconds, for the life
+    of the app.
+
+    Why (2026-09-12): at boot the app and Tailscale race. The single startup
+    attempt asked Tailscale for its address while the daemon was still
+    "Starting", gave up, and nothing ever tried again - so the Phone tab said
+    "not running" until the user saved the settings by hand. The same loop
+    also brings the endpoint back after a suspend, when Tailscale reconnects
+    and possibly hands out a different address.
+
+    A thread rather than a QTimer because `tailscale status` can take up to 5
+    seconds when the daemon hangs, and that must not freeze the tray.
+    """
+    def loop():
+        while True:
+            time.sleep(PHONE_ENDPOINT_WATCHDOG_SECONDS)
+            try:
+                apply_phone_endpoint_settings()
+            except Exception as error:
+                print(f"[PHONE] watchdog: {error}")
+
+    threading.Thread(
+        target=loop, name="whisperrocket-phone-watchdog", daemon=True
+    ).start()
 
 
 # Popup kezelés (Signal-alapú thread-safe kommunikáció)
@@ -1615,6 +1674,7 @@ def main():
     # "still loading" until it is ready, which is a better answer for the phone
     # than a refused connection.
     apply_phone_endpoint_settings()
+    start_phone_endpoint_watchdog()
 
     print("="*60)
     print("  WHISPER SPEECH-TO-TEXT")
