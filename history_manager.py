@@ -14,6 +14,12 @@ from platform_support import get_platform_handler
 # Maximális history méret (100 MB)
 MAX_HISTORY_SIZE_BYTES = 100 * 1024 * 1024
 
+# Az ai_reason mező hossz-korlátja. A reason legtöbbször egy rövid kulcsszó
+# ("timeout", "usage_limit"), de lehet a guard indoklása vagy egy kivétel
+# szövege is, és az bármilyen hosszú lehet. A hibát az eleje mondja meg, a
+# maradék csak hizlalná a history.json-t.
+MAX_AI_REASON_CHARS = 200
+
 def get_history_path() -> Path:
     """History JSON fájl elérési útja (platform-specifikus)"""
     platform_handler = get_platform_handler()
@@ -49,7 +55,8 @@ def save_history(data: Dict) -> bool:
 def add_entry(text: str, duration_sec: float, language: str,
               enhanced: Optional[bool] = None,
               raw_text: Optional[str] = None,
-              source: Optional[str] = None) -> Optional[str]:
+              source: Optional[str] = None,
+              ai_reason: Optional[str] = None) -> Optional[str]:
     """
     Új bejegyzés hozzáadása a history-hoz
 
@@ -63,6 +70,13 @@ def add_entry(text: str, duration_sec: float, language: str,
         source: Honnan érkezett - "phone" a telefonos végpontról. A billentyű-
                 kombinációval diktált bejegyzésnél None, és ilyenkor a kulcs be
                 sem kerül, hogy a korábbi bejegyzések formátuma ne változzon.
+        ai_reason: Miért nem futott le a tisztítás (timeout, usage_limit,
+                network, guard:... stb.). Csak akkor kerül a bejegyzésbe, ha
+                enhanced kifejezetten False - sikeres tisztítás mellett nincs
+                értelme, kikapcsolt funkciónál (enhanced=None) pedig minden
+                egyes bejegyzésbe bekerülne, és tele szemetelné a fájlt.
+                Enélkül a hiba oka csak a konzolra ment, és utólag nem lehetett
+                megmondani, miért maradt el a tisztítás.
 
     Returns:
         Az új bejegyzés ID-ja, vagy None hiba esetén
@@ -86,6 +100,8 @@ def add_entry(text: str, duration_sec: float, language: str,
         entry["raw_text"] = raw_text.strip()
     if source:
         entry["source"] = source
+    if enhanced is False and ai_reason and ai_reason.strip():
+        entry["ai_reason"] = ai_reason.strip()[:MAX_AI_REASON_CHARS]
 
     # Új bejegyzés az elejére (legfrissebb elöl)
     data["entries"].insert(0, entry)

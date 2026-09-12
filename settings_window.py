@@ -163,7 +163,11 @@ def load_config():
             "ai_dictionary_enabled": True,
             "phone_endpoint_enabled": False,
             "phone_endpoint_port": 8771,
-            "phone_endpoint_budget_seconds": 20
+            # 50: the phone's response frame, ten seconds under the earliest
+            # point an iPhone Shortcut has been seen to give up. Kept the same
+            # here and in whisper_gui.py - these two default dicts drifting
+            # apart is how the setup wizard once wrote a value nobody read.
+            "phone_endpoint_budget_seconds": 50
         }
 
 
@@ -1517,7 +1521,7 @@ class SettingsWindow(QMainWindow):
         form.addRow(t("phone_port", self.ui_lang), self.phone_port_edit)
 
         self.phone_budget_edit = QLineEdit(
-            str(int(self.config.get("phone_endpoint_budget_seconds", 20)))
+            str(int(self.config.get("phone_endpoint_budget_seconds", 50)))
         )
         self.phone_budget_edit.setValidator(QIntValidator(5, 300, self))
         self.phone_budget_edit.setFixedWidth(80)
@@ -1705,7 +1709,7 @@ class SettingsWindow(QMainWindow):
         try:
             self.config["phone_endpoint_budget_seconds"] = int(self.phone_budget_edit.text())
         except ValueError:
-            self.config["phone_endpoint_budget_seconds"] = 20
+            self.config["phone_endpoint_budget_seconds"] = 50
 
     def save_phone_settings(self):
         """

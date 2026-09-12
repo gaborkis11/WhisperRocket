@@ -218,7 +218,27 @@ def load_config():
             # has to be something the user switches on deliberately.
             "phone_endpoint_enabled": False,
             "phone_endpoint_port": 8771,
-            "phone_endpoint_budget_seconds": 20
+            # The response frame: how long this machine may work before it
+            # answers the phone. It is what the Settings window has always
+            # called "Response budget", and since 2026-09-10 the phone path
+            # reads it again - the note calling it unused was written when the
+            # AI timeout was briefly cut loose from the frame.
+            #
+            # 50 rather than the earlier 20: the iPhone Shortcut gives up
+            # between 60 and 70 seconds (measured 2026-08-28), so 50 leaves ten
+            # seconds of margin under the earliest reported give-up point,
+            # while 20 threw away half the frame the phone was willing to wait.
+            "phone_endpoint_budget_seconds": 50,
+            # Floor for the AI cleanup on the phone path, see
+            # phone_endpoint.phone_ai_timeout(): under this a call cannot
+            # finish, so starting one would cost the frame and still send the
+            # raw transcript.
+            "phone_endpoint_ai_min_seconds": 12,
+            # Kept for backwards compatibility with existing settings.json
+            # files; unused since 2026-09-10, the phone path derives the AI
+            # timeout from the response frame again.
+            "phone_endpoint_ai_timeout_seconds": 30,
+            "ai_timeout_max_seconds": 180
         }
 
 _update_probe = None  # keep the QThread referenced while it runs
@@ -742,6 +762,21 @@ def current_hotwords():
         return None
 
 
+def ai_failure_reason(result) -> str:
+    """
+    The reason to record when the cleanup did not deliver, "" otherwise.
+
+    Only genuine failures: result.failed is already False for "disabled" and
+    "empty_input", where nothing was attempted and there is nothing to explain.
+    Without this the reason only ever reached the console, so a dictation that
+    came back raw left no trace of WHY - which is exactly the question asked
+    afterwards, and the nine raw entries in the history could not answer it.
+    """
+    if result is None or not result.failed:
+        return ""
+    return result.reason
+
+
 def ai_reason_label(reason: str) -> str:
     """Human-readable label for why the AI cleanup did not deliver"""
     if reason.startswith("guard:"):
@@ -777,7 +812,7 @@ def current_ai_config():
     return settings
 
 
-def apply_ai_enhancement(raw_text, timeout_override=None):
+def apply_ai_enhancement(raw_text, timeout_override=None, scale_timeout=True):
     """
     Custom-dictionary fix plus AI cleanup, or None when neither is switched on.
 
@@ -785,12 +820,16 @@ def apply_ai_enhancement(raw_text, timeout_override=None):
     this app's original feature and predates the AI path, so a missing or broken
     ai_enhancer must cost the tidying and never the transcript.
 
-    timeout_override shortens the wait for this one call. The phone endpoint uses
-    it to keep the whole request inside the window the iPhone is willing to wait:
-    whatever is left of the budget after Whisper becomes the AI's timeout, and if
-    the model does not make it, enhance() falls back to the raw transcript
-    exactly as it does on the desktop - and the stuck Claude process is killed
-    rather than left running against the account's limit.
+    timeout_override sets the wait for this one call. If the model does not make
+    it, enhance() falls back to the raw transcript exactly as it does on the
+    desktop - and the stuck Claude process is killed rather than left running
+    against the account's limit.
+
+    scale_timeout=False means the override is the whole answer: no growth with
+    the length of the text, no ai_timeout_max_seconds. The phone path uses it,
+    because there the override is not a starting point but the remainder of a
+    fixed response frame, and time the phone will not wait for cannot be given
+    away however long the transcript is.
     """
     ai_config = current_ai_config()
     if not (ai_config.get("ai_enhance_enabled")
@@ -799,6 +838,24 @@ def apply_ai_enhancement(raw_text, timeout_override=None):
 
     if timeout_override is not None:
         ai_config["ai_timeout_seconds"] = timeout_override
+
+    # The timeout scales with the length of the transcript, and can only ever
+    # RAISE what was asked for, never lower it.
+    #
+    # Why (2026-09-09): a fixed timeout is wrong for a job whose duration grows
+    # with the input. A ten second dictation is tidied in a few seconds; a three
+    # minute one has ten times the text to rewrite. With a fixed limit the long
+    # ones are exactly the ones that time out and fall back to the raw
+    # transcript - and the raw transcript of a long dictation is the worst of
+    # all: one endless comma-chained sentence. That is the complaint this fixes.
+    #
+    # Rough shape: the base stays for short text, then one extra second per 50
+    # characters, capped so a runaway call still cannot hang the app.
+    if scale_timeout:
+        base = int(ai_config.get("ai_timeout_seconds", 30) or 30)
+        scaled = base + len(raw_text) // 50
+        cap = int(ai_config.get("ai_timeout_max_seconds", 180) or 180)
+        ai_config["ai_timeout_seconds"] = max(base, min(scaled, cap))
 
     try:
         from ai_enhancer import enhance
@@ -898,6 +955,7 @@ def process_audio(audio_copy):
                 text, elapsed, config["language"],
                 enhanced=(ai_result.enhanced if ai_result else None),
                 raw_text=(ai_result.raw_text if ai_result else None),
+                ai_reason=ai_failure_reason(ai_result),
             )
             # Menü frissítése a főszálban (QTimer.singleShot thread-safe)
             from PySide6.QtCore import QTimer
@@ -974,13 +1032,12 @@ def dictate_from_phone(audio_bytes):
     raise, because the endpoint turns any failure into a spoken error and this
     path should decide for itself which failure the user hears.
     """
-    from phone_endpoint import DictationOutcome
+    from phone_endpoint import DictationOutcome, phone_ai_timeout
 
     if not phone_model_ready():
         return DictationOutcome(error="not_ready")
 
     settings = current_ai_config()
-    budget = float(settings.get("phone_endpoint_budget_seconds", 20))
 
     started = time.time()
     temp_path = None
@@ -1002,15 +1059,31 @@ def dictate_from_phone(audio_bytes):
             phone_tray('blue', "tray_ready")
             return DictationOutcome(error="no_speech")
 
-        # Whatever is left of the budget is what the AI gets. Below five seconds
-        # there is no point spawning the call at all - it could not finish, and
-        # the raw transcript is the same answer either way, minus the wait.
-        remaining = budget - whisper_elapsed
-        ai_result = apply_ai_enhancement(text, timeout_override=int(remaining)) \
-            if remaining >= 5 else None
+        # The cleanup gets what is LEFT of the response frame after Whisper.
+        #
+        # Why (2026-09-10): the phone is on a clock the desktop does not have.
+        # The iPhone Shortcut waits about 60 seconds and gives up between 60 and
+        # 70 (measured 2026-08-28), which is why the frame was set to 50. Against
+        # that, a flat 30 second start was too mean - it left frame unused while
+        # the phone was still happily waiting - and the desktop's 180 second cap
+        # was worse than useless, because a cleanup finishing at 150 seconds is
+        # billed to the account and read by nobody. Both are gone from this path:
+        # the frame decides, and phone_ai_timeout() does the arithmetic.
+        #
+        # Correct text beats a fast answer here, so the cleanup always runs.
+        budget = int(settings.get("phone_endpoint_budget_seconds", 50) or 50)
+        floor = int(settings.get("phone_endpoint_ai_min_seconds", 12) or 12)
+        ai_timeout = phone_ai_timeout(budget, whisper_elapsed, floor)
+        ai_result = apply_ai_enhancement(text, timeout_override=ai_timeout,
+                                         scale_timeout=False)
+        ai_reason = ai_failure_reason(ai_result)
 
-        if ai_result is None and remaining < 5:
-            print(f"[PHONE] {remaining:.1f}s left of the budget - sending the plain transcript")
+        if ai_result is None or not ai_result.enhanced:
+            print(f"[PHONE] the cleanup did not run or fell back "
+                  f"(whisper {whisper_elapsed:.1f}s, frame {budget}s, "
+                  f"ai timeout {ai_timeout}s"
+                  f"{', reason ' + ai_reason if ai_reason else ''}) "
+                  f"- sending the plain transcript")
 
         if ai_result is not None:
             text = ai_result.text
@@ -1024,6 +1097,7 @@ def dictate_from_phone(audio_bytes):
                 enhanced=(ai_result.enhanced if ai_result else None),
                 raw_text=(ai_result.raw_text if ai_result else None),
                 source="phone",
+                ai_reason=ai_reason,
             )
             from PySide6.QtCore import QTimer
             QTimer.singleShot(0, refresh_history_menu)
@@ -1034,7 +1108,11 @@ def dictate_from_phone(audio_bytes):
         phone_tray('green' if enhanced else 'orange', "tray_phone_done")
         threading.Timer(3.0, lambda: phone_tray('blue', "tray_ready")).start()
 
-        return DictationOutcome(text=text, mode=mode, enhanced=enhanced)
+        # ai_reason is added, nothing is taken away: the body is still the
+        # finished text and Mode/Enhanced still mean what they meant, so the
+        # Shortcut on the phone keeps working unchanged.
+        return DictationOutcome(text=text, mode=mode, enhanced=enhanced,
+                                ai_reason=ai_reason)
 
     except Exception as error:
         print(f"[PHONE] failed: {error}")

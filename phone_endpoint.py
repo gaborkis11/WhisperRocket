@@ -68,6 +68,61 @@ class DictationOutcome:
     mode: str = "transcript"          # transcript | compose
     enhanced: bool = False            # did the AI cleanup deliver, or is this raw
     error: Optional[str] = None       # no_speech | not_ready | failed
+    # Why the cleanup did not deliver, empty when it did or was never tried.
+    # Appended last on purpose: every existing caller builds this by keyword,
+    # and a new field at the end cannot shift anyone's positional arguments.
+    ai_reason: str = ""
+
+
+# How much of the response frame the AI cleanup may use.
+#
+# The frame is a hard wall, not a preference: the iPhone Shortcut stops waiting
+# for the answer somewhere between 60 and 70 seconds (measured 2026-08-28), and
+# anything produced after that is thrown away unread. So the cleanup gets what
+# is LEFT of the frame once the transcription has had its share - no more,
+# because waiting past the wall only spends the account's Claude budget on an
+# answer nobody receives, and no less, because unused frame is wasted quality.
+#
+# Kept here, next to the rest of the phone protocol's timing, so it can be
+# tested without starting the GUI. Pure arithmetic: no config, no clock.
+def phone_ai_timeout(budget_seconds, whisper_elapsed, floor_seconds) -> int:
+    """
+    Seconds the AI cleanup may take after a transcription that took
+    whisper_elapsed seconds out of a budget_seconds response frame.
+
+    floor_seconds is the lower bound. A slow transcription would otherwise
+    leave two or three seconds, which is less than any cleanup has ever
+    finished in (low effort answers in roughly 4 to 8 seconds), so the call
+    would be started only to be killed - the worst of both, a raw transcript
+    AND a burnt frame. Below the floor the attempt is worth overrunning the
+    frame slightly: the phone may still be listening, and if it is not, a lost
+    answer costs no more than one that was never attempted.
+
+    The desktop cap (ai_timeout_max_seconds) deliberately has no part in this,
+    and neither does the length scaling: a longer transcript cannot be given
+    more time than the frame has left.
+    """
+    budget = int(budget_seconds or 0)
+    floor = int(floor_seconds or 0)
+    try:
+        left = int(budget - float(whisper_elapsed or 0))
+    except (TypeError, ValueError):
+        left = budget
+    return max(floor, left)
+
+
+def header_safe(value: str, limit: int = 200) -> str:
+    """
+    A string an HTTP header can actually carry.
+
+    send_header encodes latin-1 strict, so one Hungarian accent in a failure
+    reason would raise mid-response and cost the user the dictation itself.
+    Newlines go too: a header value that carries CR or LF is header injection,
+    and the reason string can end up containing model or exception text.
+    """
+    ascii_only = (value or "").encode("ascii", "replace").decode("ascii")
+    collapsed = " ".join(ascii_only.split())
+    return collapsed[:limit]
 
 
 # Which HTTP status each failure maps to. 422 rather than 200-with-empty-body so
@@ -309,10 +364,17 @@ class _Handler(BaseHTTPRequestHandler):
             if not outcome.text.strip():
                 return self._respond(422, self._message("no_speech"))
 
-            return self._respond(200, outcome.text, {
+            # Additive only: the body stays the finished text, and Mode and
+            # Enhanced keep their meaning, because the Shortcut on the phone
+            # reads exactly those. AI-Reason is sent only when there is one,
+            # so a normal answer looks precisely as it did before.
+            headers = {
                 "X-WhisperRocket-Mode": outcome.mode,
                 "X-WhisperRocket-Enhanced": "1" if outcome.enhanced else "0",
-            })
+            }
+            if outcome.ai_reason:
+                headers["X-WhisperRocket-AI-Reason"] = header_safe(outcome.ai_reason)
+            return self._respond(200, outcome.text, headers)
         finally:
             self._endpoint.dictate_slot.release()
 
