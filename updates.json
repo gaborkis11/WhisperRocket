@@ -1,6 +1,24 @@
 {
   "versions": [
     {
+      "version": "1.2.5",
+      "date": "2026-09-12",
+      "notes": {
+        "en": [
+          "Phone dictation comes up on its own after a reboot: the app used to ask Tailscale once, before it was ready, and then never again - now it re-checks every 30 seconds and starts the endpoint when Tailscale is up, and brings it back after a suspend or an address change",
+          "Phone response frame is 50 seconds by default (was 20): the iPhone Shortcut gives up between 60 and 70, so the old value threw away half the time the phone was willing to wait",
+          "On the phone the AI cleanup gets whatever is left of the frame after transcription, never less than 12 seconds - a correct text beats a fast raw one",
+          "When the AI cleanup falls back to the raw transcript, the reason (timeout, usage limit, network, guard) is kept in the history and sent to the phone in a header, so a raw result can be explained afterwards"
+        ],
+        "hu": [
+          "A telefonos diktálás újraindítás után magától elindul: az app eddig egyszer kérdezte meg a Tailscale-t, még mielőtt az készen állt, aztán soha többé - most 30 másodpercenként újra megnézi, elindítja a végpontot, amint a Tailscale fut, és alvás vagy címváltás után is visszahozza",
+          "A telefonos válaszkeret alapból 50 másodperc (eddig 20): az iPhone Parancs 60 és 70 között adja fel, a régi érték a felét eldobta annak, amit a telefon kivárt volna",
+          "Telefonon az AI-tisztítás azt kapja, ami a keretből a felismerés után marad, de legalább 12 másodpercet - a jó szöveg többet ér, mint a gyors nyers",
+          "Ha az AI-tisztítás a nyers átiratra esik vissza, az oka (időtúllépés, használati limit, hálózat, őr) bekerül az előzményekbe és egy fejlécben a telefonra is elmegy, így utólag megmondható, miért maradt nyers"
+        ]
+      }
+    },
+    {
       "version": "1.2.4",
       "date": "2026-09-04",
       "notes": {

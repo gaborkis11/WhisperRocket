@@ -904,6 +904,27 @@ The uninstaller offers three options:
 
 ## Changelog
 
+### v1.2.5
+
+**Phone dictation that survives a reboot, and a response frame the phone actually waits for.**
+
+- **The endpoint starts on its own after boot.** The app asked Tailscale for its address
+  once, right at startup, while the daemon was still *Starting* - and never asked again,
+  so the Phone tab said *Not running* until the settings were saved by hand. A watchdog
+  now re-checks every 30 seconds: it starts the endpoint when Tailscale is up, brings it
+  back after a suspend, and rebinds when the Tailscale address changes. An obstacle is
+  logged once, not every tick.
+- **Response frame 50 s by default** (was 20 s). The iPhone Shortcut gives up between
+  60 and 70 seconds (measured), so 50 leaves ten seconds of margin while the old value
+  threw away half the time the phone was willing to wait. `phone_endpoint_budget_seconds`.
+- **The AI cleanup gets what is left of the frame.** After transcription the cleanup may
+  use the remainder, floored at `phone_endpoint_ai_min_seconds` (12 s) - below that a
+  call could not finish and would only burn the frame. The desktop's length scaling and
+  180 s cap play no part on the phone.
+- **A raw result explains itself.** When the cleanup falls back to the plain transcript,
+  the reason (`timeout`, `usage_limit`, `network`, `guard:...`) is kept in the history
+  entry and sent to the phone in the `X-WhisperRocket-AI-Reason` header, ASCII-safe.
+
 ### v1.2.4
 
 **AI cleanup made reliable on long, real dictations.**
