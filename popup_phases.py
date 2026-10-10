@@ -9,9 +9,11 @@ that text. The two take a similar number of seconds, so a popup that just says
 popups (Qt on X11, GTK on Wayland) draw a small phase row under the rocket
 from this one module, so they never disagree about words, colours or jokes.
 
-A third phase comes first, and usually: the model is let go seconds after a
-dictation (warm_model.py), and the dictation that brings it back waits for
-the load. The popup says so, so the slower dictation does not look stuck.
+A third phase comes first, and rarely: the model is let go seconds after a
+dictation (warm_model.py) and loaded again when a recording starts, so it is
+normally back before the recording stops. Only when that early load did not
+happen - it failed and the transcription tries again - does the dictation
+wait for a load, and the popup says so, so it does not look stuck.
 
 Stdlib only: the tests run without Qt or GTK, and whisper_gui imports it to
 name the phase it reports.

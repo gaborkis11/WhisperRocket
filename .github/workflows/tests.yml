@@ -51,6 +51,9 @@ jobs:
       - name: Idle model release (warm_model.py)
         run: python tests/test_warm_model.py
 
+      - name: The running model cannot be deleted
+        run: python tests/test_model_protection.py
+
       - name: AI cleanup prompt rules
         run: python tests/test_ai_prompt_rules.py
 

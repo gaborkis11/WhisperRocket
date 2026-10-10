@@ -397,8 +397,11 @@ def save_config_value(key, value):
 config = load_config()
 ui_lang = config.get("ui_language", "en")
 # The Whisper model, on the GPU only while it is used - see warm_model.py.
-# Every transcription goes through whisper_model.use().
-whisper_model = warm_model.WarmModel(lambda: build_model())
+# Every transcription goes through whisper_model.use(). Loaded when a recording
+# starts (prewarm_model) and kept while it runs, so the reload hides behind
+# the speaking instead of adding to the wait after it.
+whisper_model = warm_model.WarmModel(lambda: build_model(),
+                                     keep_warm=lambda: recording)
 hotwords_provider = None  # dictionary_manager.HotwordsProvider, set in build_model()
 recording = False
 audio_data = []
@@ -696,8 +699,26 @@ def build_model():
     return model
 
 
+def prewarm_model():
+    """
+    Load the model while the user is still speaking (a recording just started).
+
+    Silent on purpose: the recording owns the tray and the popup, and a failed
+    load shows up where it matters - run_whisper() tries again after the stop
+    and reports it there.
+    """
+    if whisper_model.is_loaded:
+        return
+    try:
+        whisper_model.preload()
+    except Exception as e:
+        print(f"[MODEL] prewarm failed: {e}")
+
+
 def load_model():
     """Startup: load once so the first dictation is fast, then watch for idle"""
+    import model_manager
+    model_manager.set_running_model(config["model"])
     update_icon('orange', t("tray_loading", ui_lang))
     try:
         whisper_model.preload()
@@ -1370,6 +1391,7 @@ def start_recording():
         show_popup()
         play_sound(SOUND_START)
         print("\n[RECORDING] Starting...")
+        threading.Thread(target=prewarm_model, daemon=True).start()
         update_icon('red', t("tray_recording", ui_lang))
 
 def stop_recording():

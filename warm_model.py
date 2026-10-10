@@ -7,7 +7,8 @@ the app runs, dictation or not. On a 16 GB card that was enough to freeze a game
 running next to it. So the model now leaves the GPU after IDLE_RELEASE_SECONDS
 without a dictation and comes back on the next one - measured on an RTX 5070 Ti:
 3978 MiB down to 224 MiB (the CUDA context, which stays until the process
-exits), and 0.8-0.9 s extra on a dictation that finds it released.
+exits). The reload takes 0.8-0.9 s; the hotkey path starts it with the
+recording, so only a phone or file transcription waits for it.
 
 Every user of the model - the hotkey, the phone endpoint, file transcription -
 goes through WarmModel.use(). It holds the lock for the whole use, so the idle
@@ -62,13 +63,17 @@ class WarmModel:
     One model, shared by every caller, on the GPU only while it is being used.
 
     `loader` builds and returns the model; it is called with the lock held,
-    on whichever thread first needs the model.
+    on whichever thread first needs the model. `keep_warm`, when given, holds
+    off the release while it returns True - the app passes "a recording is
+    running", because the model is loaded when a recording starts.
     """
 
     def __init__(self, loader: Callable[[], object],
                  idle_seconds: float = IDLE_RELEASE_SECONDS,
-                 clock: Callable[[], float] = time.monotonic):
+                 clock: Callable[[], float] = time.monotonic,
+                 keep_warm: Optional[Callable[[], bool]] = None):
         self._loader = loader
+        self._keep_warm = keep_warm
         self._idle_seconds = idle_seconds
         self._clock = clock
         self._lock = threading.Lock()
@@ -134,6 +139,11 @@ class WarmModel:
         which is the opposite of idle.
         """
         if self._model is None:
+            return False
+        if self._keep_warm is not None and self._keep_warm():
+            # Counts as use: the idle time starts when the recording ends, so
+            # the model is not let go between the stop and the transcription
+            self._last_used = self._clock()
             return False
         if not self._lock.acquire(blocking=False):
             return False

@@ -192,14 +192,28 @@ while wm4.is_loaded and time.time() < deadline:
 wm4.stop_idle_watch()
 check("the watch thread releases the idle model on its own", not wm4.is_loaded)
 
-# --- 9. the wiring in whisper_gui.py -----------------------------------------
+# --- 9. kept warm while a recording runs -------------------------------------
+clock6 = Clock()
+state = {"recording": True}
+wm6 = warm_model.WarmModel(Loader(), clock=clock6, keep_warm=lambda: state["recording"])
+wm6.preload()  # what prewarm_model() does when a recording starts
+clock6.now += IDLE * 6  # a one-minute dictation
+check("not released while the recording runs", not wm6.release_if_idle() and wm6.is_loaded)
+state["recording"] = False
+clock6.now += 1
+check("not released in the gap between the stop and the transcription",
+      not wm6.release_if_idle() and wm6.is_loaded)
+clock6.now += IDLE
+check("released once idle after the recording", wm6.release_if_idle())
+
+# --- 10. the wiring in whisper_gui.py -----------------------------------------
 #
 # whisper_gui cannot be imported here (pynput needs a display), so the real
 # functions are lifted out of its source, as tests/test_phone_watchdog.py does.
 import ast  # noqa: E402
 
 source = (Path(__file__).resolve().parent.parent / "whisper_gui.py").read_text(encoding="utf-8")
-wanted = {"phone_model_ready", "run_whisper"}
+wanted = {"phone_model_ready", "run_whisper", "prewarm_model"}
 nodes = [n for n in ast.parse(source).body
          if isinstance(n, ast.FunctionDef) and n.name in wanted]
 check("whisper_gui still defines the wired functions", len(nodes) == len(wanted))
@@ -234,6 +248,21 @@ check("phone: still ready after an idle release", namespace["phone_model_ready"]
 events.clear()
 check("run_whisper brings the released model back",
       namespace["run_whisper"]("x.wav", on_loading=events.append) == "szia" and events == [True, False])
+
+# prewarm_model: loads silently, and a failure never reaches the recording
+wm7 = warm_model.WarmModel(FakeWhisper, clock=Clock())
+namespace["whisper_model"] = wm7
+namespace["prewarm_model"]()
+check("prewarm loads the model when a recording starts", wm7.is_loaded)
+broken = Loader()
+broken.fail = True
+namespace["whisper_model"] = warm_model.WarmModel(broken, clock=Clock())
+try:
+    namespace["prewarm_model"]()
+    swallowed = True
+except Exception:
+    swallowed = False
+check("a failed prewarm does not break the recording", swallowed)
 
 print(f"\n{passed} passed, {failed} failed")
 sys.exit(1 if failed else 0)

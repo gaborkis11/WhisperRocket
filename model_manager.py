@@ -203,6 +203,23 @@ def get_active_model():
         return "large-v3"
 
 
+# The model the running app loaded at startup. After a Save without a restart
+# the config names another one, but the app still reloads THIS one from disk
+# after every idle release (warm_model.py) - deleting it would make the next
+# dictation download it again, silently. Set by whisper_gui.
+_running_model = None
+
+
+def set_running_model(model_name):
+    global _running_model
+    _running_model = model_name
+
+
+def is_protected(model_name):
+    """Neither the configured model nor the one the running app uses may go"""
+    return model_name in (get_active_model(), _running_model)
+
+
 def is_model_downloaded_local(model_name, device=None):
     """Check if model is downloaded in local directory (new structure)"""
     local_path = get_local_model_path(model_name, device)
@@ -329,7 +346,7 @@ def delete_model(model_name, device=None):
         device = get_current_device()
 
     # Aktív modell ellenőrzés
-    if model_name == get_active_model():
+    if is_protected(model_name):
         return False, "active_model_cannot_delete"
 
     # Először ellenőrizzük a lokális mappát (új struktúra)
@@ -358,13 +375,12 @@ def delete_all_unused():
     Összes nem használt modell törlése
     Returns: (deleted_count: int, freed_bytes: int, errors: list)
     """
-    active_model = get_active_model()
     deleted_count = 0
     freed_bytes = 0
     errors = []
 
     for model in get_downloaded_models():
-        if model["name"] != active_model:
+        if not is_protected(model["name"]):
             success, message = delete_model(model["name"])
             if success:
                 deleted_count += 1
@@ -383,9 +399,8 @@ def get_total_cache_size():
 
 def get_freeable_size():
     """Felszabadítható méret (aktív modell nélkül)"""
-    active_model = get_active_model()
     models = get_downloaded_models()
-    return sum(m["size"] for m in models if m["name"] != active_model)
+    return sum(m["size"] for m in models if not is_protected(m["name"]))
 
 
 # Tesztelés

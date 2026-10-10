@@ -23,7 +23,7 @@ from PySide6.QtCore import Qt, QTimer, QThread, Signal, QUrl
 from PySide6.QtGui import QFont, QKeySequence, QDesktopServices, QIntValidator
 
 from model_manager import (
-    get_downloaded_models, get_active_model, delete_model,
+    get_downloaded_models, get_active_model, delete_model, is_protected,
     delete_all_unused, get_total_cache_size, get_freeable_size,
     format_size, is_model_downloaded
 )
@@ -929,7 +929,7 @@ class SettingsWindow(QMainWindow):
             return
 
         model_name = item.data(Qt.ItemDataRole.UserRole)
-        if model_name == get_active_model():
+        if is_protected(model_name):
             QMessageBox.warning(self, t("dlg_warning", self.ui_lang), t("dlg_active_no_delete", self.ui_lang))
             return
 
