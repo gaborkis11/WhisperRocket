@@ -162,9 +162,10 @@ class FakeModel:
         return iter([]), types.SimpleNamespace(duration=1.0)
 
 
-import threading  # noqa: E402
+import warm_model  # noqa: E402
 
-engine = transcription_engine.TranscriptionEngine(FakeModel(), "faster-whisper", threading.Lock())
+engine = transcription_engine.TranscriptionEngine(
+    warm_model.WarmModel(FakeModel), "faster-whisper")
 engine.transcribe_file("x.wav", "hu", hotwords="Sanyi, Tomi")
 check("transcribe_file passes hotwords through to model.transcribe",
       calls and calls[-1].get("hotwords") == "Sanyi, Tomi", str(calls))

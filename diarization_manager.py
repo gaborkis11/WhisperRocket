@@ -128,6 +128,12 @@ class DiarizationManager:
         if self.device == "cuda" and torch.cuda.is_available():
             self.pipeline.to(torch.device("cuda"))
 
+    def release(self):
+        """Drop the pipeline and hand its GPU memory back (see warm_model)"""
+        import warm_model
+        self.pipeline = None
+        warm_model.free_gpu_cache()
+
     def diarize(self, audio_path: str) -> Dict[Tuple[float, float], str]:
         """
         Run speaker diarization on an audio file.

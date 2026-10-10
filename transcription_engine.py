@@ -5,7 +5,6 @@ Backend logic for file transcription with progress reporting and export formats.
 """
 import json
 import os
-import threading
 from dataclasses import dataclass, field
 from typing import List, Optional, Callable
 
@@ -34,10 +33,11 @@ class TranscriptionResult:
 class TranscriptionEngine:
     """Handles file transcription with progress reporting"""
 
-    def __init__(self, model, whisper_backend: str, model_lock: threading.Lock):
-        self.model = model
+    def __init__(self, whisper_model, whisper_backend: str):
+        # warm_model.WarmModel: loads the model back if it was let go while
+        # idle, and holds its lock for the duration of a use
+        self.whisper_model = whisper_model
         self.whisper_backend = whisper_backend
-        self.model_lock = model_lock
         self._cancel_flag = False
 
     def transcribe_file(
@@ -86,8 +86,8 @@ class TranscriptionEngine:
     ):
         """Transcribe using faster-whisper backend"""
         # Acquire model lock and consume all segments
-        with self.model_lock:
-            segments_gen, info = self.model.transcribe(
+        with self.whisper_model.use() as model:
+            segments_gen, info = model.transcribe(
                 file_path,
                 language=language,
                 beam_size=beam_size,
@@ -128,10 +128,10 @@ class TranscriptionEngine:
         if progress_callback:
             progress_callback(0.0, "Processing...")
 
-        with self.model_lock:
+        with self.whisper_model.use() as model:
             mlx_result = mlx_whisper.transcribe(
                 file_path,
-                path_or_hf_repo=f"mlx-community/whisper-{self.model['model_name']}-mlx",
+                path_or_hf_repo=f"mlx-community/whisper-{model['model_name']}-mlx",
                 language=language,
             )
 

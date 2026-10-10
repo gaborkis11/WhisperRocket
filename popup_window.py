@@ -54,7 +54,7 @@ class RecordingPopup(QWidget):
     # Signalok thread-safe kommunikációhoz
     request_show_popup = Signal()
     request_show_processing = Signal()
-    request_show_phase = Signal(str)  # popup_phases.PHASE_STT / PHASE_AI
+    request_show_phase = Signal(str)  # one of popup_phases.PHASES
     request_show_text = Signal(str)
     request_hide_popup = Signal()
     popup_closed = Signal()  # Jelzi a managernek hogy bezáródott
@@ -474,7 +474,8 @@ class RecordingPopup(QWidget):
         """Vector glyph for the phase, 16 px wide, animated with the rocket
 
         Local model: five sound bars that breathe, the same shape as the
-        recording equalizer, in the rocket window's blue. AI: a four-point
+        recording equalizer, in the rocket window's blue (the model's load
+        uses the same bars in its own colour). AI: a four-point
         sparkle with a small companion twinkling in counter-phase, in the
         flame's gold. Drawn, not a font glyph, so it looks the same on every
         machine.
@@ -482,7 +483,7 @@ class RecordingPopup(QWidget):
         r, g, b = popup_phases.ACCENT_RGB[phase]
         phase_angle = (self.animation_frame / 60.0) * 2 * math.pi
 
-        if phase == popup_phases.PHASE_STT:
+        if phase != popup_phases.PHASE_AI:
             pen = QPen(QColor(r, g, b, 230))
             pen.setWidth(2)
             pen.setCapStyle(Qt.PenCapStyle.RoundCap)

@@ -132,13 +132,14 @@ class FileTranscriptionWindow(QMainWindow):
     transcription_complete = Signal(object)
     transcription_error = Signal(str)
 
-    def __init__(self, model, whisper_backend, config, ui_lang, model_lock, hotwords=None):
+    def __init__(self, whisper_model, whisper_backend, config, ui_lang, hotwords=None):
         super().__init__()
-        self.model = model
+        # warm_model.WarmModel shared with dictation: loaded again if it was
+        # let go while idle, and locked while this file is transcribed
+        self.whisper_model = whisper_model
         self.whisper_backend = whisper_backend
         self.config = config
         self.ui_lang = ui_lang
-        self.model_lock = model_lock
         # Callable returning the dictionary packed for the recogniser (or None);
         # called per run so a dictionary edited meanwhile is picked up
         self._hotwords = hotwords
@@ -328,7 +329,7 @@ class FileTranscriptionWindow(QMainWindow):
         if not self.selected_file or self._transcribing:
             return
 
-        if self.model is None:
+        if not self.whisper_model.usable:
             self.progress_label.setText(t("ft_model_busy", self.ui_lang))
             return
 
@@ -343,7 +344,7 @@ class FileTranscriptionWindow(QMainWindow):
         self.progress_bar.setRange(0, 100)
         self.progress_label.setText("")
 
-        self.engine = TranscriptionEngine(self.model, self.whisper_backend, self.model_lock)
+        self.engine = TranscriptionEngine(self.whisper_model, self.whisper_backend)
 
         thread = threading.Thread(target=self._transcription_worker, daemon=True)
         thread.start()
@@ -380,7 +381,12 @@ class FileTranscriptionWindow(QMainWindow):
                 dm = diarization_manager.DiarizationManager(
                     device=self.config.get("device", "cpu")
                 )
-                diar_result = dm.diarize(self.selected_file)
+                try:
+                    diar_result = dm.diarize(self.selected_file)
+                finally:
+                    # The pipeline is built again for every file, so keeping
+                    # it on the GPU would only cost VRAM
+                    dm.release()
                 result.segments = diarization_manager.merge_speakers(result.segments, diar_result)
                 result.has_diarization = True
 

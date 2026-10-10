@@ -36,7 +36,8 @@ def check(name, condition, detail=""):
 out_dir = Path(sys.argv[1]) if len(sys.argv) > 1 else None
 
 # --- 1. the shared phase data ------------------------------------------------
-check("two phases, local first", popup_phases.PHASES == ("stt", "ai"))
+check("three phases, in the order a dictation runs them",
+      popup_phases.PHASES == ("load", "stt", "ai"))
 for phase in popup_phases.PHASES:
     pool = popup_phases.MESSAGES[phase]
     check(f"{phase}: a real pool", len(pool) >= 10, str(len(pool)))
@@ -52,8 +53,11 @@ for phase in popup_phases.PHASES:
     check(f"{phase}: accent is an RGB triple",
           len(popup_phases.ACCENT_RGB[phase]) == 3 and all(0 <= c <= 255 for c in popup_phases.ACCENT_RGB[phase]))
 
-shared = set(popup_phases.MESSAGES["stt"]) & set(popup_phases.MESSAGES["ai"])
-check("no joke belongs to both phases", not shared, str(shared))
+all_jokes = [m for phase in popup_phases.PHASES for m in popup_phases.MESSAGES[phase]]
+shared = {m for m in all_jokes if all_jokes.count(m) > 1}
+check("no joke belongs to two phases", not shared, str(shared))
+check("every phase has its own colour",
+      len(set(popup_phases.ACCENT_RGB.values())) == len(popup_phases.PHASES))
 check("the AI pool talks about cleaning, not listening",
       not any("transcrib" in m.lower() for m in popup_phases.MESSAGES["ai"]))
 check("unknown phase falls back to local", popup_phases.normalize("nonsense") == "stt")
@@ -109,6 +113,18 @@ if have_qt:
     popup.show_phase("garbage")
     check("qt: an unknown phase falls back to local", popup.phase == "stt")
 
+    popup.show_phase("load")
+    check("qt: switches to the model-loading phase", popup.phase == "load")
+    check("qt: the load has its own jokes",
+          popup.current_message in popup_phases.MESSAGES["load"], popup.current_message)
+    check("qt: the window keeps its size while loading",
+          (popup.width(), popup.height()) == size_stt)
+    image_load = popup.grab()
+    check("qt: the load phase paints", not image_load.isNull())
+    check("qt: loading looks different from transcribing",
+          image_load.toImage() != image_stt.toImage())
+    popup.show_phase("stt")
+
     popup.show_phase("ai")
     popup.show_text("Szia! Kész.")
     check("qt: show_text ends processing as before", popup.state == PopupState.TEXT_PREVIEW)
@@ -137,7 +153,8 @@ if have_qt:
         out_dir.mkdir(parents=True, exist_ok=True)
         image_stt.save(str(out_dir / "popup_phase_stt.png"))
         image_ai.save(str(out_dir / "popup_phase_ai.png"))
-        print(f"  saved {out_dir}/popup_phase_stt.png and popup_phase_ai.png")
+        image_load.save(str(out_dir / "popup_phase_load.png"))
+        print(f"  saved {out_dir}/popup_phase_{{stt,ai,load}}.png")
 
 # --- 3. the overlay's icon on a bare cairo surface (no GTK, no display) ---------
 try:

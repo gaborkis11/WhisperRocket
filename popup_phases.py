@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-WhisperRocket - The two phases of a dictation, as the popup tells them apart.
+WhisperRocket - The phases of a dictation, as the popup tells them apart.
 
 A dictation runs in two very different stages: the local Whisper model turns
 the audio into text, then - only when AI cleanup is on - the Claude CLI tidies
@@ -9,30 +9,50 @@ that text. The two take a similar number of seconds, so a popup that just says
 popups (Qt on X11, GTK on Wayland) draw a small phase row under the rocket
 from this one module, so they never disagree about words, colours or jokes.
 
+A third phase comes first, and usually: the model is let go seconds after a
+dictation (warm_model.py), and the dictation that brings it back waits for
+the load. The popup says so, so the slower dictation does not look stuck.
+
 Stdlib only: the tests run without Qt or GTK, and whisper_gui imports it to
 name the phase it reports.
 """
 import random
 
-PHASE_STT = "stt"   # the local speech-to-text model, every dictation
-PHASE_AI = "ai"     # the AI cleanup, only while it is switched on
+PHASE_LOAD = "load"  # the model coming back to the GPU after an idle release
+PHASE_STT = "stt"    # the local speech-to-text model, every dictation
+PHASE_AI = "ai"      # the AI cleanup, only while it is switched on
 
-PHASES = (PHASE_STT, PHASE_AI)
+PHASES = (PHASE_LOAD, PHASE_STT, PHASE_AI)  # in the order a dictation runs them
 
 # The label is English whatever the UI language, like the jokes under it: the
 # animation is one piece and speaks one voice (the user's call, 2026-09-03).
-LABELS = {PHASE_STT: "Local transcription", PHASE_AI: "AI cleanup"}
+LABELS = {PHASE_LOAD: "Loading model", PHASE_STT: "Local transcription",
+          PHASE_AI: "AI cleanup"}
 
 # One accent per phase, shared by the icon and the label: the rocket's window
 # blue for the local model, the flame's gold for the AI - both colours are
 # already on the screen, so the row belongs to the picture instead of
-# shouting over it.
-ACCENT_RGB = {PHASE_STT: (100, 180, 255), PHASE_AI: (255, 196, 77)}
+# shouting over it. The load is the exhaust's coral: warming up, not yet
+# working - and the tray is orange for a load too.
+ACCENT_RGB = {PHASE_LOAD: (255, 128, 80), PHASE_STT: (100, 180, 255),
+              PHASE_AI: (255, 196, 77)}
 
 # The jokes are English on purpose, like they always were: they are the
 # popup's voice, not a setting. Each pool is about its own phase, so the joke
 # itself says what is happening even before the label is read.
 MESSAGES = {
+    PHASE_LOAD: [
+        "Waking the model up...",
+        "Warming up the GPU...",
+        "Coffee for the model first...",
+        "Back from a power nap...",
+        "Stretching the neurons...",
+        "Unpacking four gigabytes...",
+        "Reheating the leftovers...",
+        "Refuelling the rocket...",
+        "Rebooting the brain cells...",
+        "It was resting, honest...",
+    ],
     PHASE_STT: [
         "Transcribing your thoughts...",
         "Converting speech to text...",
@@ -120,7 +140,8 @@ def sparkle_path_cairo(cr, cx, cy, r):
 def draw_icon_cairo(cr, phase, frame: int):
     """
     The phase glyph on a 16x14 canvas: five breathing sound bars for the local
-    model, a twinkling four-point sparkle with a small companion for the AI.
+    model (and its load, in the load's colour), a twinkling four-point sparkle
+    with a small companion for the AI.
     `frame` runs 0..59 with the rocket animation.
     """
     import math
@@ -129,7 +150,7 @@ def draw_icon_cairo(cr, phase, frame: int):
     cy = ICON_HEIGHT / 2
     angle = (frame / 60.0) * 2 * math.pi
 
-    if phase == PHASE_STT:
+    if phase != PHASE_AI:
         cr.set_source_rgba(r, g, b, 0.9)
         cr.set_line_width(2)
         cr.set_line_cap(_CAIRO_LINE_CAP_ROUND)

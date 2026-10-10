@@ -141,6 +141,7 @@ import history_manager
 import dictionary_manager
 import transcript_filter
 import popup_phases
+import warm_model
 from functools import partial
 
 # Konfiguráció (bundled app-ban user könyvtárba mentjük)
@@ -395,8 +396,10 @@ def save_config_value(key, value):
 # Globális változók
 config = load_config()
 ui_lang = config.get("ui_language", "en")
-model = None
-hotwords_provider = None  # dictionary_manager.HotwordsProvider, set in load_model()
+# The Whisper model, on the GPU only while it is used - see warm_model.py.
+# Every transcription goes through whisper_model.use().
+whisper_model = warm_model.WarmModel(lambda: build_model())
+hotwords_provider = None  # dictionary_manager.HotwordsProvider, set in build_model()
 recording = False
 audio_data = []
 stream = None
@@ -415,7 +418,6 @@ history_menu = None  # History almenü referencia
 settings_window_instance = None  # Settings ablak (közvetlen megnyitáshoz)
 file_transcription_window_instance = None  # File transcription ablak
 history_viewers = []  # Aktív history viewer ablakok
-model_lock = threading.Lock()  # Lock for concurrent model access
 
 # True while the local hotkey path is transcribing. The phone endpoint reads it
 # to decide whether it may touch the tray icon: a dictation arriving from the
@@ -564,11 +566,10 @@ def open_file_transcription():
     from file_transcription_window import FileTranscriptionWindow
     if file_transcription_window_instance is None or not file_transcription_window_instance.isVisible():
         file_transcription_window_instance = FileTranscriptionWindow(
-            model=model,
+            whisper_model=whisper_model,
             whisper_backend=whisper_backend,
             config=config,
             ui_lang=ui_lang,
-            model_lock=model_lock,
             hotwords=current_hotwords,
         )
         file_transcription_window_instance.show()
@@ -658,42 +659,77 @@ def refresh_history_menu():
         traceback.print_exc()
 
 # Modell betöltés
-def load_model():
-    global model, hotwords_provider
+def build_model():
+    """
+    Load the Whisper model and return it; raises if it cannot be loaded.
+
+    The loader of whisper_model: called at startup, and again by the first
+    dictation after an idle release (warm_model.IDLE_RELEASE_SECONDS).
+    """
+    global hotwords_provider
     print("[INFO] Whisper modell betoltese...")
     sys.stdout.flush()
+
+    if whisper_backend == "mlx":
+        # MLX backend - a modell lazy-load-olódik transcribe-nál
+        print(f"[INFO] MLX modell: {config['model']}")
+        return {"type": "mlx", "model_name": config["model"]}
+
+    # Faster-whisper backend - use local path if available
+    from model_manager import get_model_path_for_loading
+    model_path = get_model_path_for_loading(config["model"], config["device"])
+    print(f"[INFO] Loading model from: {model_path}")
+
+    model = WhisperModel(
+        model_path,
+        device=config["device"],
+        compute_type=config["compute_type"]
+    )
+    # The dictionary as a hint to the recogniser. Counted with the
+    # model's own tokenizer, because faster-whisper cuts hotwords at
+    # 223 tokens without saying so - see dictionary_manager.
+    hf_tokenizer = model.hf_tokenizer
+    hotwords_provider = dictionary_manager.HotwordsProvider(
+        lambda text: len(hf_tokenizer.encode(text, add_special_tokens=False).ids))
+    print("[INFO] Modell betoltve!")
+    sys.stdout.flush()
+    return model
+
+
+def load_model():
+    """Startup: load once so the first dictation is fast, then watch for idle"""
     update_icon('orange', t("tray_loading", ui_lang))
-
     try:
-        if whisper_backend == "mlx":
-            # MLX backend - a modell lazy-load-olódik transcribe-nál
-            model = {"type": "mlx", "model_name": config["model"]}
-            print(f"[INFO] MLX modell: {config['model']}")
-            sys.stdout.flush()
-        else:
-            # Faster-whisper backend - use local path if available
-            from model_manager import get_model_path_for_loading
-            model_path = get_model_path_for_loading(config["model"], config["device"])
-            print(f"[INFO] Loading model from: {model_path}")
-
-            model = WhisperModel(
-                model_path,
-                device=config["device"],
-                compute_type=config["compute_type"]
-            )
-            # The dictionary as a hint to the recogniser. Counted with the
-            # model's own tokenizer, because faster-whisper cuts hotwords at
-            # 223 tokens without saying so - see dictionary_manager.
-            hf_tokenizer = model.hf_tokenizer
-            hotwords_provider = dictionary_manager.HotwordsProvider(
-                lambda text: len(hf_tokenizer.encode(text, add_special_tokens=False).ids))
-        print("[INFO] Modell betoltve!")
-        sys.stdout.flush()
-        update_icon('blue', t("tray_ready", ui_lang))
+        whisper_model.preload()
+        # A dictation started during the load owns the tray by now
+        if not (local_busy or recording):
+            update_icon('blue', t("tray_ready", ui_lang))
     except Exception as e:
         print(f"[HIBA] Modell betoltes: {e}")
         sys.stdout.flush()
         update_icon('red', t("tray_error", ui_lang))
+    # mlx_whisper keeps its own model cache, so there is nothing to let go
+    if whisper_backend != "mlx":
+        whisper_model.start_idle_watch()
+
+
+def desk_model_loading(loading):
+    """Tray and popup while a hotkey dictation waits for the model to reload"""
+    if loading:
+        update_icon('orange', t("tray_loading", ui_lang))
+        show_processing_phase(popup_phases.PHASE_LOAD)
+    else:
+        update_icon('yellow', t("tray_processing", ui_lang))
+        show_processing_phase(popup_phases.PHASE_STT)
+
+
+def phone_model_loading(loading):
+    """Tray while a phone dictation waits for the model (never over the desk)"""
+    if loading:
+        phone_tray('orange', "tray_loading")
+    else:
+        phone_tray('purple', "tray_phone_working")
+
 
 # Audio callback
 def audio_callback(indata, frames, time_info, status):
@@ -719,7 +755,7 @@ AI_REASON_KEYS = {
 }
 
 
-def run_whisper(file_path):
+def run_whisper(file_path, on_loading=None):
     """
     Transcribe one audio file with the loaded model.
 
@@ -728,9 +764,10 @@ def run_whisper(file_path):
     a beam size or a language fixed in one of them would otherwise silently not
     apply to the other.
 
-    Takes model_lock, so callers must not already hold it.
+    The model may have been let go while idle; it is loaded back first, and
+    `on_loading` (see WarmModel.use) lets the caller show that to the user.
     """
-    with model_lock:
+    with whisper_model.use(on_loading) as model:
         if whisper_backend == "mlx":
             # mlx_whisper has no hotwords parameter; the dictionary still
             # reaches the AI layer as before
@@ -912,7 +949,7 @@ def process_audio(audio_copy):
         print("[INFO] Whisper processing...")
         start_time = time.time()
 
-        text = run_whisper(temp_file.name)
+        text = run_whisper(temp_file.name, on_loading=desk_model_loading)
 
         elapsed = time.time() - start_time
 
@@ -1019,8 +1056,13 @@ def process_audio(audio_copy):
 
 
 def phone_model_ready() -> bool:
-    """Whether a recording could be transcribed right now"""
-    return model is not None
+    """
+    Whether a recording could be transcribed right now.
+
+    True after an idle release too: the model is one load away, and that load
+    is counted against the phone's response frame like any other Whisper time.
+    """
+    return whisper_model.usable
 
 
 def phone_tray(color, title_key, suffix=""):
@@ -1063,7 +1105,7 @@ def dictate_from_phone(audio_bytes):
 
         phone_tray('purple', "tray_phone_working")
 
-        text = run_whisper(temp_path)
+        text = run_whisper(temp_path, on_loading=phone_model_loading)
         whisper_elapsed = time.time() - started
         print(f"[PHONE] Whisper {whisper_elapsed:.2f}s, {len(audio_bytes)} bytes")
 
