@@ -1,6 +1,26 @@
 {
   "versions": [
     {
+      "version": "1.2.6",
+      "date": "2026-10-10",
+      "notes": {
+        "en": [
+          "The Whisper model leaves the GPU 10 seconds after a dictation, giving back about 4 GB of VRAM - a game running next to WhisperRocket no longer runs short (measured 3838 MiB down to 222 MiB)",
+          "It is loaded again the moment you start recording, so a hotkey dictation does not wait for it; a phone dictation loads it on arrival, under a second",
+          "Hotkey, phone and file transcription share the one model, so it is never let go in the middle of a transcription, and the phone stays ready while it is released",
+          "Speaker diarization hands its GPU memory back as soon as the file is done",
+          "The model the app is running cannot be deleted in Settings until a restart, so it is never downloaded again by surprise"
+        ],
+        "hu": [
+          "A Whisper-modell 10 másodperccel a diktálás után elhagyja a GPU-t, és kb. 4 GB VRAM-ot ad vissza - a WhisperRocket mellett futó játéknak nem fogy el a memória (mérve: 3838 MiB-ről 222 MiB-re)",
+          "A felvétel indulásakor újra betöltődik, így a gyorsbillentyűs diktálásnak nem kell rá várnia; a telefonos diktálás érkezéskor tölti be, egy másodpercen belül",
+          "A gyorsbillentyű, a telefon és a fájlátírás ugyanazt a modellt használja, így átírás közben sosem engedi el, és a telefon akkor is kész, amikor a modell épp nincs betöltve",
+          "A beszélő-szétválasztás a fájl végeztével azonnal visszaadja a GPU-memóriát",
+          "A futó app modellje újraindításig nem törölhető a Beállításokban, így sosem töltődik le újra váratlanul"
+        ]
+      }
+    },
+    {
       "version": "1.2.5",
       "date": "2026-09-12",
       "notes": {

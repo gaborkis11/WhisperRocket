@@ -131,6 +131,14 @@ startup" turns it off entirely. The About window has a manual
 | AMD / Intel | CPU fallback | 🐢 Slower (~10-15s for 30s audio) |
 | No GPU | CPU mode | 🐢 Slower |
 
+**The GPU is free while you are not dictating.** Ten seconds after a dictation the
+Whisper model leaves the GPU (about 4 GB of VRAM for large-v3), so a game or another GPU
+app next to WhisperRocket gets the memory back. It is loaded again the moment you start
+recording, so it is ready by the time you stop - no extra wait for a hotkey dictation.
+A phone or file transcription loads it on arrival (under a second, shown as
+*Loading model* in the popup and an orange tray icon).
+What stays is the CUDA context, roughly 220 MB, until the app exits.
+
 ## Usage
 
 1. **Start recording**: Press `Ctrl+Shift+S` (or your configured hotkey)
@@ -903,6 +911,27 @@ The uninstaller offers three options:
 </details>
 
 ## Changelog
+
+### v1.2.6
+
+**The GPU is given back while you are not dictating.**
+
+- **The model leaves the GPU 10 seconds after a dictation.** A loaded large-v3 used to
+  sit on about 4 GB of VRAM for as long as the app ran - enough to freeze a game on a
+  16 GB card. Now it is let go seconds after use: measured 3838 MiB down to 222 MiB (the
+  CUDA context, which stays until the app exits). This is how the app behaves, not a
+  setting.
+- **It comes back while you speak.** The load (0.8 s measured) starts with the
+  recording, so a hotkey dictation does not wait for it. A phone or file transcription
+  loads it on arrival - a cold phone dictation measured 4.9 s end to end, AI cleanup
+  included. The popup shows *Loading model* and the tray turns orange while one waits.
+  Hotkey, phone and file transcription all share the one model, behind one lock, so it
+  is never let go in the middle of a transcription.
+- **Phone dictation works with the model released too.** The endpoint stays *ready*; the reload
+  counts against the response frame like any other transcription time.
+- **Speaker diarization hands its GPU memory back** as soon as a file is done.
+- **The model the app is running cannot be deleted** in Settings until a restart, even
+  after you switched to another one - otherwise the next reload would download it again.
 
 ### v1.2.5
 
