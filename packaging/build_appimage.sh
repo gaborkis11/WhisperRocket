@@ -46,7 +46,7 @@ pip install pyinstaller
 
 # Install requirements (base only - no CUDA wheels)
 cd "$PROJECT_DIR"
-pip install faster-whisper sounddevice soundfile pyperclip pynput pillow numpy PySide6 requests evdev huggingface_hub
+pip install faster-whisper "av<19" sounddevice soundfile pyperclip pynput pillow numpy PySide6 requests evdev huggingface_hub
 
 echo -e "${GREEN}[5/8]${NC} Running PyInstaller..."
 

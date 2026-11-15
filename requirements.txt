@@ -1,4 +1,7 @@
 faster-whisper
+# PyAV 19 removed the metadata_errors argument that faster-whisper 1.2.x passes
+# to av.open(); every transcription then fails before reaching the clipboard.
+av<19
 sounddevice
 soundfile
 pyperclip

@@ -1,6 +1,22 @@
 {
   "versions": [
     {
+      "version": "1.2.7",
+      "date": "2026-11-15",
+      "notes": {
+        "en": [
+          "Dictation works again: a newer PyAV (19, released on 29 September) dropped an argument faster-whisper still passes, so every transcription failed before the text reached the clipboard - nothing was copied and nothing was pasted",
+          "The v1.2.6 AppImage and every fresh install.sh run since then were affected; PyAV is now held below version 19, so a new download or reinstall stays working",
+          "Existing install.sh installs: run git pull, then ./venv/bin/pip install -r requirements.txt, and restart the app"
+        ],
+        "hu": [
+          "A diktálás újra működik: egy újabb PyAV (19-es, szeptember 29-én jelent meg) kivett egy paramétert, amit a faster-whisper még használ, így minden átírás hibával leállt, mielőtt a szöveg a vágólapra került volna - nem másolt és nem illesztett be semmit",
+          "Érintett volt a v1.2.6 AppImage és azóta minden friss install.sh-telepítés; a PyAV mostantól 19 alatti verzión marad, így egy új letöltés vagy újratelepítés működik",
+          "Meglévő install.sh-telepítésnél: git pull, utána ./venv/bin/pip install -r requirements.txt, majd az app újraindítása"
+        ]
+      }
+    },
+    {
       "version": "1.2.6",
       "date": "2026-10-10",
       "notes": {

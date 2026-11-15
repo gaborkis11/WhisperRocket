@@ -912,6 +912,21 @@ The uninstaller offers three options:
 
 ## Changelog
 
+### v1.2.7
+
+**Dictation works again on a fresh install.**
+
+- **Every transcription failed before reaching the clipboard.** PyAV 19 (released on
+  29 September 2026) removed the `metadata_errors` argument that faster-whisper 1.2.1
+  still passes to `av.open()`. The model loaded and the recording finished, then the
+  transcription stopped with `open() got an unexpected keyword argument
+  'metadata_errors'` - nothing was copied, nothing was pasted.
+- **Who was affected:** the v1.2.6 AppImage (it was built with PyAV 19) and every
+  `install.sh` run since 29 September, since the dependencies were not pinned.
+- **The fix:** PyAV is held below 19 (`av<19` in `requirements.txt` and in the AppImage
+  build). An existing `install.sh` install is fixed with `git pull`, then
+  `./venv/bin/pip install -r requirements.txt`, and a restart of the app.
+
 ### v1.2.6
 
 **The GPU is given back while you are not dictating.**
