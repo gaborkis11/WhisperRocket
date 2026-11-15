@@ -79,7 +79,8 @@ a = Analysis(
     hiddenimports=hiddenimports,
     hookspath=[],
     hooksconfig={},
-    runtime_hooks=[],
+    # sounddevice cannot see the bundled PortAudio without this (see the hook)
+    runtime_hooks=[str(project_root / 'packaging' / 'rthook_portaudio.py')],
     excludes=excludes,
     noarchive=False,
 )

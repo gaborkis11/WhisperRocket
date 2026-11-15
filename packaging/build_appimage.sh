@@ -53,6 +53,14 @@ echo -e "${GREEN}[5/8]${NC} Running PyInstaller..."
 # Run PyInstaller with our spec
 pyinstaller "$PACKAGING_DIR/whisperrocket.spec" --clean --noconfirm
 
+# sounddevice needs PortAudio, and PyInstaller only bundles it when the build
+# host has it installed (libportaudio2). Without it the AppImage dies at start
+# on every machine lacking a system PortAudio - fail the build instead.
+if ! ls "$PROJECT_DIR/dist/whisperrocket/_internal/"libportaudio.so* >/dev/null 2>&1; then
+    echo -e "${RED}ERROR:${NC} PortAudio was not bundled - install libportaudio2 on the build host"
+    exit 1
+fi
+
 echo -e "${GREEN}[6/8]${NC} Building AppDir structure..."
 
 # Create AppDir

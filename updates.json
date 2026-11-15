@@ -1,6 +1,20 @@
 {
   "versions": [
     {
+      "version": "1.2.8",
+      "date": "2026-11-15",
+      "notes": {
+        "en": [
+          "The AppImage starts on systems without PortAudio installed: the library was already inside the AppImage, but the audio module only looked for it on the system and stopped with \"PortAudio library not found\" - now it falls back to the bundled copy",
+          "A system PortAudio is still preferred when there is one, so a machine that already worked keeps using the same library"
+        ],
+        "hu": [
+          "Az AppImage olyan rendszeren is elindul, ahol nincs telepítve a PortAudio: a könyvtár eddig is benne volt az AppImage-ben, de a hangmodul csak a rendszeren kereste, és \"PortAudio library not found\" hibával leállt - most a csomagban lévőt használja",
+          "Ha a rendszeren van PortAudio, továbbra is azt használja, így ahol eddig működött, ott ugyanaz a könyvtár marad"
+        ]
+      }
+    },
+    {
       "version": "1.2.7",
       "date": "2026-11-15",
       "notes": {

@@ -912,6 +912,21 @@ The uninstaller offers three options:
 
 ## Changelog
 
+### v1.2.8
+
+**The AppImage starts without a system PortAudio.**
+
+- **It stopped at launch with `PortAudio library not found`** on a system without
+  `libportaudio2` installed - a minimal or fresh install. The library was already inside
+  the AppImage, but `sounddevice` only looks it up on the system. A PyInstaller runtime
+  hook now hands it the bundled copy when the system has none; a system PortAudio is
+  still preferred, so a machine that already worked keeps the same library.
+- **The AppImage build now fails** if PortAudio did not get bundled, instead of
+  producing an AppImage that cannot start.
+- **Release AppImages are built in an Ubuntu 24.04 container**
+  (`packaging/build_appimage_docker.sh`), so they keep running on Linux Mint and Ubuntu
+  whatever distro the release is made on.
+
 ### v1.2.7
 
 **Dictation works again on a fresh install.**
