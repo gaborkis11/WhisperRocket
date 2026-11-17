@@ -912,6 +912,17 @@ The uninstaller offers three options:
 
 ## Changelog
 
+### v1.2.9
+
+**The app no longer slows the whole computer down over time.**
+
+- **About 3 GB of memory stayed taken after every model reload.** Since v1.2.6 the
+  Whisper model leaves the GPU when idle and comes back for the next dictation. Each
+  load passes the weights through host memory, and glibc kept that memory after the
+  model was gone, so an hour of dictating could reach 25 GB of RAM plus 28 GB of swap
+  and make the desktop crawl. The app now calls `malloc_trim` whenever the model is let
+  go, and sits at about 80 MB between dictations again.
+
 ### v1.2.8
 
 **The AppImage starts without a system PortAudio.**

@@ -179,6 +179,38 @@ warm_model.free_gpu_cache()
 check("a torch error does not break the release", True)
 del sys.modules["torch"]
 
+# --- 7b. the host heap goes back to the system on release --------------------
+#
+# The 2026-11-17 leak: glibc kept the ~2.9 GB every load passed through host
+# memory, and the reloads piled it up to 25 GB RAM + 28 GB swap.
+real_trim = warm_model._malloc_trim
+if sys.platform.startswith("linux"):
+    warm_model._malloc_trim = warm_model._UNRESOLVED
+    check("glibc's malloc_trim is found on Linux",
+          warm_model._resolve_malloc_trim() is not None)
+    check("the real trim runs", warm_model.return_heap_to_system())
+
+trims = []
+warm_model._malloc_trim = lambda pad: trims.append(pad) or 1
+warm_model.free_gpu_cache()
+check("free_gpu_cache trims the heap", trims == [0], str(trims))
+
+trims.clear()
+clock7 = Clock()
+wm7 = warm_model.WarmModel(Loader(), clock=clock7)
+wm7.preload()
+clock7.now += IDLE
+wm7.release_if_idle()
+check("an idle release trims the heap", trims == [0], str(trims))
+
+warm_model._malloc_trim = None
+check("no malloc_trim (macOS, musl): nothing to do, no error",
+      warm_model.return_heap_to_system() is False)
+warm_model._malloc_trim = lambda pad: 1 / 0
+check("a failing trim does not break the release",
+      warm_model.return_heap_to_system() is False)
+warm_model._malloc_trim = real_trim
+
 # --- 8. the background watch -------------------------------------------------
 clock4 = Clock()
 wm4 = warm_model.WarmModel(Loader(), clock=clock4)

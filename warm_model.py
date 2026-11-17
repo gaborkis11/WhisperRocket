@@ -17,6 +17,7 @@ load and a release can never overlap.
 
 Stdlib only: the tests drive it with a fake loader and a fake clock.
 """
+import ctypes
 import gc
 import sys
 import threading
@@ -37,17 +38,66 @@ IDLE_RELEASE_SECONDS = 10
 IDLE_CHECK_SECONDS = 2
 
 
+# Why (2026-11-17): every load of large-v3 passes about 2.9 GB of weights
+# through host memory on their way to the GPU. CTranslate2 frees them, but
+# glibc keeps freed memory inside its malloc arenas instead of handing it back,
+# and the loads run on fresh threads (prewarm, phone, file transcription), so
+# the retained heaps piled up: after about 16 dictations in an hour the app sat
+# on 25 GB of RAM plus 28 GB of swap and the whole desktop crawled. Measured on
+# the RTX 5070 Ti machine: a release left 2.9 GB behind; malloc_trim(0) after
+# it brings the process back to about 80 MB. MALLOC_ARENA_MAX=2 did not help.
+_UNRESOLVED = object()
+_malloc_trim = _UNRESOLVED
+
+
+def _resolve_malloc_trim():
+    """glibc's malloc_trim, or None where there is none (macOS, musl)"""
+    global _malloc_trim
+    if _malloc_trim is _UNRESOLVED:
+        _malloc_trim = None
+        if sys.platform.startswith("linux"):
+            try:
+                trim = ctypes.CDLL(None).malloc_trim
+                trim.argtypes = [ctypes.c_size_t]
+                trim.restype = ctypes.c_int
+                _malloc_trim = trim
+            except (OSError, AttributeError):
+                pass
+    return _malloc_trim
+
+
+def return_heap_to_system() -> bool:
+    """
+    Give memory that was freed but kept by malloc back to the system.
+
+    True if malloc_trim ran. Never raises: a failed trim costs memory, not the
+    release.
+    """
+    trim = _resolve_malloc_trim()
+    if trim is None:
+        return False
+    try:
+        trim(0)
+        return True
+    except Exception as e:
+        print(f"[MODEL] heap not trimmed: {e}")
+        return False
+
+
 def free_gpu_cache():
     """
-    Hand cached GPU memory back to the driver.
+    Hand cached GPU memory back to the driver, and the host heap to the system.
 
     faster-whisper (CTranslate2) frees its VRAM once the model object is gone,
-    so gc.collect() is enough for it. torch keeps a cache of its own - it is
-    only here when speaker diarization (pyannote) ran - and needs
-    empty_cache(). torch is never imported just for this: importing it would
-    create a CUDA context and cost the very memory we are trying to give back.
+    so gc.collect() is enough for it. The host memory its load went through
+    stays with glibc until malloc_trim - see return_heap_to_system(). torch
+    keeps a cache of its own - it is only here when speaker diarization
+    (pyannote) ran - and needs empty_cache(). torch is never imported just for
+    this: importing it would create a CUDA context and cost the very memory we
+    are trying to give back.
     """
     gc.collect()
+    return_heap_to_system()
     torch = sys.modules.get("torch")
     if torch is None:
         return
