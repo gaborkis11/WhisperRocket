@@ -9,8 +9,12 @@
 # personal settings - style profile, custom dictionary, edited prompts, history -
 # belong in ~/.config/whisperrocket/ as well. Never in a tracked file.
 #
-# .gitignore already covers all of these, but `git add -f` bypasses it, so the
-# ones that would leak something about a person are checked again here.
+# .gitignore already covers all of these, but `git add -f` bypasses it, so they
+# are checked again here - with the same patterns as .gitignore, not a list of
+# exact names: until 2026-11-24 this hook let "my_style_profile.md" and
+# CLAUDE.md through although .gitignore covered both. Rule 4 goes further than
+# any filename can: the real values in ~/.config/whisperrocket/.env are refused
+# in every staged file, whatever it is called.
 
 set -uo pipefail
 
@@ -25,7 +29,8 @@ report() {
     printf '  %s\n' "$1" >&2
 }
 
-staged_files=$(git diff --cached --name-only --diff-filter=ACM)
+# R included: renaming a template to a personal name is still adding that file
+staged_files=$(git diff --cached --name-only --diff-filter=ACMR)
 [ -z "$staged_files" ] && exit 0
 
 # 1. Never commit a secrets file, whatever it is named
@@ -37,15 +42,26 @@ while IFS= read -r file; do
     esac
 done <<< "$staged_files"
 
-# 2. Never commit personal settings. These describe a specific person - how they
-#    write, which names they use, what they dictated - and the repository is
-#    public. The .example.* templates are the versions that ship.
+# 2. Never commit personal settings or internal files. These describe a specific
+#    person - how they write, which names they use, what they dictated - and the
+#    repository is public. The .example.* templates are the versions that ship.
+#    Keep these patterns in step with the "Personal settings" block in .gitignore.
 while IFS= read -r file; do
-    case "$(basename "$file")" in
-        DEVLOG.md)
-            report "$file — internal development log, deliberately not published"
+    name=$(basename "$file")
+    case "$name" in
+        *.example.md|*.example.json) continue ;;
+    esac
+    case "$file" in
+        tasks/*|.claude/*|personal/*|private/*|*/personal/*|*/private/*)
+            report "$file — internal or personal folder, never published"
+            continue
             ;;
-        style_profile.md|dictionary.md|dictionary.json|prompt_transcript.md|prompt_compose.md|history.json|config.json)
+    esac
+    case "$name" in
+        DEVLOG.md|CLAUDE.md)
+            report "$file — internal development file, deliberately not published"
+            ;;
+        *style_profile*.md|*dictionary*.md|*dictionary*.json*|*dictionary*.txt|prompt_*.md|*history.json|config.json)
             report "$file — personal settings (keep it in ~/.config/whisperrocket/; commit the .example version instead)"
             ;;
     esac
@@ -87,6 +103,30 @@ while IFS= read -r file; do
         fi
     done
 done <<< "$staged_files"
+
+# 4. The real secrets, wherever they are pasted. The values are read from the
+#    .env file and handed to grep through a pipe - never printed, never written
+#    to disk. Values shorter than 12 characters are skipped: too likely to
+#    occur by chance, and no real token is that short.
+env_file="${WHISPERROCKET_ENV_FILE:-$HOME/.config/whisperrocket/.env}"
+if [ -r "$env_file" ]; then
+    secret_values() {
+        while IFS= read -r line || [ -n "$line" ]; do
+            case "$line" in ''|\#*) continue ;; esac
+            value=${line#*=}
+            value=${value%\"}; value=${value#\"}; value=${value%\'}; value=${value#\'}
+            [ "${#value}" -ge 12 ] && printf '%s\n' "$value"
+        done < "$env_file"
+    }
+    if [ -n "$(secret_values)" ]; then
+        while IFS= read -r file; do
+            if git diff --cached -U0 -- "$file" | grep '^+' | grep -v '^+++' \
+                    | grep -qF -f <(secret_values); then
+                report "$file — contains a real secret from ~/.config/whisperrocket/.env"
+            fi
+        done <<< "$staged_files"
+    fi
+fi
 
 if [ "$failed" -ne 0 ]; then
     printf '\n%s\n' "${YELLOW}Credentials: move the value to ~/.config/whisperrocket/.env (mode 0600)" >&2
