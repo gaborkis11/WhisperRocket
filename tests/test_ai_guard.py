@@ -101,6 +101,56 @@ r = verdict("na most több hibát is találtam igazából majd nullára eltelep�
 check("deleting filler and splitting sentences is not a reorder", r.ok, str(r.failures))
 check("reordered_words counts the swap", ai_guard.reordered_words("figyelj bazdmeg ottlesz zsani", "bazdmeg figyelj ottlesz zsani") == 1)
 
+# --- spelled-out numbers turned into digits (2026-11-24) -------------------------
+# Two faithful phone cleanups were rejected as rewritten(0.58) and (0.57): every
+# content word they "lost" was a number word the model had written as digits.
+# Synthetic texts with the same shape - no real dictation goes into the repo.
+r = verdict("szia peti akkor holnap mennek hozzád a lányok tizenhét óra nulla nullától "
+            "tizennyolc óra harmincig ez kétszer negyvenöt perc ha jól tudom ebben "
+            "maradtunk így oké üdv anna",
+            "Szia Peti! Akkor holnap mennek hozzád a lányok 17:00-tól 18:30-ig. "
+            "Ez 2x45 perc. Ha jól tudom, ebben maradtunk. Így oké? Üdv, Anna")
+check("times and counts written as digits are not a rewrite", r.ok, str(r.failures))
+
+r = verdict("annyiból nem jó hogy ahogy nézem a felbontás ott most kettő ezer öt "
+            "hatvanszor ezer négy negyven és nem négy ká",
+            "Annyiból nem jó, hogy ahogy nézem, a felbontás ott most 2560x1440, és nem 4K.")
+check("a resolution written as digits is not a rewrite", r.ok, str(r.failures))
+
+r = verdict("holnap tizenhét harminckor találkozunk", "Holnap 17:30-kor találkozunk.")
+check("a time written as digits passes", r.ok, str(r.failures))
+r = verdict("holnap tizenhét harminckor találkozunk", "Holnap találkozunk.")
+check("without digits in the output a dropped time still counts as lost",
+      not r.ok and any(f.startswith("rewritten") for f in r.failures), str(r.failures))
+
+check("only the number words are exempted, 'fogok' still counts",
+      ai_guard.number_word_stems("holnap tizenhét órakor ott fogok állni a vízben") == {"tizen"})
+
+r = verdict("tizenhét embernek kell megírni a meghívót a holnapi edzésre",
+            "17 ember.")
+check("digits do not excuse dropping the rest of the message",
+      not r.ok and any(f.startswith("rewritten") for f in r.failures), str(r.failures))
+
+for word in ("tizenhet", "nullatol", "harmincig", "ketszer", "negyvenot",
+             "tizennyolc", "kettot", "egymillio", "nyolcadik", "hatvanszor"):
+    check(f"'{word}' is a number word", ai_guard.is_number_word(word))
+for word in ("hatalmas", "ezert", "hatas", "hatra", "otthon", "felbontas",
+             "kettesben", "hatar", "negyzet", "heten", "hetet", "hetig", "hetben",
+             "hatat", "egyik", "egyben", "egyen"):
+    check(f"'{word}' is not a number word", not ai_guard.is_number_word(word))
+for word in ("hatkor", "hettol", "egyszer", "otodik"):
+    check(f"'{word}' on its own is still a number word", ai_guard.is_number_word(word))
+check("a very long word is refused, not recursed into", not ai_guard.is_number_word("hat" * 500))
+
+r = verdict("a jövő héten tizenhétkor megyünk", "17-kor megyünk.")
+check("a dropped 'héten' (week) is still lost next to digits",
+      not r.ok and any(f.startswith("rewritten") for f in r.failures), str(r.failures))
+
+r = ai_guard.check("tizenhét harmincig kétszer negyvenöt nullától tizenkettő hatvanig fontos",
+                   "Fontos megbeszélés holnap 17 órakor, ne felejtsd el, kérlek szépen.", "compose")
+check("compose mode does not get the exemption",
+      not r.ok and any(f.startswith("rewritten") for f in r.failures), str(r.failures))
+
 # --- packaging -------------------------------------------------------------------
 check("echoed transcript tags are stripped",
       ai_guard.strip_wrapper("<TRANSCRIPT>\nSzia! Jövök.\n</TRANSCRIPT>") == "Szia! Jövök.")

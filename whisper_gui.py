@@ -138,6 +138,7 @@ class UpdateDownloader(QThread):
 
 from translations import t, TRANSLATIONS
 import history_manager
+import phone_log
 import dictionary_manager
 import transcript_filter
 import popup_phases
@@ -1192,7 +1193,10 @@ def dictate_from_phone(audio_bytes):
     except Exception as error:
         print(f"[PHONE] failed: {error}")
         phone_tray('blue', "tray_ready")
-        return DictationOutcome(error="failed")
+        # The detail reaches phone_errors.log through the endpoint's refusal,
+        # on the same line as the client - one crash, one line
+        return DictationOutcome(error="failed",
+                                error_detail=f"{type(error).__name__}: {error}")
 
     finally:
         # The recording is deleted whatever happened - the briefing asks for the
@@ -1202,6 +1206,12 @@ def dictate_from_phone(audio_bytes):
                 os.unlink(temp_path)
             except Exception:
                 pass
+
+
+def record_phone_refusal(status, key, client, detail=""):
+    """Every error answer to the phone, kept past a restart (see phone_log.py)"""
+    phone_log.record(get_platform_handler().get_config_dir(), status, key, client,
+                     detail)
 
 
 def phone_endpoint_messages():
@@ -1301,6 +1311,7 @@ def _apply_phone_endpoint_settings_locked():
         dictate=dictate_from_phone,
         ready_check=phone_model_ready,
         messages=phone_endpoint_messages(),
+        on_refused=record_phone_refusal,
     )
 
     try:

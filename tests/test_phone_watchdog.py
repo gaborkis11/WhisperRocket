@@ -64,7 +64,7 @@ class FakeEndpoint:
     """Stands in for phone_endpoint.PhoneEndpoint; counts starts"""
     started = []
 
-    def __init__(self, host, port, token, dictate, ready_check, messages):
+    def __init__(self, host, port, token, dictate, ready_check, messages, on_refused=None):
         self.host, self.port, self.token = host, port, token
         self._running = False
         self.fail_with = None
@@ -129,6 +129,7 @@ def load(config, states, log):
         "dictate_from_phone": lambda b: None,
         "phone_model_ready": lambda: True,
         "phone_endpoint_messages": lambda: {},
+        "record_phone_refusal": lambda status, key, client, detail="": None,
     }
     exec(compile(ast.Module(body=body, type_ignores=[]),
                  "whisper_gui.py", "exec"), namespace)

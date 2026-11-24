@@ -111,6 +111,57 @@ _ENTITY = re.compile(
 
 _TRANSCRIPT_TAG = re.compile(r"</?transcript>", re.IGNORECASE)
 
+# Spelled-out Hungarian numbers, accent-stripped. The cleanup is told to write
+# numbers as digits, and "tizenhét óra nulla nullától" -> "17:00-tól" leaves no
+# content word behind, so the retention check used to count every one of them
+# as lost. Measured 2026-11-24: two faithful phone cleanups scored 0.58 and
+# 0.57 against the 0.6 floor, and every missing stem was a number word - the
+# raw transcript went out and the user had to dictate again.
+#
+# A word counts only when it is made entirely of these pieces plus at most one
+# ending below. "fel" (half) is left out because it is also the prefix fel-
+# ("felbontás"), and the "-t", "-as", "-ra", "-ik", "-ban" endings because they
+# would turn "ezért", "hatás", "hátra", "egyik" and "egyben" into numbers.
+_NUMBER_MORPHEMES: Sequence[str] = (
+    "nulla", "egy", "ketto", "kett", "ket", "harom", "negy", "ot", "hat",
+    "het", "nyolc", "kilenc", "tiz", "tizen", "husz", "huszon", "harminc",
+    "negyven", "otven", "hatvan", "hetven", "nyolcvan", "kilencven", "szaz",
+    "ezer", "millio", "milliard",
+)
+_NUMBER_ENDINGS: Sequence[str] = (
+    "", "tol", "ig", "kor", "szor", "szer", "sor", "an", "en", "at", "et",
+    "ot", "ad", "ed", "od", "adik", "edik", "odik",
+)
+# On their own these are also ordinary words once the accents are gone: "hét"
+# is a week ("héten", "hetet", "hétig"), "hát" a back, "egy" an article
+# ("egyen"). Standing alone they only count with an ending that is never
+# anything but a number: "hatkor", "héttől", "egyszer", "ötödik".
+_AMBIGUOUS_MORPHEMES: Sequence[str] = ("egy", "hat", "het", "ot")
+_UNAMBIGUOUS_ENDINGS: Sequence[str] = (
+    "tol", "kor", "szor", "szer", "adik", "edik", "odik",
+)
+
+# No real number word comes near this; it bounds the recursion below
+_MAX_NUMBER_WORD = 40
+
+
+def is_number_word(word: str) -> bool:
+    """Whether an accent-stripped, lowercased word is a spelled-out number"""
+    def rest_is_number(rest: str, pieces: tuple) -> bool:
+        if pieces and rest in _NUMBER_ENDINGS:
+            if len(pieces) == 1 and pieces[0] in _AMBIGUOUS_MORPHEMES:
+                return rest in _UNAMBIGUOUS_ENDINGS
+            return True
+        return any(rest.startswith(m) and rest_is_number(rest[len(m):], pieces + (m,))
+                   for m in _NUMBER_MORPHEMES)
+    return 0 < len(word) <= _MAX_NUMBER_WORD and rest_is_number(word, ())
+
+
+def number_word_stems(text: str, min_length: int = 5) -> Set[str]:
+    """The content_words() stems of this text that are spelled-out numbers"""
+    return {w[:min_length] for w in _words(normalize(text))
+            if len(w) >= min_length and is_number_word(w)}
+
 
 @dataclass
 class GuardResult:
@@ -331,9 +382,17 @@ def check(raw_text: str, model_text: str, mode: str = "transcript",
 
     raw_content = content_words(raw_text)
     out_content = content_words(text)
-    if limits["min_retention"] > 0 and raw_content:
-        kept = raw_content & out_content
-        retention = len(kept) / len(raw_content)
+    # Spelled-out numbers are not counted once the output carries digits: they
+    # were turned into numbers, not lost. Without any digit a dropped number
+    # word still counts, so deleting "tizenhét" outright is still caught.
+    # Transcript mode only: compose mode reformulates anyway, and its low
+    # floor is there to catch a refusal, which must not get easier to pass.
+    counted = raw_content
+    if mode == "transcript" and re.search(r"\d", text):
+        counted = raw_content - number_word_stems(raw_text)
+    if limits["min_retention"] > 0 and counted:
+        kept = counted & out_content
+        retention = len(kept) / len(counted)
         if retention < limits["min_retention"]:
             failures.append(f"rewritten({retention:.2f})")
 

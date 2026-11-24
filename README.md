@@ -272,8 +272,9 @@ observed in testing before the check existed.
 The model's answer is not trusted on its own. Before it reaches your clipboard it must
 pass a guard that compares it with what you said: nothing softened or added in the
 swearing, no content you never said (a reply instead of a transcript scores far above
-the ceiling), no web address, e-mail or long number lost, no sentences rearranged. A
-failed check gets one retry; if that fails too, you get the plain transcript and the
+the ceiling), no web address, e-mail or long number lost, no sentences rearranged.
+Spelled-out numbers the cleanup wrote as digits ("tizenhét óra harminc" → "17:30")
+count as kept, not as lost words. A failed check gets one retry; if that fails too, you get the plain transcript and the
 tray icon turns orange with the reason.
 
 Two more things happen in code rather than in the model, because measurement showed the
@@ -644,6 +645,14 @@ phone can read them aloud while you are driving.
 | The request times out | Lower the response budget, or measure the real limit as above |
 | Nothing reaches the computer at all | The phone is not on the tailnet. Open the Tailscale app and check it is connected |
 
+**Every refused phone request is written down**, so "it did not work in the car
+yesterday" can still be looked up the next day:
+`~/.config/whisperrocket/phone_errors.log` gets one line per failure - time, status,
+reason (`not_ready`, `no_speech`, `busy`, `failed`, `bad_token`, `too_large`, ...)
+and the phone's Tailscale address. Never the recording, the text or the access key.
+It is capped at 256 KB with one backup. The endpoint itself still writes nothing: it
+hands the failure to the app, which keeps the log.
+
 **If your phone uses another VPN**, it may conflict with Tailscale and the
 computer will be unreachable - most phones can only hold one VPN tunnel at a time.
 This is the most common cause of "it worked at home but not on mobile data".
@@ -911,6 +920,23 @@ The uninstaller offers three options:
 </details>
 
 ## Changelog
+
+### v1.2.10
+
+**Dictation with times and numbers keeps its AI cleanup.**
+
+- **The cleanup was thrown away when it wrote numbers as digits.** The output guard
+  checks that the words you said survive the cleanup, and it counted every spelled-out
+  number as lost once it became digits: "tizenhét óra nulla nullától tizennyolc óra
+  harmincig" → "17:00-tól 18:30-ig" left nothing behind to match. A message full of
+  times scored just under the limit, the retry did the same, and the plain transcript
+  went out instead. Number words now count as kept when the output has digits; a
+  dropped number with no digits in its place still counts as lost, and words such as
+  "héten" or "egyik" are never mistaken for numbers.
+- **Failed phone dictations are kept in a log.** Requests that never reached the
+  history - model still loading, no speech, busy, wrong key, too large, a crash - were
+  only in the app's stdout log, which is overwritten on every start. They now go to
+  `~/.config/whisperrocket/phone_errors.log` as well.
 
 ### v1.2.9
 

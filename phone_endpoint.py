@@ -22,6 +22,7 @@ Anything app-shaped is injected by the caller:
   - `dictate`      turns audio bytes into text
   - `ready_check`  answers whether the model is loaded yet
   - `messages`     the user-visible strings, already in the user's language
+  - `on_refused`   told about every error answer, so the app can keep a record
 
 DESIGN NOTES
 ------------
@@ -72,6 +73,9 @@ class DictationOutcome:
     # Appended last on purpose: every existing caller builds this by keyword,
     # and a new field at the end cannot shift anyone's positional arguments.
     ai_reason: str = ""
+    # Why an error happened, for the app's own failure log only - it never
+    # goes into the response. Appended last for the same reason as ai_reason.
+    error_detail: str = ""
 
 
 # How much of the response frame the AI cleanup may use.
@@ -248,6 +252,20 @@ class _Handler(BaseHTTPRequestHandler):
 
     # -- plumbing ---------------------------------------------------------
 
+    def send_error(self, code, message=None, explain=None):
+        """
+        The errors http.server answers by itself - an unsupported method (501),
+        a malformed request line (400), an oversized URL or header (414, 431) -
+        never pass through _refuse, so they are reported here.
+        """
+        on_refused = getattr(getattr(self.server, "endpoint", None), "on_refused", None)
+        if on_refused is not None:
+            try:
+                on_refused(code, f"http_{code}", self.address_string(), "")
+            except Exception as error:
+                print(f"[PHONE] could not record the refusal: {error}")
+        super().send_error(code, message, explain)
+
     def log_message(self, fmt, *args):
         """Route request logs into the app's own stdout log"""
         print(f"[PHONE] {self.address_string()} {fmt % args}")
@@ -258,6 +276,25 @@ class _Handler(BaseHTTPRequestHandler):
 
     def _message(self, key: str) -> str:
         return self._endpoint.messages.get(key, DEFAULT_MESSAGES.get(key, key))
+
+    def _refuse(self, status: int, key: str, detail: str = ""):
+        """
+        Answer with an error, and tell the app about it first.
+
+        None of these requests reach the history, and the stdout log is
+        overwritten on every start, so before 2026-11-24 a refused phone
+        dictation left no trace by the next day. The callback gets the status,
+        the error key, the client address and the app's own detail - never the
+        audio or the token.
+        A failing callback must not cost the phone its answer.
+        """
+        on_refused = self._endpoint.on_refused
+        if on_refused is not None:
+            try:
+                on_refused(status, key, self.address_string(), detail)
+            except Exception as error:
+                print(f"[PHONE] could not record the refusal: {error}")
+        return self._respond(status, self._message(key))
 
     def _respond(self, status: int, body: str, extra_headers: Optional[Dict] = None):
         payload = body.encode("utf-8")
@@ -295,9 +332,9 @@ class _Handler(BaseHTTPRequestHandler):
     def do_GET(self):
         parsed = urlparse(self.path)
         if parsed.path != HEALTH_PATH:
-            return self._respond(404, self._message("not_found"))
+            return self._refuse(404, "not_found")
         if not self._authorized():
-            return self._respond(401, self._message("bad_token"))
+            return self._refuse(401, "bad_token")
 
         delay = self._requested_delay(parsed.query)
         if delay:
@@ -306,7 +343,7 @@ class _Handler(BaseHTTPRequestHandler):
             # anywhere between 25 and 60 seconds. Bounded, token-protected, and
             # limited to two at a time so it cannot be used to tie the box up.
             if not self._endpoint.health_slot.acquire(blocking=False):
-                return self._respond(429, self._message("busy"))
+                return self._refuse(429, "busy")
             try:
                 time.sleep(delay)
             finally:
@@ -314,40 +351,40 @@ class _Handler(BaseHTTPRequestHandler):
 
         ready_check = self._endpoint.ready_check
         if ready_check is not None and not ready_check():
-            return self._respond(503, self._message("not_ready"))
+            return self._refuse(503, "not_ready")
 
         return self._respond(200, self._message("health_ok"))
 
     def do_POST(self):
         parsed = urlparse(self.path)
         if parsed.path != DICTATE_PATH:
-            return self._respond(404, self._message("not_found"))
+            return self._refuse(404, "not_found")
         if not self._authorized():
-            return self._respond(401, self._message("bad_token"))
+            return self._refuse(401, "bad_token")
 
         length = self._content_length()
         if length is None:
-            return self._respond(400, self._message("bad_request"))
+            return self._refuse(400, "bad_request")
         if length > self._endpoint.max_bytes:
             # Refused on the header alone. With Connection: close we can answer
             # and hang up without ever reading the oversized body.
-            return self._respond(413, self._message("too_large"))
+            return self._refuse(413, "too_large")
 
         # One recording at a time. The second caller is told to retry rather than
         # queued, so a phone that gave up cannot leave work running behind it.
         if not self._endpoint.dictate_slot.acquire(blocking=False):
-            return self._respond(429, self._message("busy"))
+            return self._refuse(429, "busy")
 
         try:
             audio = self.rfile.read(length)
             if len(audio) != length:
-                return self._respond(400, self._message("bad_request"))
+                return self._refuse(400, "bad_request")
 
             content_type = self.headers.get("Content-Type", "") or ""
             if content_type.lower().startswith("multipart/"):
                 audio = extract_multipart_file(audio, content_type)
                 if not audio:
-                    return self._respond(400, self._message("bad_request"))
+                    return self._refuse(400, "bad_request")
 
             try:
                 outcome = self._endpoint.dictate(audio)
@@ -355,14 +392,14 @@ class _Handler(BaseHTTPRequestHandler):
                 # A failure in the pipeline must not take the server down with
                 # it - the next dictation should still work.
                 print(f"[PHONE] dictation failed: {error}")
-                return self._respond(500, self._message("failed"))
+                return self._refuse(500, "failed")
 
             if outcome.error:
                 status = ERROR_STATUS.get(outcome.error, 500)
-                return self._respond(status, self._message(outcome.error))
+                return self._refuse(status, outcome.error, outcome.error_detail)
 
             if not outcome.text.strip():
-                return self._respond(422, self._message("no_speech"))
+                return self._refuse(422, "no_speech")
 
             # Additive only: the body stays the finished text, and Mode and
             # Enhanced keep their meaning, because the Shortcut on the phone
@@ -410,8 +447,10 @@ class PhoneEndpoint:
                  dictate: Callable[[bytes], DictationOutcome],
                  ready_check: Optional[Callable[[], bool]] = None,
                  messages: Optional[Dict[str, str]] = None,
-                 max_bytes: int = DEFAULT_MAX_BYTES):
+                 max_bytes: int = DEFAULT_MAX_BYTES,
+                 on_refused: Optional[Callable[[int, str, str, str], None]] = None):
         self.host = host
+        self.on_refused = on_refused
         self.port = int(port)
         self.token = token
         self.dictate = dictate

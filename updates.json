@@ -1,6 +1,22 @@
 {
   "versions": [
     {
+      "version": "1.2.10",
+      "date": "2026-11-24",
+      "notes": {
+        "en": [
+          "A dictation full of times or numbers no longer loses its AI cleanup: the check that compares the cleanup with what you said counted every number written as digits (\"seventeen thirty\" → \"17:30\") as a lost word, threw the cleanup away and gave you the plain transcript",
+          "Numbers turned into digits now count as kept; a number that simply disappeared still counts as lost",
+          "Phone dictations that fail before any text comes back (model loading, no speech, busy, wrong key, too large, a crash) are now kept in phone_errors.log in the settings folder, so they can still be looked up after a restart"
+        ],
+        "hu": [
+          "Az időpontokkal, számokkal teli diktálás már nem veszíti el az AI-javítást: az ellenőrzés, ami a javítást összeveti azzal, amit mondtál, minden számjegyre írt számot (\"tizenhét harminc\" → \"17:30\") elveszett szónak vett, eldobta a javítást, és a nyers szöveget adta vissza",
+          "A számjeggyé alakított szám most megtartottnak számít; ami egyszerűen kimaradt, az továbbra is elveszettnek",
+          "A telefonos diktálás azon hibái, amelyeknél szöveg sem jön vissza (töltődő modell, nincs beszéd, foglalt, rossz kulcs, túl nagy, összeomlás), mostantól a beállítások mappájában lévő phone_errors.log-ba is bekerülnek, így újraindítás után is visszanézhetők"
+        ]
+      }
+    },
+    {
       "version": "1.2.9",
       "date": "2026-11-17",
       "notes": {

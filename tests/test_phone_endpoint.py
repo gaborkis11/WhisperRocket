@@ -92,6 +92,8 @@ def fake_dictate(audio_bytes):
         return DictationOutcome(error="not_ready")
     if behaviour["mode"] == "raise":
         raise RuntimeError("pipeline blew up")
+    if behaviour["mode"] == "failed_detail":
+        return DictationOutcome(error="failed", error_detail="RuntimeError: cuda gone")
     if behaviour["mode"] == "empty":
         return DictationOutcome(text="   ")
     if behaviour["mode"] == "compose":
@@ -300,6 +302,53 @@ def test_failure_modes():
     check("server still alive after the exception", status == 200, f"got {status}")
 
 
+def test_refusals_are_reported():
+    print("\n[8b] Every error answer reaches on_refused, the answer survives a broken callback")
+
+    seen = []
+    endpoint.on_refused = lambda status, key, client, detail: seen.append((status, key, client, detail))
+    try:
+        request(token="wrong")
+        behaviour["mode"] = "not_ready"
+        request(method="POST", path="/dictate", body=b"audio")
+        behaviour["mode"] = "silence"
+        request(method="POST", path="/dictate", body=b"audio")
+        behaviour["mode"] = "raise"
+        request(method="POST", path="/dictate", body=b"audio")
+        behaviour["mode"] = "ok"
+        status, _, _ = request(method="POST", path="/dictate", body=b"audio")
+
+        keys = [(s, k) for s, k, _, _ in seen]
+        check("bad token, loading, silence and a crash are all reported",
+              keys == [(401, "bad_token"), (503, "not_ready"), (422, "no_speech"), (500, "failed")],
+              repr(keys))
+        check("a successful dictation is not reported", status == 200 and len(seen) == 4, repr(seen))
+        check("the client address is passed on", all(c == HOST for _, _, c, _ in seen), repr(seen))
+        check("the token never reaches the callback", TOKEN not in repr(seen))
+
+        seen.clear()
+        behaviour["mode"] = "failed_detail"
+        status, body, _ = request(method="POST", path="/dictate", body=b"audio")
+        check("the app's error detail reaches the callback, not the phone",
+              seen == [(500, "failed", HOST, "RuntimeError: cuda gone")] and "cuda" not in body,
+              f"{seen!r} {body!r}")
+
+        seen.clear()
+        status, _, _ = request(method="PUT", path="/dictate", body=b"audio")
+        check("an error http.server answers by itself is reported too",
+              status == 501 and [(s, k) for s, k, _, _ in seen] == [(501, "http_501")], f"{status} {seen!r}")
+
+        def broken(status, key, client, detail):
+            raise OSError("disk full")
+        endpoint.on_refused = broken
+        status, body, _ = request(token="wrong")
+        check("a failing callback still lets the phone hear the error",
+              status == 401 and bool(body.strip()), f"{status} {body!r}")
+    finally:
+        endpoint.on_refused = None
+        behaviour["mode"] = "ok"
+
+
 def test_concurrency():
     print("\n[9] One dictation at a time")
 
@@ -467,6 +516,7 @@ def main():
         test_multipart_upload()
         test_utf8_text()
         test_failure_modes()
+        test_refusals_are_reported()
         test_concurrency()
         test_health_and_delay()
         test_delay_clamping()
